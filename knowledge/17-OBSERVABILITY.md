@@ -50,6 +50,8 @@ Esses identificadores devem acompanhar logs, métricas e erros.
 
 Os logs devem ser estruturados em JSON.
 
+No banco, cada Log pertence obrigatoriamente a uma Execution e pode correlacionar uma AgentExecution e um Artifact. Também registra `level`, `event`, `message`, `context`, `requestId`, `traceId` e `createdAt`. Registros são append-only no MVP.
+
 Exemplo:
 
 ```json

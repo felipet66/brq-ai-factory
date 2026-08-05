@@ -10,16 +10,28 @@
   },
   "workspaces": [
     "apps/*",
-    "shared"
+    "shared",
+    "prisma"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @brq-ai-factory/web",
     "build": "npm run build --workspace @brq-ai-factory/web",
     "start": "npm run start --workspace @brq-ai-factory/web",
-    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared *.ts *.mjs --max-warnings=0",
+    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared prisma *.ts *.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
+    "prebuild": "npm run prisma:generate",
+    "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspace @brq-ai-factory/web",
+    "pretest": "npm run prisma:generate",
     "test": "vitest run && npm run test --workspace @brq-ai-factory/web",
+    "pretest:coverage": "npm run prisma:generate",
+    "test:coverage": "vitest run --coverage",
+    "prisma:generate": "prisma generate",
+    "prisma:database:init": "node prisma/ensure-sqlite-database.mjs",
+    "preprisma:migrate:dev": "npm run prisma:database:init",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "preprisma:migrate:deploy": "npm run prisma:database:init",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -27,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "dotenv": "^17.4.2",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.0",

@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["node", "vitest/globals"]
   },
-  "include": ["prisma.config.ts", "shared/**/*.ts", "vitest.config.ts"],
+  "include": ["prisma.config.ts", "prisma/**/*.ts", "shared/**/*.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "apps"]
 }

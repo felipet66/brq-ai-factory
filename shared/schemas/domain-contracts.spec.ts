@@ -237,4 +237,30 @@ describe('agentExecutionSchema date coherence', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('should restrict agent-specific output fields to JSON values', () => {
+    const output = {
+      status: 'SUCCESS',
+      summary: 'Resultado fictício.',
+      artifacts: [],
+      nextContext: {},
+      warnings: [],
+      metadata: {
+        agent: 'PRODUCT_OWNER',
+        promptVersion: '1.0.0',
+        schemaVersion: '1.0.0',
+      },
+      customField: () => 'not-json',
+    } as const;
+
+    expect(
+      agentExecutionSchema.safeParse({
+        ...baseAgentExecution,
+        status: 'SUCCESS',
+        output,
+        startedAt: STARTED_AT,
+        finishedAt: FINISHED_AT,
+      }).success,
+    ).toBe(false);
+  });
 });

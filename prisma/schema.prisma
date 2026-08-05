@@ -6,3 +6,123 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String
+  description String
+  status      String      @default("ACTIVE")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  executions  Execution[]
+
+  @@index([status, createdAt])
+}
+
+model Execution {
+  id              String           @id @default(cuid())
+  projectId       String
+  status          String           @default("CREATED")
+  createdAt       DateTime         @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  agentExecutions AgentExecution[]
+  artifacts       Artifact[]
+  logs            Log[]
+
+  @@index([projectId, createdAt])
+  @@index([status, createdAt])
+}
+
+model PromptVersion {
+  id              String           @id @default(cuid())
+  agent           String
+  version         String
+  schemaVersion   String
+  content         String
+  hash            String
+  status          String           @default("DRAFT")
+  description     String?
+  source          String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  agentExecutions AgentExecution[]
+
+  @@unique([agent, version])
+  @@index([agent, status])
+  @@index([hash])
+}
+
+model AgentExecution {
+  id              String        @id @default(cuid())
+  executionId     String
+  agent           String
+  status          String        @default("CREATED")
+  attempt         Int
+  input           Json
+  output          Json?
+  agentVersion    String
+  promptVersion   String
+  schemaVersion   String
+  model           String?
+  inputTokens     Int?
+  outputTokens    Int?
+  durationMs      Int?
+  createdAt       DateTime      @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  execution       Execution     @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  prompt          PromptVersion @relation(fields: [agent, promptVersion], references: [agent, version], onDelete: Restrict, onUpdate: Restrict)
+  artifacts       Artifact[]
+  logs            Log[]
+
+  @@unique([executionId, agent, attempt])
+  @@index([executionId, createdAt])
+  @@index([agent, status, createdAt])
+}
+
+model Artifact {
+  id               String         @id @default(cuid())
+  executionId      String
+  agentExecutionId String
+  name             String
+  filename         String
+  type             String
+  content          String
+  version          Int
+  provenance       Json
+  createdAt        DateTime       @default(now())
+  execution        Execution      @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  agentExecution   AgentExecution @relation(fields: [agentExecutionId], references: [id], onDelete: Restrict)
+  logs             Log[]
+
+  @@unique([executionId, filename, version])
+  @@index([executionId, createdAt])
+  @@index([agentExecutionId, createdAt])
+  @@index([type, createdAt])
+}
+
+model Log {
+  id               String          @id @default(cuid())
+  executionId      String
+  agentExecutionId String?
+  artifactId       String?
+  level            String
+  event            String
+  message          String?
+  context          Json
+  requestId        String?
+  traceId          String?
+  createdAt        DateTime        @default(now())
+  execution        Execution       @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  agentExecution   AgentExecution? @relation(fields: [agentExecutionId], references: [id], onDelete: SetNull)
+  artifact         Artifact?       @relation(fields: [artifactId], references: [id], onDelete: SetNull)
+
+  @@index([executionId, createdAt])
+  @@index([agentExecutionId, createdAt])
+  @@index([artifactId, createdAt])
+  @@index([event, createdAt])
+  @@index([requestId])
+  @@index([traceId])
+}

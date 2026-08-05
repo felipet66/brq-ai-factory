@@ -168,8 +168,44 @@ Permite reproduzir execuções antigas.
 Atributos
 
 - id
+- agent
 - version
+- schemaVersion
+- content
+- hash
+- status
 - description
+- source
+- createdAt
+- updatedAt
+
+Estados canônicos:
+
+- `DRAFT`
+- `ACTIVE`
+- `DEPRECATED`
+- `ARCHIVED`
+
+O conteúdo, a versão, o hash, a versão do schema e a origem são imutáveis. Somente o status pode ser alterado.
+
+---
+
+## Log
+
+Registro estruturado e append-only de um evento de uma Execution.
+
+Atributos
+
+- id
+- executionId
+- agentExecutionId
+- artifactId
+- level
+- event
+- message
+- context
+- requestId
+- traceId
 - createdAt
 
 ---
@@ -213,6 +249,12 @@ Agent
 ↓
 
 PromptVersion
+
+Execution
+
+↓
+
+Log
 
 ---
 

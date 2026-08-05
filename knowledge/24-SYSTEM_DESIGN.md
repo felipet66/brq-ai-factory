@@ -313,7 +313,8 @@ Responsável por armazenar:
 - Artifacts
 - Logs
 - Prompt Versions
-- Configurações
+
+Os ports de persistência pertencem a `shared/`. Implementações, mapeadores, migrations e Prisma Client pertencem a `prisma/`. Regras de negócio e transições de estado permanecem fora dos repositories.
 
 ---
 

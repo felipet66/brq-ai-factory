@@ -25,6 +25,14 @@ export const artifactProvenanceSchema = z
   })
   .strict();
 
+export const artifactCreateInputSchema = artifactDraftSchema
+  .extend({
+    executionId: identifierSchema,
+    agentExecutionId: identifierSchema,
+    provenance: artifactProvenanceSchema,
+  })
+  .strict();
+
 export const artifactSchema = artifactDraftSchema
   .extend({
     id: identifierSchema,

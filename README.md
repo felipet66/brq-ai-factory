@@ -27,7 +27,8 @@ brq-ai-factory/
 │   │   ├── ADR-008-NextJS.md
 │   │   ├── ADR-009-Prompt-Versioning.md
 │   │   ├── ADR-010-Human-Review.md
-│   │   └── ADR-011-Repository-Layout.md
+│   │   ├── ADR-011-Repository-Layout.md
+│   │   └── ADR-012-PERSISTENCE_BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -79,11 +80,22 @@ Pré-requisitos:
 nvm use
 npm ci
 cp .env.example .env
+npm run prisma:migrate:deploy
 npm run prisma:validate
 npm run dev
 ```
 
-O MVP utiliza SQLite local. Nenhuma configuração de deploy faz parte da Sprint 0.
+O MVP utiliza SQLite local. Os comandos de migration inicializam o arquivo configurado em `DATABASE_URL` quando necessário. Nenhuma configuração de deploy faz parte do MVP atual.
+
+## Persistência
+
+O workspace `@brq/prisma` implementa os repositories definidos em `@brq/shared`. Para criar uma migration durante o desenvolvimento:
+
+```bash
+npm run prisma:migrate:dev -- --name nome_da_migration
+```
+
+Não existe seed obrigatório. Input e output de agentes, provenance de artifacts e contexto de logs são persistidos como JSON.
 
 ## Validações
 
@@ -91,6 +103,8 @@ O MVP utiliza SQLite local. Nenhuma configuração de deploy faz parte da Sprint
 npm run lint
 npm run typecheck
 npm run test
+npm run test:coverage
 npm run prisma:validate
 npm run build
+npm run format:check
 ```

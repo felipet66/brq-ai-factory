@@ -157,8 +157,9 @@ Entregas
 - Prisma Schema
 - Repositories
 - Migrations
-- Seed
+- Seed somente quando existir dado inicial obrigatório
 - Configuração SQLite
+- testes de integração com banco isolado
 
 Entidades
 
@@ -172,6 +173,13 @@ Entidades
 Critério
 
 Persistência funcional.
+
+Decisões da implementação
+
+- nenhum seed é necessário no MVP atual;
+- contratos e ports permanecem em `shared`;
+- Prisma Client, mapeadores e implementações permanecem em `prisma`;
+- repositories não executam lógica de negócio nem transições de estado.
 
 ---
 

@@ -250,7 +250,18 @@ O Prompt Builder monta o Prompt Final.
 
 Contém a configuração local de persistência do MVP.
 
-Na Sprint 0 contém somente a infraestrutura do Prisma e SQLite. Modelos, migrations, seed e repositories pertencem à Sprint 2.
+Desde a Sprint 2 contém:
+
+```text
+client.ts
+mappers.ts
+migrations/
+repositories/
+tests/
+schema.prisma
+```
+
+O workspace `@brq/prisma` depende de `@brq/shared`. Nenhum detalhe do Prisma pertence à Shared Layer ou ao `core`.
 
 ---
 
@@ -283,6 +294,12 @@ Nenhuma regra específica de agente deve existir aqui.
 # npm workspaces
 
 O `package.json` da raiz coordena os npm workspaces.
+
+Workspaces implementados:
+
+- `apps/web`;
+- `shared`;
+- `prisma`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 

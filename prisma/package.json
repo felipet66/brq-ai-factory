@@ -1,0 +1,19 @@
+{
+  "name": "@brq/prisma",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./client": "./client.ts",
+    "./repositories/*": "./repositories/*.ts"
+  },
+  "dependencies": {
+    "@brq/shared": "0.1.0",
+    "@prisma/adapter-better-sqlite3": "^7.9.1",
+    "@prisma/client": "^7.9.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

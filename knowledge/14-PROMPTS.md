@@ -288,11 +288,13 @@ O banco deve registrar:
 
 # Imutabilidade
 
-Prompts utilizados em execuções concluídas não devem ser alterados.
+Conteúdo, versão, hash, schema version e origem de uma PromptVersion não devem ser alterados após a persistência. Somente o status pode mudar.
 
 Uma mudança deve gerar nova versão.
 
 Isso permite reproduzir resultados antigos.
+
+A combinação `(agent, version)` é única. O hash SHA-256 identifica o conteúdo persistido.
 
 ---
 

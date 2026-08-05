@@ -4,7 +4,7 @@
 
 Definir a persistência da aplicação.
 
-Os campos abaixo representam o modelo conceitual. O mapeamento físico para Prisma pertence à Sprint 2.
+Os campos abaixo representam o modelo persistido pelo Prisma desde a Sprint 2.
 
 Banco inicial:
 
@@ -52,7 +52,8 @@ Prisma
 - promptVersion
 - schemaVersion
 - model
-- usage
+- inputTokens
+- outputTokens
 - durationMs
 - status
 - createdAt
@@ -80,8 +81,14 @@ Prisma
 
 - id
 - executionId
+- agentExecutionId
+- artifactId
 - level
+- event
 - message
+- context
+- requestId
+- traceId
 - createdAt
 
 ---
@@ -91,21 +98,36 @@ Prisma
 - id
 - agent
 - version
-- prompt
+- schemaVersion
+- content
+- hash
+- status
+- description
+- source
 - createdAt
+- updatedAt
 
 ---
 
-## Config
+## Decisões físicas
 
-Configurações globais.
+- estados e tipos canônicos são persistidos como texto e validados pelos schemas da Shared Layer;
+- input, output, provenance e context são persistidos como JSON;
+- tokens e duração são colunas escalares;
+- datas são armazenadas como `DateTime` e mapeadas para ISO 8601;
+- relações históricas obrigatórias usam `Restrict`;
+- correlações opcionais de Log com AgentExecution e Artifact usam `SetNull`;
+- não existem repositories de hard delete no MVP.
 
-Exemplos
+## Unicidade e versionamento
 
-- modelo padrão
-- temperatura
-- timeout
-- retry
+- AgentExecution: `(executionId, agent, attempt)`;
+- Artifact: `(executionId, filename, version)`;
+- PromptVersion: `(agent, version)`.
+
+Artifact e PromptVersion geram novos registros em vez de sobrescrever conteúdo histórico.
+
+Configuração global permanece em variáveis de ambiente. Não existe entidade `Config` nesta etapa, evitando persistência de segredos.
 
 ---
 

@@ -1,0 +1,1 @@
+export const PROMPT_VERSION_STATUSES = ['DRAFT', 'ACTIVE', 'DEPRECATED', 'ARCHIVED'] as const;

@@ -1,4 +1,6 @@
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+import type { LogLevel } from '../types/log-record';
+
+export type { LogLevel } from '../types/log-record';
 
 export type LogContext = Record<string, unknown>;
 

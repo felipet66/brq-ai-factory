@@ -25,6 +25,7 @@ Este documento funciona apenas como índice.
 | ADR-009 | Prompt Versioning                          | Accepted |
 | ADR-010 | Human Review                               | Accepted |
 | ADR-011 | Repository Layout and Workspace Boundaries | Accepted |
+| ADR-012 | Persistence Boundary                       | Accepted |
 
 ---
 

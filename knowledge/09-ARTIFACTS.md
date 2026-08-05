@@ -76,9 +76,11 @@ O artefato enriquecido pela plataforma possui:
 
 # Versionamento
 
-Toda nova execução gera uma nova versão do artefato.
+Uma nova versão dentro da mesma Execution e para o mesmo `filename` gera um novo registro com `version` incremental, iniciando em `1`.
 
 Nunca sobrescrever versões antigas.
+
+O versionamento entre Executions exige um identificador de linhagem que ainda não faz parte do contrato canônico.
 
 ---
 
