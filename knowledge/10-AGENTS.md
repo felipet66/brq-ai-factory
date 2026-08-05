@@ -185,7 +185,8 @@ Todos os agentes devem retornar um formato comum.
   "warnings": [],
   "metadata": {
     "agent": "PRODUCT_OWNER",
-    "promptVersion": "1.0.0"
+    "promptVersion": "1.0.0",
+    "schemaVersion": "1.0.0"
   }
 }
 ```
@@ -202,6 +203,8 @@ PARTIAL_SUCCESS
 FAILED
 REQUIRES_REVIEW
 ```
+
+Esses valores representam o resultado final de uma tentativa de agente. `CREATED`, `RUNNING` e `CANCELLED` pertencem ao ciclo de vida de `AgentExecution`, não ao contrato de saída do agente.
 
 ## SUCCESS
 
@@ -382,13 +385,15 @@ Esses acessos devem ser mediados pela aplicação.
 
 # Versionamento
 
-Cada agente deve possuir:
+Cada execução de agente deve registrar:
 
 - versão do agente
 - versão do prompt
 - versão do schema
 - versão do modelo utilizado
 - versão das regras
+
+No contrato base de saída, `agent`, `promptVersion` e `schemaVersion` identificam o payload validado. `agentVersion` e `model` são metadados autoritativos de `AgentExecution`, adicionados pela plataforma e não confiados à resposta textual do modelo. O versionamento das regras será definido com o mecanismo de snapshot da Knowledge Layer.
 
 Exemplo:
 
@@ -436,6 +441,8 @@ O retry pode ocorrer quando:
 - faltar um campo obrigatório
 
 O retry não deve ser infinito.
+
+Cada retry automático cria uma nova `AgentExecution` dentro da mesma `Execution`, com novo identificador e número de tentativa incrementado. Uma `AgentExecution` encerrada não retorna ao estado `RUNNING`.
 
 Configuração inicial:
 

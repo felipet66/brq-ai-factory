@@ -4,6 +4,8 @@
 
 Definir a persistência da aplicação.
 
+Os campos abaixo representam o modelo conceitual. O mapeamento físico para Prisma pertence à Sprint 2.
+
 Banco inicial:
 
 SQLite
@@ -32,6 +34,7 @@ Prisma
 - id
 - projectId
 - status
+- createdAt
 - startedAt
 - finishedAt
 
@@ -42,11 +45,19 @@ Prisma
 - id
 - executionId
 - agent
+- attempt
+- input
+- output
+- agentVersion
+- promptVersion
+- schemaVersion
 - model
-- tokens
-- duration
+- usage
+- durationMs
 - status
 - createdAt
+- startedAt
+- finishedAt
 
 ---
 
@@ -54,9 +65,14 @@ Prisma
 
 - id
 - executionId
+- agentExecutionId
+- name
 - type
 - filename
 - content
+- version
+- createdAt
+- provenance
 
 ---
 

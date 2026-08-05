@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { AppError } from '../errors/app-error';
+import { ERROR_CODES } from '../errors/error-codes';
 
 const serverEnvSchema = z.object({
   DATABASE_URL: z
@@ -16,7 +17,7 @@ export function parseServerEnv(source: NodeJS.ProcessEnv): ServerEnv {
 
   if (!result.success) {
     throw new AppError('Configuração de ambiente inválida.', {
-      code: 'INVALID_ENVIRONMENT',
+      code: ERROR_CODES.INVALID_ENVIRONMENT,
       cause: result.error,
     });
   }

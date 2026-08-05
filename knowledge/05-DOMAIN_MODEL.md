@@ -29,6 +29,13 @@ Atributos
 - createdAt
 - updatedAt
 
+Estados canônicos:
+
+- `ACTIVE`
+- `ARCHIVED`
+
+Um Project inicia em `ACTIVE` e pode ser arquivado. `ARCHIVED` é terminal no MVP.
+
 ---
 
 ## Execution
@@ -44,8 +51,18 @@ Atributos
 - id
 - projectId
 - status
+- createdAt
 - startedAt
 - finishedAt
+
+Estados canônicos:
+
+- `CREATED`
+- `RUNNING`
+- `REQUIRES_REVIEW`
+- `SUCCESS`
+- `FAILED`
+- `CANCELLED`
 
 ---
 
@@ -76,13 +93,41 @@ Atributos
 
 - id
 - executionId
-- agentId
+- agent
+- attempt
 - input
 - output
-- duration
-- tokens
+- agentVersion
+- promptVersion
+- schemaVersion
 - model
+- usage
+- durationMs
 - status
+- createdAt
+- startedAt
+- finishedAt
+
+Estados canônicos:
+
+- `CREATED`
+- `RUNNING`
+- `SUCCESS`
+- `PARTIAL_SUCCESS`
+- `REQUIRES_REVIEW`
+- `FAILED`
+- `CANCELLED`
+
+Uma `AgentExecution` representa uma única tentativa. Retry automático cria uma nova `AgentExecution`, com novo identificador e `attempt` incrementado, dentro da mesma `Execution`.
+
+## Coerência temporal
+
+- `CREATED`: `startedAt` e `finishedAt` nulos;
+- `RUNNING`: `startedAt` preenchido e `finishedAt` nulo;
+- `REQUIRES_REVIEW` de `Execution`: `startedAt` preenchido e `finishedAt` nulo;
+- estados finais: `finishedAt` preenchido;
+- quando ambos existirem, `finishedAt` não pode ser anterior a `startedAt`;
+- uma entidade cancelada antes de iniciar pode possuir `startedAt` nulo.
 
 ---
 
@@ -101,9 +146,16 @@ Atributos
 
 - id
 - executionId
+- agentExecutionId
+- name
 - type
 - filename
 - content
+- version
+- createdAt
+- provenance
+
+Antes do enriquecimento pela plataforma, o agente produz um `ArtifactDraft` com `name`, `filename`, `type` e `content`. Tanto o draft quanto o artefato final aceitam somente um nome de arquivo seguro, sem caminhos absolutos, `../` ou separadores de diretório.
 
 ---
 
@@ -173,6 +225,8 @@ Uma Execution possui várias AgentExecutions.
 Cada AgentExecution produz zero ou mais Artifacts.
 
 Todo Artifact pertence a apenas uma Execution.
+
+Todo Artifact referencia a AgentExecution que o produziu.
 
 Nenhum Agent conhece outro Agent.
 

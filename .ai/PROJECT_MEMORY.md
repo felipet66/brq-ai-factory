@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 0 — Foundation implementada em 2026-08-04 e aguardando aprovação humana.
+Sprint 1 — Shared Layer implementada em 2026-08-04 e aguardando aprovação humana.
 
-Não iniciar a Sprint 1 sem aprovação explícita.
+Não iniciar a Sprint 2 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -25,6 +25,20 @@ Não iniciar a Sprint 1 sem aprovação explícita.
 - logger JSON mínimo com redação de campos sensíveis;
 - nenhuma variável secreta exposta ao frontend.
 
+## Shared Layer
+
+- `shared` registrado como workspace interno `@brq/shared`;
+- estados canônicos de `Project`, `Execution` e `AgentExecution`;
+- schemas Zod e tipos inferidos para domínio, contratos base de agentes e artefatos;
+- `ArtifactDraft` separado do `Artifact` enriquecido pela plataforma;
+- nomes de arquivo validados sem caminhos absolutos, `../` ou separadores;
+- coerência mínima entre status e datas de início/fim;
+- retries automáticos criam nova `AgentExecution` na mesma `Execution`;
+- `FAILED → RUNNING` reservado à retomada explícita;
+- `REQUIRES_REVIEW → RUNNING` reservado a futura resolução humana auditável;
+- códigos de erro compartilhados integrados ao baseline existente;
+- interface `AIProvider` preservada para a Sprint 3 em `core/ai-provider`.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -40,6 +54,15 @@ Não iniciar a Sprint 1 sem aprovação explícita.
 - build: aprovado;
 - smoke local: `GET /` respondeu HTTP 200;
 - npm audit: zero vulnerabilidades.
+
+## Validações da Sprint 1
+
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 40 aprovados, sendo 39 da Shared Layer e 1 smoke da aplicação;
+- Prisma validate: aprovado;
+- build: aprovado;
+- format check: aprovado.
 
 ## Fora do escopo confirmado
 

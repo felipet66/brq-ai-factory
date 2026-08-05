@@ -1,0 +1,27 @@
+export const PROJECT_STATUSES = ['ACTIVE', 'ARCHIVED'] as const;
+
+export const EXECUTION_STATUSES = [
+  'CREATED',
+  'RUNNING',
+  'REQUIRES_REVIEW',
+  'SUCCESS',
+  'FAILED',
+  'CANCELLED',
+] as const;
+
+export const AGENT_EXECUTION_STATUSES = [
+  'CREATED',
+  'RUNNING',
+  'SUCCESS',
+  'PARTIAL_SUCCESS',
+  'REQUIRES_REVIEW',
+  'FAILED',
+  'CANCELLED',
+] as const;
+
+export const AGENT_RESULT_STATUSES = [
+  'SUCCESS',
+  'PARTIAL_SUCCESS',
+  'FAILED',
+  'REQUIRES_REVIEW',
+] as const;

@@ -128,6 +128,17 @@ shared/
 - logger
 - errors
 - config
+- estados canônicos de Project, Execution e AgentExecution
+- contratos base de agentes e artefatos
+- códigos de erro compartilhados
+- testes unitários e de contrato
+
+Limites da Sprint
+
+- preservar os baselines existentes de config, erros e logger
+- não implementar AIProvider, persistência, agentes ou Orchestrator
+- retries automáticos criam uma nova AgentExecution na mesma Execution
+- retomadas após falha ou revisão permanecem decisões explícitas do fluxo futuro
 
 Critério
 

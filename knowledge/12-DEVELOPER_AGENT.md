@@ -106,7 +106,8 @@ O Developer Agent deve produzir:
   "warnings": [],
   "metadata": {
     "agent": "DEVELOPER",
-    "promptVersion": "1.0.0"
+    "promptVersion": "1.0.0",
+    "schemaVersion": "1.0.0"
   }
 }
 ```

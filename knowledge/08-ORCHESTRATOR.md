@@ -60,17 +60,29 @@ Finalizar
 
 # Estados
 
-CREATED
+Estados canônicos de `Execution`:
 
-RUNNING
+- `CREATED`
+- `RUNNING`
+- `REQUIRES_REVIEW`
+- `SUCCESS`
+- `FAILED`
+- `CANCELLED`
 
-WAITING
+Transições permitidas:
 
-SUCCESS
+| Origem            | Destinos                                            |
+| ----------------- | --------------------------------------------------- |
+| `CREATED`         | `RUNNING`, `CANCELLED`                              |
+| `RUNNING`         | `REQUIRES_REVIEW`, `SUCCESS`, `FAILED`, `CANCELLED` |
+| `REQUIRES_REVIEW` | `RUNNING`, `FAILED`, `CANCELLED`                    |
+| `FAILED`          | `RUNNING`                                           |
 
-FAILED
+`SUCCESS` e `CANCELLED` são estados terminais.
 
-CANCELLED
+`FAILED → RUNNING` representa exclusivamente uma retomada explícita e nunca pode ocorrer automaticamente.
+
+`REQUIRES_REVIEW → RUNNING` deverá exigir uma resolução humana auditável. A implementação de usuários, auditoria e do fluxo de revisão pertence a Sprints posteriores.
 
 ---
 
@@ -79,6 +91,8 @@ CANCELLED
 Cada agente poderá ser executado novamente.
 
 Sem reiniciar toda a pipeline.
+
+Retry automático encerra a tentativa atual e cria uma nova `AgentExecution`, com `attempt` incrementado, dentro da mesma `Execution`. `RETRY` é um evento, não um estado.
 
 ---
 

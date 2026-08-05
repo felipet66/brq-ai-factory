@@ -324,13 +324,23 @@ stateDiagram-v2
 
 CREATED --> RUNNING
 
+CREATED --> CANCELLED
+
 RUNNING --> SUCCESS
 
 RUNNING --> FAILED
 
 RUNNING --> CANCELLED
 
-FAILED --> RETRY
+RUNNING --> REQUIRES_REVIEW
 
-RETRY --> RUNNING
+REQUIRES_REVIEW --> RUNNING: resolução humana auditável
+
+REQUIRES_REVIEW --> FAILED
+
+REQUIRES_REVIEW --> CANCELLED
+
+FAILED --> RUNNING: retomada explícita
 ```
+
+Retries automáticos de agentes não usam `FAILED --> RUNNING` nesta máquina. Cada retry cria uma nova `AgentExecution` em `CREATED`, dentro da mesma `Execution`.

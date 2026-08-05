@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { AppError, toSafeErrorResponse } from './app-error';
+import { ERROR_CODES } from './error-codes';
 
 describe('toSafeErrorResponse', () => {
   it('should hide internal error details by default', () => {
@@ -15,7 +16,7 @@ describe('toSafeErrorResponse', () => {
   it('should expose an explicitly safe operational error', () => {
     const result = toSafeErrorResponse(
       new AppError('Entrada inválida.', {
-        code: 'INVALID_INPUT',
+        code: ERROR_CODES.INVALID_INPUT,
         statusCode: 400,
         expose: true,
       }),

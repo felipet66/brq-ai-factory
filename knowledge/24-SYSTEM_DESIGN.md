@@ -401,41 +401,32 @@ Os demais agentes seguem exatamente o mesmo fluxo.
 
 # Estados
 
-Execution
+Estados de `Execution`:
 
-```
+```text
 CREATED
-
-↓
-
 RUNNING
-
-↓
-
+REQUIRES_REVIEW
 SUCCESS
-```
-
-ou
-
-```
-RUNNING
-
-↓
-
 FAILED
-```
-
-ou
-
-```
-RUNNING
-
-↓
-
 CANCELLED
 ```
 
-Cada AgentExecution possui estados próprios.
+`FAILED → RUNNING` representa somente uma retomada explícita e nunca ocorre automaticamente. `REQUIRES_REVIEW → RUNNING` deverá depender de uma resolução humana auditável.
+
+Estados de `AgentExecution`:
+
+```text
+CREATED
+RUNNING
+SUCCESS
+PARTIAL_SUCCESS
+REQUIRES_REVIEW
+FAILED
+CANCELLED
+```
+
+Os resultados de uma `AgentExecution` são terminais para aquela tentativa.
 
 ---
 
@@ -449,6 +440,8 @@ Quando permitido:
 - schema inválido
 
 Nunca realizar retry infinito.
+
+Retry automático cria uma nova `AgentExecution`, com novo identificador e `attempt` incrementado, dentro da mesma `Execution`. `RETRY` é um evento, não um estado persistido.
 
 ```
 Tentativa 1

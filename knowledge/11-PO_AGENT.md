@@ -105,7 +105,8 @@ O Product Owner Agent deve produzir:
   "warnings": [],
   "metadata": {
     "agent": "PRODUCT_OWNER",
-    "promptVersion": "1.0.0"
+    "promptVersion": "1.0.0",
+    "schemaVersion": "1.0.0"
   }
 }
 ```

@@ -44,23 +44,33 @@ quality-report.md
 
 ---
 
-# Estrutura
+# ArtifactDraft
 
-Todo artefato possui:
+O agente produz um draft antes do enriquecimento pela plataforma:
 
-id
+- name
+- filename
+- type
+- content
 
-name
+`filename` deve conter somente um nome de arquivo seguro. Caminhos absolutos, `../`, separadores de diretório e nomes vazios são inválidos.
 
-type
+# Artifact
 
-agent
+O artefato enriquecido pela plataforma possui:
 
-createdAt
+- id
+- executionId
+- agentExecutionId
+- name
+- filename
+- type
+- content
+- version
+- createdAt
+- provenance
 
-content
-
-version
+`provenance` registra `agent`, `promptVersion` e `model`.
 
 ---
 

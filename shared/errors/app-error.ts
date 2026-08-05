@@ -1,22 +1,24 @@
+import { ERROR_CODES, type ErrorCode } from './error-codes';
+
 export interface AppErrorOptions {
-  code: string;
+  code: ErrorCode;
   statusCode?: number;
   expose?: boolean;
   cause?: unknown;
 }
 
 export interface SafeErrorResponse {
-  code: string;
+  code: ErrorCode;
   message: string;
 }
 
 const INTERNAL_ERROR: SafeErrorResponse = {
-  code: 'INTERNAL_ERROR',
+  code: ERROR_CODES.INTERNAL_ERROR,
   message: 'Não foi possível concluir a operação.',
 };
 
 export class AppError extends Error {
-  readonly code: string;
+  readonly code: ErrorCode;
   readonly statusCode: number;
   readonly expose: boolean;
 
