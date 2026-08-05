@@ -81,6 +81,7 @@ Exemplos:
 - Agent Runner e AI Provider
 - Agent Runner e Response Validator por contratos públicos
 - Response Validator e Artifact Generator por contratos públicos
+- Product Owner Agent e seus quatro componentes genéricos por APIs públicas
 - Prisma e banco de testes
 - geração de `ArtifactDraft` e persistência de `Artifact` como responsabilidades separadas
 - validação da resposta estruturada de um agente
@@ -105,6 +106,7 @@ Principais contratos:
 - Agent Runner
 - Response Validator
 - Artifact Generator
+- Product Owner Agent
 - repository
 
 Todos os contratos devem utilizar schemas versionados.
@@ -180,6 +182,8 @@ Cada agente deve possuir avaliações para:
 O Response Validator possui uma suíte independente e determinística para finish reasons, presença de conteúdo, `TEXT`, JSON malformado, JSON Schema, coerência de `structuredData`, hashes, issues, imutabilidade, logs sanitizados e dependências proibidas. Esses testes utilizam `AgentRunResult` sintético e não realizam chamadas a providers.
 
 O Artifact Generator possui suíte independente e determinística para request, specification, bindings, rendering, ordem, limites, colisões de filename, hashes estruturais e de conteúdo, imutabilidade, logs sanitizados e dependências proibidas. Casos unitários usam `ValidationResult` sintético; um teste de contrato também produz o resultado pela API pública do Response Validator e confirma a compatibilidade do `validatedValueHash`. Nenhum teste escreve no filesystem ou banco. Testes de repository continuam cobrindo versionamento e persistência separadamente.
+
+O Product Owner Agent possui testes determinísticos para contratos, schemas, readiness, IDs, referências cruzadas, assets versionados, projeção de contexto, Business Validation, geração dos três drafts, rejeições funcionais, cancelamento, erros técnicos, imutabilidade, logs sanitizados e fronteiras proibidas. A integração usa os componentes genéricos reais com `FakeAIProvider` e `FakeKnowledgeSource`; nunca chama um provider externo, filesystem de artifacts, banco, Developer, QA ou Orchestrator.
 
 ---
 

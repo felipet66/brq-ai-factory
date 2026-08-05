@@ -35,7 +35,8 @@ brq-ai-factory/
 │   │   ├── ADR-015-PROMPT-BUILDER-BOUNDARY.md
 │   │   ├── ADR-016-AGENT-RUNNER-BOUNDARY.md
 │   │   ├── ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md
-│   │   └── ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md
+│   │   ├── ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md
+│   │   └── ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -68,11 +69,15 @@ brq-ai-factory/
 │   ├── 28-AGENT_RUNNER_FLOW.md
 │   ├── 29-RESPONSE_VALIDATOR_FLOW.md
 │   ├── 30-ARTIFACT_GENERATOR_FLOW.md
-│   └── 31-ARTIFACT_LIFECYCLE.md
+│   ├── 31-ARTIFACT_LIFECYCLE.md
+│   ├── 32-PRODUCT_OWNER_AGENT_FLOW.md
+│   └── 33-PIPELINE_OVERVIEW.md
 │
 ├── core/
 ├── agents/
+│   └── product-owner/
 ├── prompts/
+│   └── product-owner/1.0.0/
 ├── shared/
 ├── prisma/
 ├── package.json
@@ -129,7 +134,7 @@ O contexto preserva o conteúdo original e identifica cada documento por ID, cat
 
 O workspace `@brq/prompt-builder` transforma estruturas prontas em um `PromptResult` determinístico. A hierarquia conceitual `PromptDocument → PromptSection → PromptBlock → PromptFragment` é representada por `PromptTemplate` antes da resolução e por `ResolvedPromptDocument` depois dela. O renderer produz separadamente os canais `instructions` e `input`.
 
-Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. Assets, Prompt Manifest, loader, selector e consumers de produção permanecem adiados.
+Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. O Product Owner já possui assets e manifesto estáticos; loader genérico de prompts, registry, descoberta e seleção dinâmica de versões permanecem adiados.
 
 [Fluxo visual do Prompt Builder](knowledge/27-PROMPT_BUILDER_FLOW.md)
 
@@ -156,6 +161,14 @@ O workspace `@brq/artifact-generator` transforma exclusivamente um `ValidationRe
 O módulo distingue hashes estruturais — specification, template, draft e geração — do hash do conteúdo renderizado. Ele não conhece agentes concretos, não chama IA, não grava arquivos, não persiste nem versiona artifacts e não coordena o fluxo. Enriquecimento, versionamento e persistência permanecem responsabilidades posteriores.
 
 [Fluxo visual do Artifact Generator](knowledge/30-ARTIFACT_GENERATOR_FLOW.md) · [Ciclo de vida dos Artifacts](knowledge/31-ARTIFACT_LIFECYCLE.md)
+
+## Product Owner Agent
+
+O workspace `agents/product-owner` implementa a primeira fachada concreta de agente. Sua factory valida dependências e assets uma vez; cada invocação posterior carrega o contexto `PRODUCT_OWNER`, projeta-o como entrada estruturada do Agent Runner e encadeia exatamente uma tentativa por `Knowledge Loader → Agent Runner → Response Validator → Business Validation → Artifact Generator`.
+
+O contrato funcional produz uma `ProductOwnerSpecification` com readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`. A Business Validation recalcula essa decisão, verifica completude, IDs e referências cruzadas sem alterar a resposta e sinaliza truncamento quando excede o limite de issues. Somente uma saída aceita gera exatamente os drafts canônicos `story.md`, `acceptance.md` e `backlog.json`. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. Persistência, retry e avanço de workflow continuam fora do agente.
+
+[Fluxo visual do Product Owner Agent](knowledge/32-PRODUCT_OWNER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-019](knowledge/ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md)
 
 ## Validações
 

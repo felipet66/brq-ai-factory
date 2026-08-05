@@ -390,35 +390,30 @@ Implementação dos agentes.
 
 Estrutura:
 
-```
+```text
 product-owner/
+    package.json
+    product-owner-agent.ts
+    contracts.ts
+    schemas.ts
+    errors.ts
+    business-validation.ts
+    knowledge-projection.ts
+    prompt-request.ts
+    prompt-assets.ts
+    result.ts
+    logging.ts
+    testing/
+    *.spec.ts
 
-developer/
+developer/ (futuro)
 
-qa/
-
-shared/
+qa/ (futuro)
 ```
 
-Cada agente possui:
+O Product Owner é uma fachada de uma única tentativa. Sua factory valida dependências e assets antes de aceitar requests. A tentativa usa somente as APIs públicas de Knowledge Loader, Agent Runner, Response Validator e Artifact Generator; após o gate da Business Validation, o Generator recebe o `ValidationResult` aceito e a `ArtifactSpecification`. O Runner continua sendo o único ponto que integra Prompt Builder e AI Provider para executar o modelo.
 
-```
-prompt.md
-
-agent.ts
-
-schema.ts
-
-types.ts
-
-README.md
-
-tests/
-
-examples/
-```
-
-Essa estrutura é futura. A Sprint 5 não cria agentes, prompts funcionais ou consumers de produção.
+O workspace também reutiliza tipos e schemas declarativos de prompt e os utilitários públicos de canonical JSON e hashing do Prompt Builder para validar assets e proveniência, sem instanciar ou chamar o Builder. A Business Validation limita o relatório a 100 issues e informa `issuesTruncated`; a saída aceita contém exatamente três artifacts. Business Validation, schemas e assets específicos permanecem locais ao agente; não são movidos para `shared`.
 
 ---
 
@@ -426,19 +421,25 @@ Essa estrutura é futura. A Sprint 5 não cria agentes, prompts funcionais ou co
 
 Prompts versionados.
 
-```
-shared/
-
+```text
 product-owner/
+    1.0.0/
+        manifest.json
+        template.json
+        global-rules.json
+        security-rules.json
+        product-owner-rules.json
+        output-contract.json
+        artifact-specification.json
 
-developer/
+developer/ (futuro)
 
-qa/
+qa/ (futuro)
 ```
 
 O Prompt Builder monta o Prompt Final.
 
-Na Sprint 5, esta pasta permanece reservada. Prompt Manifest, assets versionados, loader, selector e registry serão definidos somente quando houver agents e consumers concretos; o Builder recebe estruturas prontas e não acessa esta pasta.
+O bundle 1.0.0 do Product Owner é declarativo, importado estaticamente e validado antes do uso. O manifest referencia filenames, IDs e versões, enquanto o loader calcula os hashes. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. O Builder recebe estruturas prontas e continua sem acessar esta pasta. Registry, descoberta dinâmica e seleção automática de versão permanecem futuros.
 
 ---
 
@@ -501,7 +502,8 @@ Workspaces implementados:
 - `core/prompt-builder`;
 - `core/agent-runner`;
 - `core/response-validator`;
-- `core/artifact-generator`.
+- `core/artifact-generator`;
+- `agents/product-owner`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -509,25 +511,17 @@ Cada módulo é registrado como workspace somente quando for implementado pela S
 
 # Fluxo de Dependências
 
-```
+```text
 apps
-
-↓
-
-core
-
-↓
-
+  ↓
+core/orchestrator (futuro)
+  ↓
 agents
-
-↓
-
-shared
+  ↓
+APIs públicas dos componentes core + shared
 ```
 
-A camada superior conhece a inferior.
-
-Nunca o contrário.
+Componentes genéricos de `core` não conhecem agentes concretos. O futuro Orchestrator poderá chamar fachadas em `agents`; cada fachada, por sua vez, compõe somente APIs públicas explicitamente permitidas pelo ADR correspondente.
 
 ---
 
@@ -569,9 +563,11 @@ O Artifact Generator pode acessar somente a API pública de `core/response-valid
 
 Pode acessar:
 
-- shared
+- `shared`;
+- APIs públicas de `core/knowledge-loader`, `core/agent-runner`, `core/response-validator` e `core/artifact-generator` quando exigidas pela fachada;
+- tipos e schemas declarativos e utilitários públicos de canonicalização e hashing do `core/prompt-builder`, sem chamar o Builder diretamente.
 
-Nunca acessa outro agente.
+Nunca acessa outro agente, adapters concretos de provider, Prisma, repositories, apps ou internals de `core`. Workflow, retry, persistência e transições de estado permanecem fora das fachadas.
 
 ---
 
@@ -579,7 +575,7 @@ Nunca acessa outro agente.
 
 Não contém código.
 
-Apenas instruções.
+Contém assets declarativos versionados, incluindo instruções, templates, manifests, schemas e artifact specifications.
 
 ---
 

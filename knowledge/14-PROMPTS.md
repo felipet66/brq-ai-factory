@@ -53,11 +53,11 @@ Somente o renderer converte o documento validado nos textos separados `instructi
 ```text
 agents/
 ├── product-owner/
-│   └── prompt.md
+│   └── prompt-assets.ts
 ├── developer/
-│   └── prompt.md
+│   └── (futuro)
 └── qa/
-    └── prompt.md
+    └── (futuro)
 ```
 
 Versões podem ser armazenadas em:
@@ -65,12 +65,19 @@ Versões podem ser armazenadas em:
 ```text
 prompts/
 └── product-owner/
-    ├── 1.0.0.md
-    ├── 1.1.0.md
-    └── current.md
+    └── 1.0.0/
+        ├── manifest.json
+        ├── template.json
+        ├── global-rules.json
+        ├── security-rules.json
+        ├── product-owner-rules.json
+        ├── output-contract.json
+        └── artifact-specification.json
 ```
 
-Esses assets e um futuro Prompt Manifest não fazem parte da Sprint 5. O Builder não lê `agents/` nem `prompts/`; loader, selector, registry, status ativo e consumers de produção serão definidos quando existir um fluxo concreto.
+O bundle declarativo do Product Owner possui IDs e versões explícitos, é importado server-side e validado como conjunto antes do uso. Seu manifesto fixa exatamente os assets da versão; descoberta dinâmica, alias `current`, registry e seleção automática continuam fora do MVP.
+
+O Prompt Builder não lê `agents/` nem `prompts/`. A fachada do Product Owner carrega o bundle estático, projeta estruturas prontas no contrato do Agent Runner e deixa a construção efetiva encapsulada no Runner.
 
 ---
 
@@ -260,7 +267,7 @@ Quando faltar informação, o agente deve:
 
 - registrar a dúvida
 - marcar assumptions
-- utilizar `REQUIRES_REVIEW` quando necessário
+- utilizar `REQUIRES_CLARIFICATION` no contrato do Product Owner quando houver dúvida bloqueante
 - não inventar decisões críticas
 
 ---
@@ -513,7 +520,7 @@ Conforme o evento, os logs registram:
 - requestId e traceId
 - código de erro
 
-O Builder nunca registra conteúdo do prompt, contexto, entrada do usuário, valores de variáveis, segredos ou JSON Schemas completos. Agente, modelo e tokens pertencem às camadas futuras de execução e provider.
+O Builder nunca registra conteúdo do prompt, contexto, entrada do usuário, valores de variáveis, segredos ou JSON Schemas completos. Modelo e tokens pertencem às camadas de execução e provider; a fachada concreta do agente também mantém conteúdo fora dos logs.
 
 ---
 
@@ -527,7 +534,7 @@ Quando um prompt falhar repetidamente:
 - solicitar revisão
 - não avançar o pipeline automaticamente
 
-Essas decisões pertencem ao Orchestrator e aos componentes futuros de execução. O Prompt Builder apenas retorna resultado ou erro determinístico e nunca executa retry.
+Essas decisões pertencem ao futuro Orchestrator. Prompt Builder, Agent Runner e Product Owner Agent apenas reportam o resultado da tentativa atual e nunca executam retry funcional.
 
 ---
 

@@ -405,15 +405,31 @@ Implementar o primeiro agente.
 
 Entregas
 
-agents/product-owner
+- workspace `agents/product-owner`
+- contratos e schemas versionados da demanda, specification e resultado
+- assets declarativos versionados em `prompts/product-owner/1.0.0`
+- fachada de uma única tentativa sobre Knowledge Loader, Agent Runner, Response Validator e Artifact Generator
+- Business Validation determinística para readiness, completude, IDs e referências cruzadas, com relatório limitado e `issuesTruncated`
+- drafts canônicos `story.md`, `acceptance.md` e `backlog.json`
+- hashes e metadados de proveniência sem persistência
+- logs estruturados e sanitizados
+- testes unitários, de contrato, integração e fronteiras
 
-- prompt
-- schema
-- testes
+Decisões da implementação
+
+- a fachada não chama Prompt Builder ou AI Provider diretamente; essas integrações permanecem encapsuladas pelo Agent Runner;
+- o contexto `PRODUCT_OWNER` é carregado pelo Knowledge Loader e projetado sem alterar conteúdo documental;
+- a factory valida uma vez os assets com filenames, IDs e versões explícitos; o loader calcula seus hashes e fixa o `bundleHash` esperado do release 1.0.0 antes de a fachada aceitar requests;
+- o JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned permanecem sujeitos a verificação explícita;
+- o Response Validator verifica o contrato estrutural, e a Business Validation específica do domínio ocorre em uma etapa separada;
+- readiness é recalculada deterministicamente e nunca corrigida silenciosamente;
+- depois do gate de negócio, o Artifact Generator recebe o `ValidationResult` aceito e a `ArtifactSpecification` e produz exatamente três drafts;
+- uma invocação representa uma tentativa e não executa retry, persistência, transições de estado ou coordenação de workflow;
+- hashing e canonicalização reutilizam as APIs públicas existentes, sem implementação paralela no agente.
 
 Critério
 
-O agente produz User Story válida.
+Uma demanda válida produz uma `ProductOwnerSpecification` rastreável e, quando aceita pelas duas validações, exatamente os três drafts canônicos, sem iniciar etapas posteriores.
 
 ---
 

@@ -76,24 +76,25 @@ Cada agente deve possuir a seguinte estrutura:
 ```text
 agents/
 └── product-owner/
-    ├── prompt.md
-    ├── agent.ts
-    ├── schema.ts
-    ├── types.ts
-    ├── examples/
-    ├── tests/
+    ├── product-owner-agent.ts
+    ├── contracts.ts
+    ├── schemas.ts
+    ├── business-validation.ts
+    ├── prompt-assets.ts
+    ├── testing/
+    ├── *.spec.ts
     └── README.md
 ```
 
 O runner de execução é genérico e permanece em `core/agent-runner`, conforme o ADR-011.
 
-Essa estrutura descreve os agentes futuros. A Sprint 5 não cria `prompt.md`, Prompt Manifest, loader, selector ou consumer de produção. O Prompt Builder recebe definições prontas e permanece independente dos diretórios de agentes e prompts.
+O Product Owner é o primeiro agente concreto. Seus assets declarativos e versionados ficam em `prompts/product-owner/1.0.0`; a fachada recebe dependências injetadas e não chama `PromptBuilder.build` nem AI Provider diretamente. O workspace usa somente tipos, schemas e hashing canônico do entrypoint público do Prompt Builder para validar os assets. Developer e QA permanecem futuros.
 
 ---
 
 # Componentes
 
-## prompt.md
+## Assets declarativos
 
 Define:
 
@@ -106,56 +107,51 @@ Define:
 - formato de saída
 - critérios de qualidade
 
+No Product Owner, esses elementos ficam em arquivos JSON versionados sob `prompts/product-owner/1.0.0`, vinculados por um manifesto de filenames, IDs e versões. A factory valida o bundle e calcula seus hashes antes de aceitar requests.
+
 ---
 
-## agent.ts
+## Fachada do agente
 
 Responsável por:
 
 - identificar o agente
-- referenciar seu prompt e schema
+- referenciar assets e schemas versionados
 - declarar versões e metadados
-- expor seu contrato ao Agent Runner genérico
+- compor uma única tentativa sobre componentes genéricos
+- expor um resultado funcional imutável sem coordenar workflow
 
 ---
 
-## schema.ts
+## contracts.ts e schemas.ts
 
-Define o contrato de resposta do agente.
+Definem os contratos de request, specification, Business Validation e resultado do agente.
 
 Toda resposta deve ser validada antes de ser aceita.
 
----
-
-## types.ts
-
-Contém:
-
-- tipos de entrada
-- tipos de saída
-- enums
-- contratos internos
+O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs nos modelos-base suportados. Modelos fine-tuned exigem verificação explícita.
 
 ---
 
-## examples
+## business-validation.ts
 
-Contém exemplos de:
+Contém invariantes específicas do domínio:
 
-- entrada válida
-- saída válida
-- cenários de erro
-- respostas esperadas
+- derivação de readiness
+- completude mínima
+- unicidade de IDs
+- referências cruzadas
+- limite de issues e indicador `issuesTruncated`
 
 ---
 
-## tests
+## testing e specs
 
 Contém:
 
 - testes unitários
 - testes de contrato
-- avaliações de qualidade
+- testes de integração e fronteiras
 - fixtures
 
 ---
@@ -174,9 +170,9 @@ Explica:
 
 ---
 
-# Contrato Base
+# Contrato Base Compartilhado
 
-Todos os agentes devem retornar um formato comum.
+O Shared Layer preserva um envelope transversal para integrações futuras da plataforma:
 
 ```json
 {
@@ -193,7 +189,7 @@ Todos os agentes devem retornar um formato comum.
 }
 ```
 
-O campo `artifacts` desse envelope descreve intenção de saída do agente; ele permanece conteúdo não confiável. Não é um registro persistido e não pode ignorar o Response Validator ou a `ArtifactSpecification` aplicada pelo Artifact Generator.
+Esse envelope não é o contrato enviado ao modelo nem a API pública do Product Owner Agent. Na implementação concreta, o modelo retorna somente `ProductOwnerSpecification`, e a fachada retorna `ProductOwnerAgentResult` com outcome `GENERATED` ou `VALIDATION_REJECTED`. Drafts são produzidos exclusivamente pelo Artifact Generator.
 
 ---
 
@@ -209,6 +205,8 @@ REQUIRES_REVIEW
 ```
 
 Esses valores representam o resultado final de uma tentativa de agente. `CREATED`, `RUNNING` e `CANCELLED` pertencem ao ciclo de vida de `AgentExecution`, não ao contrato de saída do agente.
+
+O Product Owner usa uma taxonomia funcional mais específica: readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`, separada do outcome técnico-funcional da fachada.
 
 ## SUCCESS
 
@@ -292,8 +290,12 @@ Saídas:
 - critérios de aceite
 - regras de negócio
 - cenários
+- premissas e dependências
+- riscos e itens fora do escopo
 - dúvidas
+- Definition of Ready
 - backlog inicial
+- drafts de artifacts quando as validações forem aceitas
 
 O Product Owner Agent não deve:
 
@@ -424,15 +426,16 @@ Uma resposta só pode ser aceita quando:
 - atende ao schema
 - contém os campos obrigatórios
 - não viola restrições
-- possui artefatos esperados
 - não contém instruções maliciosas
 - não tenta alterar o próprio papel
 
 O Response Validator genérico verifica finish reason, presença e formato do conteúdo, JSON, schema e coerência do structured output mediante um contrato funcional versionado. Ele não conhece Product Owner, Developer ou QA e, portanto, não substitui avaliações semânticas específicas de agente, critérios de qualidade ou revisão humana.
 
+No Product Owner, uma etapa separada denominada Business Validation recalcula readiness e verifica completude, IDs únicos e referências cruzadas. Ela não altera a specification nem se confunde com o Response Validator genérico; seu resultado inclui `issuesTruncated` para sinalizar quando o limite de 100 issues foi atingido.
+
 Respostas inválidas geram um `ValidationResult` imutável com issues classificadas e metadados rastreáveis. O Validator registra somente metadados técnicos e não corrige conteúdo, executa retry ou altera estados.
 
-Somente um `ValidationResult` aceito pode ser encaminhado ao Artifact Generator. Esse componente recebe separadamente uma specification declarativa, resolve bindings, renderiza drafts e retorna um resultado imutável. Ele não escolhe regras do agente, não revalida semanticamente a resposta, não persiste e não coordena o próximo passo.
+Somente um `ValidationResult` aceito e aprovado pelo gate da Business Validation pode ser encaminhado ao Artifact Generator. Esse componente recebe o `ValidationResult` e, separadamente, uma `ArtifactSpecification` declarativa, resolve bindings, renderiza exatamente os três drafts canônicos e retorna um resultado imutável. Ele não escolhe regras do agente, não revalida semanticamente a resposta, não persiste e não coordena o próximo passo.
 
 O fluxo posterior pode gerar:
 

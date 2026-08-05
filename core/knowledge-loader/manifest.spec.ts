@@ -4,20 +4,20 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 32 canonical documents and ADRs 001 through 018', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.5.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(50);
+  it('loads the 34 canonical documents and ADRs 001 through 019', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.6.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(53);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      32,
+      34,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      18,
+      19,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:018',
-      locator: 'ADR/ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md',
+      id: 'adr:019',
+      locator: 'ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md',
       category: 'ADR',
-      order: 1018,
+      order: 1019,
     });
     expect(
       KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
@@ -58,6 +58,22 @@ describe('Knowledge manifest', () => {
       locator: '31-ARTIFACT_LIFECYCLE.md',
       category: 'ARCHITECTURE',
       order: 31,
+    });
+    expect(
+      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:product-owner-agent-flow'),
+    ).toEqual({
+      id: 'knowledge:product-owner-agent-flow',
+      locator: '32-PRODUCT_OWNER_AGENT_FLOW.md',
+      category: 'ARCHITECTURE',
+      order: 32,
+    });
+    expect(
+      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:pipeline-overview'),
+    ).toEqual({
+      id: 'knowledge:pipeline-overview',
+      locator: '33-PIPELINE_OVERVIEW.md',
+      category: 'ARCHITECTURE',
+      order: 33,
     });
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST.documents)).toBe(true);

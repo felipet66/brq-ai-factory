@@ -213,6 +213,14 @@ Conteúdo validado estruturalmente continua não confiável para exibição ou e
 
 Logs do Generator nunca incluem conteúdo validado ou renderizado, valor de bindings, templates, specification completa, prompts, schemas, caminhos, segredos ou headers. Somente IDs, hashes, versão, quantidades, bytes, duração, estágio e códigos de erro são permitidos.
 
+## Product Owner Agent
+
+A fachada do Product Owner valida a demanda e seus limites antes de carregar conhecimento. Os assets versionados são configuração server-side importada estaticamente, validada como bundle e nunca selecionada pelo payload do usuário. IDs e hashes vinculam manifesto, template, rule sets, output contract e artifact specification.
+
+Conhecimento e demanda permanecem dados não confiáveis no canal `INPUT`; regras, identidade e contrato permanecem no canal `INSTRUCTIONS`. A saída só avança após Response Validation estrutural e Business Validation específica do domínio. Nenhuma dessas etapas corrige, executa ou persiste o conteúdo.
+
+O agente não acessa OpenAI, SDKs, Prisma, repositories, filesystem de artifacts, outros agentes ou Orchestrator. Cancelamento é apenas propagado e uma invocação não executa retry. Logs nunca incluem demanda, contexto, documentos, prompt, resposta, specification, artifacts, schemas completos ou segredos; apenas metadados técnicos allowlisted.
+
 ---
 
 # Saída dos Agentes

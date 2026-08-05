@@ -9,13 +9,13 @@ import {
 } from './selection-policy';
 
 const ADR_IDS = Array.from(
-  { length: 18 },
+  { length: 19 },
   (_, index) => `adr:${String(index + 1).padStart(3, '0')}`,
 );
 
 describe('Knowledge selection policy', () => {
   it('defines every canonical context under a versioned policy', () => {
-    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.5.0');
+    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.6.0');
     expect(Object.keys(KNOWLEDGE_SELECTION_POLICY.contexts)).toEqual([
       'GLOBAL',
       'PRODUCT_OWNER',
@@ -56,6 +56,8 @@ describe('Knowledge selection policy', () => {
       'knowledge:response-validator-flow',
       'knowledge:artifact-generator-flow',
       'knowledge:artifact-lifecycle',
+      'knowledge:product-owner-agent-flow',
+      'knowledge:pipeline-overview',
       ...ADR_IDS,
     ]);
   });
@@ -98,6 +100,7 @@ describe('Knowledge selection policy', () => {
         'adr:016',
         'adr:017',
         'adr:018',
+        'adr:019',
       ],
     });
   });

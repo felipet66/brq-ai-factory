@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 8 — Artifact Generator implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 9 — Product Owner Agent implementada em 2026-08-05 e aguardando validação técnica final e aprovação humana.
 
-Não iniciar a Sprint 9 sem aprovação explícita.
+Não iniciar a Sprint 10 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -18,6 +18,7 @@ Não iniciar a Sprint 9 sem aprovação explícita.
 - Agent Runner genérico integrando Prompt Builder e AI Provider sem regras de agente ou workflow;
 - Response Validator genérico para classificação funcional determinística de `AgentRunResult`;
 - Artifact Generator genérico para produzir drafts determinísticos a partir de saídas validadas e specifications declarativas;
+- Product Owner Agent como fachada concreta de uma única tentativa sobre os componentes genéricos já existentes;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -105,7 +106,7 @@ Não iniciar a Sprint 9 sem aprovação explícita.
 - hashes de seções preservados nos metadados do `PromptResult`;
 - comparação estrutural determinística de seções adicionadas, removidas, alteradas ou reordenadas, com paths imutáveis e sem avaliação semântica por IA;
 - logs limitados a identidade e versão do prompt, hashes finais, quantidades de seções e contextos, orçamento, duração, correlação e códigos de erro;
-- Prompt Manifest, assets, loader, selector, registry e consumers de produção adiados por ausência de uso concreto.
+- na Sprint 5, Prompt Manifest, assets e consumers foram adiados; a Sprint 9 adicionou o bundle estático do Product Owner, enquanto loader genérico, selector, registry e seleção dinâmica continuam adiados.
 
 ## Agent Runner Layer
 
@@ -152,6 +153,22 @@ Não iniciar a Sprint 9 sem aprovação explícita.
 - logs contêm somente IDs, hashes, contagens, bytes, duração, estágio e código de erro, sem conteúdo ou specification completa;
 - nenhuma IA, filesystem, persistência, versionamento, retry, estado, agente concreto ou workflow.
 
+## Product Owner Agent Layer
+
+- `agents/product-owner` registrado como workspace interno e primeira fachada concreta de agente;
+- a factory valida dependências e o bundle de assets uma vez antes de aceitar requests; `ASSET_LOADING` não integra os estágios da tentativa;
+- cada invocação encadeia `Knowledge Loader → Agent Runner → Response Validator → Business Validation → Artifact Generator` sem coordenar outros agentes;
+- demanda, specification, readiness e resultado possuem contratos e schemas versionados e imutáveis;
+- assets declarativos versionados em `prompts/product-owner/1.0.0`, com manifesto referenciando filenames, IDs e versões, loader calculando os hashes do template, rule sets, output contract, Validation Contract derivado, artifact specification e bundle, e `bundleHash` esperado fixado para impedir alteração silenciosa do release;
+- o JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita e permanecem um risco conhecido;
+- IDs dos assets e itens de domínio são explícitos e estáveis, independentemente dos filenames;
+- Business Validation específica do domínio recalcula readiness e verifica completude, unicidade e referências cruzadas sem corrigir a resposta; o relatório expõe no máximo 100 issues e informa `issuesTruncated`;
+- `READY`, `PARTIALLY_READY` e `REQUIRES_CLARIFICATION` distinguem specification pronta, pendências não bloqueantes e dúvidas bloqueantes;
+- somente as validações estrutural e de negócio aceitas permitem ao Artifact Generator receber o `ValidationResult` e a `ArtifactSpecification` e gerar exatamente `story.md`, `acceptance.md` e `backlog.json`;
+- canonicalização e hashing reutilizam APIs públicas existentes; não existe implementação paralela no agente;
+- logs preservam apenas IDs, versões, hashes, contagens, tempos e códigos técnicos, sem demanda, contexto, prompt, resposta ou artifacts;
+- nenhuma persistência, retry, transição de estado, Orchestrator, Developer Agent ou QA Agent integra esta Sprint.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -162,6 +179,7 @@ Não iniciar a Sprint 9 sem aprovação explícita.
 - ADR-016 registra a fronteira do Agent Runner, suas integrações, a separação de métricas e a ausência de retry, persistência e regras de workflow;
 - ADR-017 registra a fronteira do Response Validator, a pipeline determinística, o report interno, a classificação funcional e a ausência de retry ou semântica específica de agente;
 - ADR-018 registra a fronteira do Artifact Generator, a specification declarativa, o modelo resolvido interno, a separação dos hashes e a ausência de filesystem, persistência e versionamento;
+- ADR-019 registra a fronteira do Product Owner Agent, a composição dos componentes genéricos, a Business Validation específica e a ausência de workflow, retry e persistência;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -270,12 +288,25 @@ Não iniciar a Sprint 9 sem aprovação explícita.
 - teste de contrato Validator → Generator aprovado usando exclusivamente APIs públicas;
 - nenhuma chamada externa, persistência, filesystem, retry ou item da Sprint 9 executado.
 
+## Validações da Sprint 9
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 507 aprovados, sendo 64 do Product Owner Agent, 442 anteriores da suíte raiz e 1 smoke da aplicação;
+- cobertura de `agents/product-owner`: 93,82% statements, 82,15% branches, 100% functions e 94,60% lines;
+- cobertura global da suíte raiz: 93,75% statements, 85,10% branches, 98,63% functions e 93,93% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- `git diff --check`: aprovado;
+- nenhuma chamada externa, teste live, persistência, retry ou transição de estado executada;
+- nenhum item da Sprint 10 foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E;
-- agentes e prompts funcionais;
-- assets de prompt, Prompt Manifest, loader, selector, registry e consumers de produção;
-- Product Owner Agent, Developer Agent e QA Agent;
+- Developer Agent e QA Agent;
+- registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional e workflow entre agentes;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;

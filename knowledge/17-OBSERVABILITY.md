@@ -162,6 +162,15 @@ artifact.generation.started
 artifact.generation.completed
 artifact.generation.failed
 
+product_owner.agent.started
+product_owner.knowledge.loaded
+product_owner.run.completed
+product_owner.validation.accepted
+product_owner.validation.rejected
+product_owner.artifacts.generated
+product_owner.agent.completed
+product_owner.agent.failed
+
 artifact.created
 artifact.versioned
 
@@ -186,6 +195,8 @@ Eventos do Agent Runner usam `agentExecutionId` como correlação obrigatória e
 Eventos do Response Validator podem registrar IDs de execução e correlação, identidade, versão e formato do contrato, finish reason, validade, hashes, duração, quantidade e códigos de issues e indicador de truncamento. Nunca registram conteúdo, `structuredData`, valor validado, schema completo, mensagens cruas do engine de schema, prompts ou segredos. O Validator emite uma decisão para a tentativa atual e não possui evento de retry ou correção.
 
 Eventos do Artifact Generator podem registrar IDs de execução e correlação, identidade e versão da specification, `sourceValidationHash`, `sourceValidatedValueHash`, hashes estruturais e de conteúdo, quantidade de templates e artifacts, bytes renderizados, duração, estágio, classificação e código de erro. Nunca registram conteúdo validado ou renderizado, templates, bindings, specification completa, valores resolvidos, prompts ou segredos. Eventos de geração em memória são distintos de `artifact.created` e `artifact.versioned`, emitidos somente pela futura integração de persistência.
+
+Eventos do Product Owner Agent podem registrar IDs de execução e correlação, versões e hashes de assets, contexto documental por ID e hash, outcome, readiness, contagens, durações, provider, modelo e códigos técnicos ou de validação. Nunca registram demanda, contexto, prompt, resposta, specification, issues com valores, artifacts ou schemas completos. A fachada não emite evento de retry ou persistência.
 
 ---
 
@@ -237,6 +248,14 @@ Eventos do Artifact Generator podem registrar IDs de execução e correlação, 
 - duração total da geração;
 - erros por classificação, estágio e código.
 
+## Product Owner Agent
+
+- tentativas concluídas, rejeitadas e com falha;
+- readiness e códigos de rejeição;
+- duração total da fachada e métricas reportadas pelos componentes quando disponíveis;
+- quantidade e bytes dos drafts gerados;
+- versões e hashes dos assets usados.
+
 No Agent Runner, as métricas permanecem separadas por origem:
 
 - `observed`: `totalDurationMs`, `promptBuilderDurationMs`, `providerDurationMs`, `bytesSent` e `bytesReceived`, medidos localmente;
@@ -263,11 +282,13 @@ Uma execução completa deve poder ser visualizada como um trace.
 ```text
 Execution
 ├── Product Owner
+│   ├── Knowledge loading
 │   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
+│   ├── Business validation
 │   ├── Artifact generation
-│   └── Artifact persistence
+│   └── Resultado em memória
 ├── Developer
 │   ├── Prompt building
 │   ├── AI request

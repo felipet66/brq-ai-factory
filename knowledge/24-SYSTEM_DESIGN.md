@@ -259,7 +259,7 @@ Execution Context
 PromptResult
 ```
 
-Prompt Manifest, assets, loader, selector, registry e consumers de produção permanecem adiados até existir uso concreto.
+O Product Owner já possui um manifesto e assets estáticos como consumer concreto. Loader genérico de prompts, selector, registry, descoberta e seleção dinâmica de versões permanecem adiados; o Prompt Builder continua recebendo estruturas prontas e não lê esses assets.
 
 ---
 
@@ -395,7 +395,11 @@ Finalizar
 # Fluxo Interno do Product Owner
 
 ```
-Execution
+Factory: validar dependências e assets
+
+↓
+
+ProductOwnerAgentRequest
 
 ↓
 
@@ -403,7 +407,7 @@ Knowledge Loader
 
 ↓
 
-Contexto estruturado
+Projeção de contexto
 
 ↓
 
@@ -411,11 +415,7 @@ Agent Runner
 
 ↓
 
-Prompt Builder injetado
-
-↓
-
-Agent Runner
+Prompt Builder injetado no Runner
 
 ↓
 
@@ -423,7 +423,7 @@ AI Provider abstrato
 
 ↓
 
-Agent Runner
+AgentRunResult
 
 ↓
 
@@ -431,14 +431,24 @@ Response Validator
 
 ↓
 
+Business Validation (Product Owner)
+
+↓
+
 Artifact Generator
 
 ↓
 
-Persistência
+ProductOwnerAgentResult
 ```
 
-Os demais agentes seguem exatamente o mesmo fluxo.
+A factory valida o bundle uma vez; `ASSET_LOADING` não integra os estágios de uma tentativa. A fachada executa uma única tentativa e retorna `GENERATED` ou `VALIDATION_REJECTED`. A Business Validation expõe `issuesTruncated` quando precisa limitar seu relatório a 100 issues. Depois desse gate, o Artifact Generator ainda recebe o `ValidationResult` aceito junto da `ArtifactSpecification`, nunca a specification funcional isolada. A fachada não persiste, altera estados, executa retry ou chama outros agentes. A futura integração com Orchestrator será responsável por selecionar tentativas, enriquecer e persistir artifacts e avançar o workflow.
+
+O JSON Schema inicial do Product Owner evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs nos modelos-base suportados. Modelos fine-tuned exigem verificação explícita e permanecem um risco conhecido.
+
+[Fluxo visual do Product Owner Agent](32-PRODUCT_OWNER_AGENT_FLOW.md) e [visão geral do pipeline](33-PIPELINE_OVERVIEW.md).
+
+Developer e QA poderão seguir a mesma composição geral, com contratos, Business Validation e artifacts próprios quando suas Sprints forem aprovadas.
 
 ---
 
@@ -562,6 +572,8 @@ O Response Validator usa um contrato server-side coerente com `expectedOutputCon
 
 O Artifact Generator exige resultado aceito e vínculo exato com o contrato fonte declarado pela specification. Bindings leem somente o valor validado e seus resultados permanecem dados opacos; o renderer não executa ou reinterpreta conteúdo. Filenames são nomes lógicos seguros, nunca caminhos, e o módulo não acessa filesystem ou persistência. Logs registram somente IDs, hashes, formatos, contagens, bytes, duração, estágio e código de erro.
 
+O Product Owner Agent valida a demanda e o bundle declarativo antes da execução, preserva conhecimento e input no canal não confiável e separa Response Validation de Business Validation. A fachada não registra conteúdo, não corrige a specification e não possui acesso direto ao provider, banco ou filesystem.
+
 O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 
 ---
@@ -594,7 +606,11 @@ core/
 
 agents/
 
+    product-owner/
+
 prompts/
+
+    product-owner/1.0.0/
 
 shared/
 ```
@@ -609,6 +625,7 @@ sequenceDiagram
     participant API
     participant Engine as Execution Engine
     participant Orchestrator
+    participant PO as Product Owner Agent
     participant Knowledge as Knowledge Loader
     participant Runner as Agent Runner
     participant Prompt as Prompt Builder
@@ -620,18 +637,21 @@ sequenceDiagram
     Frontend->>API: iniciar fluxo
     API->>Engine: criar execução
     Engine->>Orchestrator: iniciar pipeline
-    Orchestrator->>Knowledge: carregar contexto
-    Knowledge-->>Orchestrator: contexto estruturado
-    Orchestrator->>Runner: run(AgentRunRequest)
+    Orchestrator->>PO: run(ProductOwnerAgentRequest)
+    PO->>Knowledge: carregar contexto PRODUCT_OWNER
+    Knowledge-->>PO: contexto estruturado
+    PO->>Runner: run(AgentRunRequest)
     Runner->>Prompt: build(prompt mapeado)
     Prompt-->>Runner: PromptResult
     Runner->>Provider: generate(AIRequest)
     Provider-->>Runner: AIResponse
-    Runner-->>Orchestrator: AgentRunResult
-    Orchestrator->>Validator: validar resposta
-    Validator-->>Orchestrator: resultado validado
-    Orchestrator->>Artifact: generate(validation + specification)
-    Artifact-->>Orchestrator: ArtifactGenerationResult
+    Runner-->>PO: AgentRunResult
+    PO->>Validator: validar resposta
+    Validator-->>PO: ValidationResult
+    PO->>PO: Business Validation
+    PO->>Artifact: generate(ValidationResult aceito + ArtifactSpecification)
+    Artifact-->>PO: ArtifactGenerationResult
+    PO-->>Orchestrator: ProductOwnerAgentResult
     Orchestrator->>Orchestrator: enriquecer drafts com IDs e provenance
     Orchestrator->>DB: persistir ArtifactCreateInput
     DB-->>Orchestrator: concluído

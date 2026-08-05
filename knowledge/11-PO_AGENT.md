@@ -22,28 +22,42 @@ O Product Owner Agent pode receber:
 
 ```json
 {
-  "title": "Criar autenticação com MFA",
-  "description": "Usuários devem utilizar um segundo fator ao entrar no sistema.",
-  "businessGoal": "Reduzir risco de acesso não autorizado.",
-  "targetUsers": ["Usuário autenticado"],
-  "constraints": ["Não utilizar dados reais", "Seguir a stack oficial"],
-  "additionalContext": ""
+  "context": {
+    "executionId": "execution-po-001",
+    "agentExecutionId": "agent-execution-po-001",
+    "attempt": 1,
+    "agentVersion": "1.0.0",
+    "requestId": "request-po-001",
+    "traceId": "trace-po-001"
+  },
+  "demand": {
+    "title": "Criar autenticação com MFA",
+    "description": "Usuários devem utilizar um segundo fator ao entrar no sistema.",
+    "businessGoal": "Reduzir risco de acesso não autorizado.",
+    "targetUsers": ["Usuário autenticado"],
+    "constraints": ["Não utilizar dados reais", "Seguir a stack oficial"]
+  },
+  "additionalContext": "A primeira versão atende somente contas internas.",
+  "model": "configured-model"
 }
 ```
 
 Campos mínimos:
 
-- title
-- description
+- context
+- demand.title
+- demand.description
+- model
 
 Campos opcionais:
 
-- businessGoal
-- targetUsers
-- constraints
+- demand.businessGoal
+- demand.targetUsers
+- demand.constraints
+- demand.deadline
+- demand.priority
 - additionalContext
-- deadline
-- priority
+- limits
 
 ---
 
@@ -51,16 +65,20 @@ Campos opcionais:
 
 O Product Owner Agent deve produzir:
 
+- readiness funcional
 - resumo funcional
 - User Story
 - critérios de aceite
 - regras de negócio
 - cenários
+- premissas
 - dependências
 - dúvidas abertas
 - riscos funcionais
+- itens fora do escopo
+- Definition of Ready
 - backlog inicial
-- artefatos
+- os drafts canônicos quando a saída for aceita
 
 ---
 
@@ -68,14 +86,15 @@ O Product Owner Agent deve produzir:
 
 ```json
 {
-  "status": "SUCCESS",
+  "readiness": "READY",
+  "title": "Autenticação com MFA",
   "summary": "Demanda estruturada com sucesso.",
+  "objective": "Reduzir risco de acesso não autorizado.",
+  "context": "Usuários autenticados precisam confirmar um segundo fator.",
   "userStory": {
-    "title": "Autenticação com MFA",
-    "persona": "usuário autenticado",
-    "need": "confirmar sua identidade por um segundo fator",
-    "benefit": "reduzir o risco de acesso não autorizado",
-    "statement": "Como usuário autenticado, quero confirmar minha identidade por um segundo fator para reduzir o risco de acesso não autorizado."
+    "asA": "usuário autenticado",
+    "iWant": "confirmar minha identidade por um segundo fator",
+    "soThat": "reduza o risco de acesso não autorizado"
   },
   "acceptanceCriteria": [
     {
@@ -88,28 +107,47 @@ O Product Owner Agent deve produzir:
   "businessRules": [
     {
       "id": "BR-001",
-      "description": "O acesso só pode ser concluído após a validação dos dois fatores."
+      "description": "O acesso só pode ser concluído após a validação dos dois fatores.",
+      "source": "Demanda inicial",
+      "condition": "Credenciais do primeiro fator válidas",
+      "impact": "HIGH"
     }
   ],
-  "scenarios": {
-    "positive": [],
-    "negative": [],
-    "edgeCases": []
-  },
+  "scenarios": [
+    {
+      "id": "SCN-001",
+      "title": "Solicitar segundo fator",
+      "type": "MAIN",
+      "given": ["Credenciais válidas"],
+      "when": ["O primeiro fator for aprovado"],
+      "then": ["O sistema solicita o segundo fator"],
+      "acceptanceCriteriaIds": ["AC-001"]
+    }
+  ],
+  "assumptions": [],
   "dependencies": [],
   "openQuestions": [],
   "risks": [],
-  "backlog": [],
-  "artifacts": [],
-  "nextContext": {},
-  "warnings": [],
-  "metadata": {
-    "agent": "PRODUCT_OWNER",
-    "promptVersion": "1.0.0",
-    "schemaVersion": "1.0.0"
-  }
+  "outOfScope": [],
+  "definitionOfReady": [{ "id": "DOR-001", "criterion": "Critérios de aceite revisados" }],
+  "backlogItems": [
+    {
+      "id": "BL-001",
+      "title": "Solicitar segundo fator",
+      "description": "Exibir a etapa de confirmação após o primeiro fator.",
+      "priority": "HIGH",
+      "dependencyIds": [],
+      "acceptanceCriteriaIds": ["AC-001"]
+    }
+  ]
 }
 ```
+
+O contrato usa listas explícitas, objetos estritos e IDs estáveis. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs nos modelos-base suportados; modelos fine-tuned exigem verificação explícita. O Response Validator valida o schema; depois, a Business Validation recalcula a readiness, exige referências válidas e aplica as regras de completude sem modificar a resposta. Seu relatório expõe no máximo 100 issues e usa `issuesTruncated` para indicar corte.
+
+- `READY`: não há dúvida nem premissa pendente;
+- `PARTIALLY_READY`: há somente dúvida não bloqueante ou premissa que exige validação;
+- `REQUIRES_CLARIFICATION`: existe ao menos uma dúvida bloqueante.
 
 ---
 
@@ -207,12 +245,12 @@ Exemplo:
 
 ```json
 {
-  "id": "ITEM-001",
+  "id": "BL-001",
   "title": "Solicitar segundo fator",
   "description": "Exibir a etapa de confirmação após a validação das credenciais.",
   "priority": "HIGH",
-  "dependencies": [],
-  "acceptanceCriteria": ["AC-001"]
+  "dependencyIds": [],
+  "acceptanceCriteriaIds": ["AC-001"]
 }
 ```
 
@@ -246,7 +284,8 @@ Exemplo:
 
 ```json
 {
-  "assumption": "O MVP utilizará um código temporário fictício.",
+  "id": "ASM-001",
+  "description": "O MVP utilizará um código temporário fictício.",
   "requiresValidation": true
 }
 ```
@@ -270,17 +309,19 @@ Fora de escopo:
 
 # Artefatos
 
-O Product Owner Agent deve gerar:
+Uma specification aceita deve gerar deterministicamente exatamente três drafts, nesta ordem:
 
 ## story.md
 
 Contém:
 
 - título
+- readiness
+- resumo
 - contexto
 - objetivo
 - User Story
-- escopo
+- premissas
 - fora de escopo
 
 ## acceptance.md
@@ -290,7 +331,10 @@ Contém:
 - critérios de aceite
 - regras de negócio
 - cenários
+- dependências
+- riscos
 - dúvidas
+- Definition of Ready
 
 ## backlog.json
 
@@ -351,7 +395,7 @@ A saída é considerada adequada quando:
 
 # Casos de Falha
 
-O agente deve retornar `REQUIRES_REVIEW` quando:
+O agente retorna `REQUIRES_CLARIFICATION` somente quando existe ao menos uma `openQuestion` com impacto `BLOCKING`. Os casos abaixo devem ser registrados como pergunta bloqueante quando impedirem uma especificação segura:
 
 - a demanda for muito vaga
 - os objetivos estiverem em conflito
@@ -373,4 +417,4 @@ A etapa do Product Owner está concluída quando:
 - cenários foram identificados
 - dúvidas foram registradas
 - artefatos foram produzidos
-- o schema foi validado
+- o schema e a Business Validation foram aceitos

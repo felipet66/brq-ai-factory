@@ -6,6 +6,7 @@ export default defineConfig({
     fileParallelism: false,
     hookTimeout: 60_000,
     include: [
+      'agents/product-owner/**/*.spec.ts',
       'core/agent-runner/**/*.spec.ts',
       'core/ai-provider/**/*.spec.ts',
       'core/artifact-generator/**/*.spec.ts',
@@ -19,6 +20,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'agents/product-owner/**/*.ts',
         'core/agent-runner/**/*.ts',
         'core/ai-provider/**/*.ts',
         'core/artifact-generator/**/*.ts',
@@ -28,7 +30,12 @@ export default defineConfig({
         'shared/**/*.ts',
         'prisma/**/*.ts',
       ],
-      exclude: ['**/*.spec.ts', 'shared/types/**', 'generated/**'],
+      exclude: [
+        '**/*.spec.ts',
+        'agents/product-owner/testing/**',
+        'shared/types/**',
+        'generated/**',
+      ],
       reporter: ['text', 'json-summary'],
     },
   },
