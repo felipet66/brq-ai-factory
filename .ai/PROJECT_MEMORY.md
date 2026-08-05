@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 4 — Knowledge Loader implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 5 — Prompt Builder implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 5 sem aprovação explícita.
+Não iniciar a Sprint 6 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -14,6 +14,7 @@ Não iniciar a Sprint 5 sem aprovação explícita.
 - Prisma 7 com SQLite local, models, migration inicial e repositories;
 - SDK OpenAI 7.4 com Responses API isolada no adapter concreto;
 - Knowledge Loader determinístico com origem filesystem abstraída por `KnowledgeSource`;
+- Prompt Builder determinístico com AST imutável e renderização final em dois canais;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -86,12 +87,30 @@ Não iniciar a Sprint 5 sem aprovação explícita.
 - logs limitados a metadados técnicos, sem conteúdo documental ou caminhos absolutos;
 - nenhuma IA, embeddings, RAG, busca semântica, resumo, persistência ou montagem de prompt.
 
+## Prompt Builder Layer
+
+- `core/prompt-builder` registrado como workspace interno `@brq/prompt-builder`;
+- transformação pura e determinística, sem I/O de domínio, filesystem, persistência ou chamadas externas; logger estruturado injetável como única saída lateral;
+- hierarquia conceitual `PromptDocument → PromptSection → PromptBlock → PromptFragment`, representada por `PromptTemplate` e `ResolvedPromptDocument`;
+- seções separadas pelos canais semânticos `INSTRUCTIONS` e `INPUT`;
+- templates com slots tipados validados e resolução em uma única passagem;
+- contexto, constraints, variáveis e output contracts recebidos como estruturas prontas;
+- orçamento padrão de 128 KiB, configurável por instância em bytes UTF-8, com preflight de limite inferior e medição final exata, sem resumo, truncamento ou omissão silenciosa;
+- limite estrutural separado para referências de proveniência, configurável por instância e aplicado antes do clone por schema;
+- hashes SHA-256 canônicos `templateHash`, `instructionsHash`, `inputHash`, `outputContractHash` e `promptHash`;
+- proveniência canônica de rule sets e contextos preservada em `ResolvedPromptDocument.sources` e nos metadados, sem alterar o `promptHash` do payload efetivo;
+- hashes de seções preservados nos metadados do `PromptResult`;
+- comparação estrutural determinística de seções adicionadas, removidas, alteradas ou reordenadas, com paths imutáveis e sem avaliação semântica por IA;
+- logs limitados a identidade e versão do prompt, hashes finais, quantidades de seções e contextos, orçamento, duração, correlação e códigos de erro;
+- Prompt Manifest, assets, loader, selector, registry e consumers de produção adiados por ausência de uso concreto.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
 - ADR-012 registra ports compartilhados, adapter Prisma, mapeamento físico, versionamento e política de delete;
 - ADR-013 registra a fronteira do AI Provider, a separação entre retries técnicos e funcionais e a política de segurança;
 - ADR-014 registra a fronteira do Knowledge Loader, manifesto declarativo, índice imutável, seleção determinística, orçamento e segurança do filesystem;
+- ADR-015 registra a fronteira do Prompt Builder, AST imutável, canais semânticos, renderização determinística, orçamento, hashes e comparação estrutural;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -151,11 +170,24 @@ Não iniciar a Sprint 5 sem aprovação explícita.
 - smoke local do adapter filesystem: 41 documentos indexados, nenhum ausente e os 6 contextos canônicos carregados;
 - nenhuma chamada externa ou teste live executado.
 
+## Validações da Sprint 5
+
+- format check: aprovado;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 297 aprovados, sendo 77 do Prompt Builder, 219 anteriores da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/prompt-builder`: 92,15% statements, 84,84% branches, 97,95% functions e 91,96% lines;
+- cobertura global da suíte raiz: 91,95% statements, 83,59% branches, 96,80% functions e 91,90% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- nenhuma chamada externa ou teste live executado.
+
 ## Fora do escopo confirmado
 
 - testes E2E;
 - agentes e prompts funcionais;
-- Prompt Builder e Agent Runner;
+- assets de prompt, Prompt Manifest, loader, selector, registry e consumers de produção;
+- Agent Runner;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;
 - métricas avançadas;

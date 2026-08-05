@@ -65,7 +65,7 @@ QA Agent
 Resultado Final
 ```
 
-O Orchestrator solicita o tipo de contexto necessário para cada etapa. O Knowledge Loader aplica a política documental determinística, e o Prompt Builder futuro combina esse contexto com as demais entradas. Nenhum desses componentes transfere suas responsabilidades ao agente.
+O Orchestrator solicita o tipo de contexto necessário para cada etapa. O Knowledge Loader aplica a política documental determinística, e o Prompt Builder combina esse contexto já preparado com as demais estruturas de entrada. Nenhum desses componentes transfere suas responsabilidades ao agente.
 
 ---
 
@@ -86,6 +86,8 @@ agents/
 ```
 
 O runner de execução é genérico e permanece em `core/agent-runner`, conforme o ADR-011.
+
+Essa estrutura descreve os agentes futuros. A Sprint 5 não cria `prompt.md`, Prompt Manifest, loader, selector ou consumer de produção. O Prompt Builder recebe definições prontas e permanece independente dos diretórios de agentes e prompts.
 
 ---
 
@@ -249,6 +251,8 @@ Todo agente recebe um envelope de execução.
 Cada agente deve receber apenas o contexto necessário.
 
 Documentos da Knowledge Layer são selecionados pelo Knowledge Loader mediante política explícita e orçamento configurável. O Loader preserva o conteúdo e sua rastreabilidade; não monta o prompt nem interpreta regras funcionais do agente.
+
+O Prompt Builder recebe o contexto já carregado e o mantém separado de instruções por canais semânticos. Ele não seleciona documentos, resume conteúdo ou infere regras do agente.
 
 Não enviar automaticamente:
 
@@ -493,7 +497,8 @@ Cada execução deve registrar:
 
 - agente
 - versão
-- prompt
+- ID e versão do prompt
+- `templateHash` e `promptHash`
 - modelo
 - horário de início
 - horário de término

@@ -169,6 +169,14 @@ Cada agente deve ser instruído a ignorar pedidos que tentem:
 - executar ações fora do escopo
 - modificar regras arquiteturais
 
+## Prompt Builder
+
+O Prompt Builder deve manter identidade, regras e output contract confiáveis no canal `INSTRUCTIONS`, enquanto constraints, contexto e entradas não confiáveis permanecem no canal `INPUT`. A AST e os delimitadores estruturais preservam essa separação até a renderização, mas não tornam o conteúdo confiável nem substituem a validação posterior da resposta.
+
+Templates aceitam apenas slots tipados validados. A resolução ocorre em uma única passagem, e valores inseridos são tratados como dados opacos, sem reinterpretação como template ou criação de novos nós estruturais.
+
+O orçamento em bytes UTF-8 limita o tamanho do prompt sem resumir ou truncar conteúdo. Logs nunca incluem texto renderizado, contexto, entrada do usuário, valores de variáveis, segredos ou JSON Schemas completos.
+
 ---
 
 # Saída dos Agentes

@@ -197,12 +197,35 @@ O Context Composer preserva cada documento sem resumo ou transformação e inclu
 Recebe:
 
 - contexto estruturado do Knowledge Loader
-- prompt base
+- definição versionada
+- regras globais e específicas do agente
+- constraints
+- variáveis
 - entrada do usuário
+- output contract provider-neutral
+
+Contextos usam contrato local com os tipos `KNOWLEDGE`, `EXECUTION`, `USER_INPUT` ou `ARTIFACT`, serialização `TEXT` ou `JSON` e `contentHash` verificado. O documento resolvido preserva proveniência completa de contextos e de rule sets em `sources`, espelhada nos metadados. Output contracts suportam `TEXT` e `JSON_SCHEMA`.
 
 Gera:
 
-Prompt Final
+`PromptResult`
+
+O prompt permanece estruturado até o último passo em uma hierarquia conceitual imutável de quatro níveis:
+
+```text
+PromptDocument
+└── PromptSection
+    └── PromptBlock
+        └── PromptFragment
+```
+
+Essa hierarquia é representada por `PromptTemplate` antes da resolução e por `ResolvedPromptDocument` depois dela. A posição nos arrays define a ordem canônica; não existe campo `order`.
+
+Cada seção pertence ao canal semântico `INSTRUCTIONS` ou `INPUT`: identidade, regras e output contract são confiáveis; constraints, contextos e entrada são não confiáveis. A montagem e a renderização seguem ordem canônica, templates resolvem slots tipados em uma única passagem e valores inseridos permanecem dados opacos. O renderer produz textos separados para `instructions` e `input`; o `PromptResult` contém ainda documento resolvido, metadados, orçamento e output contract.
+
+O orçamento padrão é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada. Um preflight de limite inferior antecede clone, canonicalização e renderização; a medição final exata soma os bytes UTF-8 de `instructions`, `input` e do output contract em JSON canônico. Excesso gera erro; o Builder não resume, trunca ou omite silenciosamente conteúdo. Hashes canônicos identificam o template, os canais renderizados, o output contract e o resultado final. Proveniência não integra o `promptHash` do payload efetivo. A comparação estrutural desta Sprint reporta seções adicionadas, removidas, alteradas ou reordenadas e a mudança de `promptHash`, com `nodeType` e `path` imutável nas referências públicas. Mudanças exclusivas de proveniência podem manter `PromptComparison.equal`.
+
+A transformação é pura e não realiza I/O de domínio nem acessa recursos externos; o logger estruturado injetável é sua única saída lateral. O componente não carrega assets, seleciona versões, persiste dados ou conhece AI Provider, OpenAI, Responses API, Agent Runner, Orchestrator, Knowledge Source, Prisma ou frontend.
 
 Exemplo:
 
@@ -231,8 +254,10 @@ Execution Context
 
 ↓
 
-Prompt Final
+PromptResult
 ```
+
+Prompt Manifest, assets, loader, selector, registry e consumers de produção permanecem adiados até existir uso concreto.
 
 ---
 
@@ -499,7 +524,8 @@ Cada execução registra:
 - tokens
 - agente
 - modelo
-- prompt
+- ID e versão do prompt
+- `templateHash` e `promptHash`
 - artifacts
 - logs
 - retries

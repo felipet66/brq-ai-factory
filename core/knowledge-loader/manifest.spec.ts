@@ -4,20 +4,28 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 27 canonical documents and ADRs 001 through 014', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.0.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(41);
+  it('loads the 28 canonical documents and ADRs 001 through 015', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.2.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(43);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      27,
+      28,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      14,
+      15,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:014',
-      locator: 'ADR/ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md',
+      id: 'adr:015',
+      locator: 'ADR/ADR-015-PROMPT-BUILDER-BOUNDARY.md',
       category: 'ADR',
-      order: 1014,
+      order: 1015,
+    });
+    expect(
+      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
+    ).toEqual({
+      id: 'knowledge:prompt-builder-flow',
+      locator: '27-PROMPT_BUILDER_FLOW.md',
+      category: 'ARCHITECTURE',
+      order: 27,
     });
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST.documents)).toBe(true);

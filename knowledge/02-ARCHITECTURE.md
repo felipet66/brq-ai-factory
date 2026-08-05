@@ -105,6 +105,16 @@ O Knowledge Loader não monta prompts, executa agentes, coordena o pipeline, per
 
 ---
 
+### Prompt Layer
+
+`core/prompt-builder` recebe estruturas prontas e produz um `PromptResult` determinístico. A hierarquia conceitual `PromptDocument → PromptSection → PromptBlock → PromptFragment` é representada por `PromptTemplate` antes da resolução e por `ResolvedPromptDocument` depois dela.
+
+Seções usam os canais semânticos `INSTRUCTIONS` e `INPUT`. Templates, constraints, contexto, variáveis e output contracts são validados e compostos em ordem explícita; orçamento e hashes usam bytes UTF-8 e representações canônicas.
+
+A transformação é pura e não realiza I/O de domínio nem acessa recursos externos; o logger estruturado injetável é sua única saída lateral. O Prompt Builder não carrega assets, seleciona versões, chama providers, executa agentes, coordena o pipeline ou persiste dados.
+
+---
+
 ### Agent Layer
 
 Cada agente possui:

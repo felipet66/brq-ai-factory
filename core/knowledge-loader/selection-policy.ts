@@ -25,10 +25,11 @@ const ADR_IDS = [
   'adr:012',
   'adr:013',
   'adr:014',
+  'adr:015',
 ] as const;
 
 const rawKnowledgeSelectionPolicy = {
-  version: '1.0.0',
+  version: '1.2.0',
   contexts: {
     GLOBAL: {
       required: [
@@ -99,6 +100,7 @@ const rawKnowledgeSelectionPolicy = {
         'adr:010',
         'adr:013',
         'adr:014',
+        'adr:015',
       ],
     },
     ARCHITECTURE: {
@@ -111,7 +113,7 @@ const rawKnowledgeSelectionPolicy = {
         'knowledge:system-design',
         'knowledge:repository-structure',
       ],
-      optional: ['knowledge:sequence-diagrams', ...ADR_IDS],
+      optional: ['knowledge:sequence-diagrams', 'knowledge:prompt-builder-flow', ...ADR_IDS],
     },
   },
 };

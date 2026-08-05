@@ -176,7 +176,53 @@ O módulo produz contexto íntegro e rastreável, com orçamento configurável. 
 
 ## Prompt Builder
 
-Monta o prompt final.
+Transforma estruturas prontas em um `PromptResult` determinístico.
+
+Estrutura inicial:
+
+```text
+prompt-builder/
+
+package.json
+
+canonical-json.ts
+
+contracts.ts
+
+context-injector.ts
+
+errors.ts
+
+hashing.ts
+
+immutability.ts
+
+index.ts
+
+prompt-assembler.ts
+
+prompt-budget.ts
+
+prompt-builder.ts
+
+prompt-comparator.ts
+
+prompt-renderer.ts
+
+prompt-template.ts
+
+schemas.ts
+
+variable-resolver.ts
+
+testing/prompt-fixtures.ts
+
+*.spec.ts
+```
+
+O prompt segue a hierarquia conceitual imutável `PromptDocument → PromptSection → PromptBlock → PromptFragment`, representada concretamente por `PromptTemplate` antes da resolução e por `ResolvedPromptDocument` depois dela. Seções declaram os canais semânticos `INSTRUCTIONS` ou `INPUT`; o renderer produz os textos separados `instructions` e `input`.
+
+A transformação é pura e sem I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não lê `agents/`, `prompts/` ou `knowledge/`, não carrega assets, não seleciona versões e não conhece AI Provider, Agent Runner, Orchestrator, Knowledge Source, Prisma ou frontend.
 
 ---
 
@@ -250,6 +296,8 @@ tests/
 examples/
 ```
 
+Essa estrutura é futura. A Sprint 5 não cria agentes, prompts funcionais ou consumers de produção.
+
 ---
 
 # prompts
@@ -267,6 +315,8 @@ qa/
 ```
 
 O Prompt Builder monta o Prompt Final.
+
+Na Sprint 5, esta pasta permanece reservada. Prompt Manifest, assets versionados, loader, selector e registry serão definidos somente quando houver agents e consumers concretos; o Builder recebe estruturas prontas e não acessa esta pasta.
 
 ---
 
@@ -325,7 +375,8 @@ Workspaces implementados:
 - `shared`;
 - `prisma`;
 - `core/ai-provider`;
-- `core/knowledge-loader`.
+- `core/knowledge-loader`;
+- `core/prompt-builder`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -378,6 +429,8 @@ Pode acessar:
 - prompts
 
 - shared
+
+O Prompt Builder é uma exceção mais restrita dentro de `core`: recebe estruturas prontas e não acessa `agents/`, `prompts/` ou `knowledge/`.
 
 ---
 

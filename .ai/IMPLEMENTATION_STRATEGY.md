@@ -253,7 +253,7 @@ Cada contexto recebe somente os documentos autorizados e selecionados, com conte
 
 Objetivo
 
-Construir prompts dinamicamente.
+Transformar estruturas prontas em prompts finais determinísticos.
 
 Entregas
 
@@ -261,15 +261,29 @@ core/prompt-builder
 
 Responsabilidades
 
-- carregar prompt base
-- adicionar contexto
-- adicionar regras
-- adicionar segurança
-- adicionar entrada do usuário
+- validar contratos de entrada, AST e resultado
+- representar a hierarquia conceitual PromptDocument → PromptSection → PromptBlock → PromptFragment como PromptTemplate antes da resolução e ResolvedPromptDocument depois dela
+- separar seções pelos canais semânticos INSTRUCTIONS e INPUT
+- compor regras globais, regras de agente, constraints, contexto, variáveis e output contracts provider-neutral
+- resolver slots tipados em uma única passagem
+- aplicar preflight de limite inferior e medição final exata sobre orçamento configurável em bytes UTF-8, com default centralizado de 128 KiB, sem truncamento silencioso
+- limitar estruturalmente as referências de proveniência antes do clone por schema, sem debitá-las do orçamento do payload
+- produzir `templateHash`, `instructionsHash`, `inputHash`, `outputContractHash` e `promptHash` canônicos
+- preservar proveniência canônica de rule sets e contextos sem alterar o `promptHash` do payload efetivo
+- comparar prompts estruturalmente com referências imutáveis de nodeType e path
+- renderizar os canais `instructions` e `input` somente na etapa final
+
+Decisões da implementação
+
+- a transformação é pura e determinística, sem I/O de domínio, filesystem, persistência ou chamadas externas; o logger estruturado injetável é a única saída lateral;
+- recebe somente estruturas prontas e não conhece AI Provider, Agent Runner, Orchestrator, Knowledge Source, Prisma ou frontend;
+- valores resolvidos são tratados como dados opacos e nunca reinterpretados como template;
+- logs contêm somente metadados técnicos sanitizados;
+- Prompt Manifest, assets, loader, selector, registry e consumers de produção permanecem adiados por não existir uso concreto nesta Sprint.
 
 Critério
 
-Prompt final estruturado.
+O mesmo input válido produz uma estrutura imutável, os mesmos canais renderizados e hashes idênticos, dentro do orçamento configurado.
 
 ---
 

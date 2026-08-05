@@ -44,6 +44,8 @@ Entregas:
 - Next.js
 - Prisma
 - SQLite
+- Knowledge Loader
+- Prompt Builder determinístico
 - Orchestrator
 - Product Owner Agent
 - Developer Agent
@@ -76,6 +78,8 @@ Entregas:
 - Prompt Registry
 - Versionamento completo
 - Dashboard de execução
+
+Assets de prompt, Prompt Manifest, loader e selector serão avaliados junto ao Prompt Registry, quando existirem agents e consumers de produção. A Sprint 5 entrega somente o motor puro de composição e renderização.
 
 ---
 

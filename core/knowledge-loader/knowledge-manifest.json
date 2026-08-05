@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.2.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -144,6 +144,12 @@
       "order": 26
     },
     {
+      "id": "knowledge:prompt-builder-flow",
+      "locator": "27-PROMPT_BUILDER_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 27
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -226,6 +232,12 @@
       "locator": "ADR/ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md",
       "category": "ADR",
       "order": 1014
+    },
+    {
+      "id": "adr:015",
+      "locator": "ADR/ADR-015-PROMPT-BUILDER-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1015
     }
   ]
 }

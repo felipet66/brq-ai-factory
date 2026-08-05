@@ -8,6 +8,7 @@ export default defineConfig({
     include: [
       'core/ai-provider/**/*.spec.ts',
       'core/knowledge-loader/**/*.spec.ts',
+      'core/prompt-builder/**/*.spec.ts',
       'shared/**/*.spec.ts',
       'prisma/**/*.spec.ts',
     ],
@@ -17,6 +18,7 @@ export default defineConfig({
       include: [
         'core/ai-provider/**/*.ts',
         'core/knowledge-loader/**/*.ts',
+        'core/prompt-builder/**/*.ts',
         'shared/**/*.ts',
         'prisma/**/*.ts',
       ],

@@ -28,6 +28,7 @@ Este documento funciona apenas como índice.
 | ADR-012 | Persistence Boundary                                | Accepted |
 | ADR-013 | AI Provider Boundary and Resilience                 | Accepted |
 | ADR-014 | Knowledge Loader Boundary and Deterministic Context | Accepted |
+| ADR-015 | Prompt Builder Boundary and Deterministic Model     | Accepted |
 
 ---
 

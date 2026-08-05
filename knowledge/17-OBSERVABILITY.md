@@ -148,8 +148,11 @@ agent.execution.retried
 artifact.created
 artifact.versioned
 
-prompt.loaded
+prompt.build.started
+prompt.build.completed
+prompt.build.failed
 prompt.validation.failed
+prompt.budget.exceeded
 
 ai.request.started
 ai.request.retrying
@@ -158,6 +161,8 @@ ai.request.failed
 ```
 
 Eventos do AI Provider registram somente provider, modelo, IDs de correlação, tentativa, duração, tokens, código de erro e status técnico aplicável. Nunca registram prompts, respostas completas, chaves, headers de autorização, cookies ou JSON Schemas completos.
+
+Eventos do Prompt Builder registram somente metadados aplicáveis ao evento: promptId, agente, versão, schemaVersion, `templateHash`, `instructionsHash`, `inputHash`, `outputContractHash`, `promptHash`, quantidades de seções e contextos, orçamento, bytes, duração, requestId, traceId e código de erro. Nunca registram o texto renderizado, contexto, entrada do usuário, valores de variáveis ou JSON Schemas completos.
 
 ---
 
@@ -213,17 +218,17 @@ Uma execução completa deve poder ser visualizada como um trace.
 ```text
 Execution
 ├── Product Owner
-│   ├── Prompt loading
+│   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
 │   └── Artifact persistence
 ├── Developer
-│   ├── Prompt loading
+│   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
 │   └── Artifact persistence
 └── QA
-    ├── Prompt loading
+    ├── Prompt building
     ├── AI request
     ├── Schema validation
     └── Artifact persistence
@@ -237,7 +242,8 @@ A plataforma deve registrar informações suficientes para reproduzir uma execu�
 
 Registrar:
 
-- versão do prompt
+- ID e versão do prompt
+- `templateHash` e `promptHash`
 - agente
 - modelo
 - configurações

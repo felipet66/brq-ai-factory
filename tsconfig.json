@@ -6,6 +6,7 @@
   "include": [
     "core/ai-provider/**/*.ts",
     "core/knowledge-loader/**/*.ts",
+    "core/prompt-builder/**/*.ts",
     "prisma.config.ts",
     "prisma/**/*.ts",
     "shared/**/*.ts",
