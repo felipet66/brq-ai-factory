@@ -248,6 +248,8 @@ Responsabilidades:
 
 Camada de abstração.
 
+Recebe uma solicitação já montada, chama uma implementação concreta e normaliza conteúdo, modelo, uso de tokens e metadados técnicos. Não monta prompts, não carrega conhecimento, não valida contratos funcionais, não cria artefatos e não persiste dados.
+
 Implementações futuras:
 
 - OpenAI
@@ -443,6 +445,8 @@ Quando permitido:
 Nunca realizar retry infinito.
 
 Retry automático cria uma nova `AgentExecution`, com novo identificador e `attempt` incrementado, dentro da mesma `Execution`. `RETRY` é um evento, não um estado persistido.
+
+Retries internos do `AIProvider` são tentativas técnicas distintas: somente falhas de conexão sem resposta HTTP válida podem ser repetidas e todas permanecem na mesma chamada. Respostas HTTP, recusas e conteúdo inválido nunca disparam retry técnico. O Orchestrator continua responsável por qualquer nova `AgentExecution`.
 
 ```
 Tentativa 1

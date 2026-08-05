@@ -14,6 +14,7 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "paths": {
+      "@brq/ai-provider/*": ["./core/ai-provider/*"],
       "@brq/shared/*": ["./shared/*"]
     }
   }

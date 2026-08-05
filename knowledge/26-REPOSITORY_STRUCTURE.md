@@ -299,7 +299,8 @@ Workspaces implementados:
 
 - `apps/web`;
 - `shared`;
-- `prisma`.
+- `prisma`;
+- `core/ai-provider`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 

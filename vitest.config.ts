@@ -5,10 +5,11 @@ export default defineConfig({
     environment: 'node',
     fileParallelism: false,
     hookTimeout: 60_000,
-    include: ['shared/**/*.spec.ts', 'prisma/**/*.spec.ts'],
+    include: ['core/ai-provider/**/*.spec.ts', 'shared/**/*.spec.ts', 'prisma/**/*.spec.ts'],
+    exclude: ['core/ai-provider/**/*.live.spec.ts'],
     coverage: {
       provider: 'v8',
-      include: ['shared/**/*.ts', 'prisma/**/*.ts'],
+      include: ['core/ai-provider/**/*.ts', 'shared/**/*.ts', 'prisma/**/*.ts'],
       exclude: ['**/*.spec.ts', 'shared/types/**', 'generated/**'],
       reporter: ['text', 'json-summary'],
     },

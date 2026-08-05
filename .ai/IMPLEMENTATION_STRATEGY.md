@@ -200,6 +200,15 @@ Implementar:
 - FakeAIProvider
 - Configuração
 
+Decisões da implementação
+
+- contratos específicos permanecem em `core/ai-provider` e não conhecem a Responses API;
+- OpenAIProvider utiliza a Responses API apenas como adapter inicial;
+- timeout padrão de 60 segundos com configuração server-side;
+- retry técnico somente para falha de conexão sem resposta HTTP válida;
+- FakeAIProvider cobre falhas técnicas, JSON malformado e structured output incompatível;
+- suíte padrão não realiza chamadas reais.
+
 Critério
 
 A aplicação consegue conversar com um provider utilizando interfaces.

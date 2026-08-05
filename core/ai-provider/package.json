@@ -1,0 +1,16 @@
+{
+  "name": "@brq/ai-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./fake": "./fake/fake-ai-provider.ts",
+    "./openai": "./openai/openai-provider.ts"
+  },
+  "dependencies": {
+    "@brq/shared": "0.1.0",
+    "openai": "^7.4.0",
+    "zod": "^4.4.3"
+  }
+}

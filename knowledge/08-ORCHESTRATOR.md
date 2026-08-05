@@ -94,6 +94,8 @@ Sem reiniciar toda a pipeline.
 
 Retry automático encerra a tentativa atual e cria uma nova `AgentExecution`, com `attempt` incrementado, dentro da mesma `Execution`. `RETRY` é um evento, não um estado.
 
+Essa regra descreve retries funcionais de agente. O `AIProvider` pode repetir internamente apenas uma falha de conexão sem resposta HTTP válida; essas tentativas técnicas permanecem dentro da mesma chamada e não criam `AgentExecution`. Qualquer resposta HTTP, recusa ou conteúdo inválido retorna sem retry técnico.
+
 ---
 
 # Contrato

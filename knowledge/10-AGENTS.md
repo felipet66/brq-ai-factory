@@ -444,6 +444,8 @@ O retry não deve ser infinito.
 
 Cada retry automático cria uma nova `AgentExecution` dentro da mesma `Execution`, com novo identificador e número de tentativa incrementado. Uma `AgentExecution` encerrada não retorna ao estado `RUNNING`.
 
+Tentativas técnicas do `AIProvider` não são retries de agente. Elas são permitidas somente quando uma falha de conexão ocorre sem resposta HTTP válida e permanecem dentro da mesma chamada. Respostas HTTP, recusas, JSON malformado e structured output incompatível não são repetidos pelo provider.
+
 Configuração inicial:
 
 ```text

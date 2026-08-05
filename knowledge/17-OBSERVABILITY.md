@@ -152,9 +152,12 @@ prompt.loaded
 prompt.validation.failed
 
 ai.request.started
+ai.request.retrying
 ai.request.completed
 ai.request.failed
 ```
+
+Eventos do AI Provider registram somente provider, modelo, IDs de correlação, tentativa, duração, tokens, código de erro e status técnico aplicável. Nunca registram prompts, respostas completas, chaves, headers de autorização, cookies ou JSON Schemas completos.
 
 ---
 

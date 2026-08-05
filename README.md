@@ -28,7 +28,8 @@ brq-ai-factory/
 │   │   ├── ADR-009-Prompt-Versioning.md
 │   │   ├── ADR-010-Human-Review.md
 │   │   ├── ADR-011-Repository-Layout.md
-│   │   └── ADR-012-PERSISTENCE_BOUNDARY.md
+│   │   ├── ADR-012-PERSISTENCE_BOUNDARY.md
+│   │   └── ADR-013-AI-PROVIDER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -96,6 +97,16 @@ npm run prisma:migrate:dev -- --name nome_da_migration
 ```
 
 Não existe seed obrigatório. Input e output de agentes, provenance de artifacts e contexto de logs são persistidos como JSON.
+
+## AI Provider
+
+O workspace `@brq/ai-provider` contém a interface abstrata, o adapter OpenAI e o FakeAIProvider. A configuração real utiliza `OPENAI_API_KEY` somente no servidor, com timeout padrão de 60 segundos. A suíte padrão não chama serviços externos.
+
+O teste real opcional exige ativação e modelo explícitos:
+
+```bash
+RUN_OPENAI_LIVE_TESTS=true OPENAI_LIVE_TEST_MODEL=nome-do-modelo npm run test:ai:live
+```
 
 ## Validações
 

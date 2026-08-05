@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 2 — Persistence implementada em 2026-08-04 e aguardando aprovação humana.
+Sprint 3 — AI Provider implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 3 sem aprovação explícita.
+Não iniciar a Sprint 4 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -12,6 +12,7 @@ Não iniciar a Sprint 3 sem aprovação explícita.
 - npm workspaces sem Turborepo;
 - Next.js 16 com App Router, TypeScript strict e Tailwind CSS;
 - Prisma 7 com SQLite local, models, migration inicial e repositories;
+- SDK OpenAI 7.4 com Responses API isolada no adapter concreto;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -24,6 +25,7 @@ Não iniciar a Sprint 3 sem aprovação explícita.
 - erro seguro sem exposição de detalhes internos;
 - logger JSON mínimo com redação de campos sensíveis;
 - nenhuma variável secreta exposta ao frontend.
+- configuração OpenAI validada de forma lazy e exclusivamente server-side.
 
 ## Shared Layer
 
@@ -37,7 +39,7 @@ Não iniciar a Sprint 3 sem aprovação explícita.
 - `FAILED → RUNNING` reservado à retomada explícita;
 - `REQUIRES_REVIEW → RUNNING` reservado a futura resolução humana auditável;
 - códigos de erro compartilhados integrados ao baseline existente;
-- interface `AIProvider` preservada para a Sprint 3 em `core/ai-provider`.
+- `TokenUsage` e contratos JSON transversais disponíveis para componentes de `core`.
 
 ## Persistence Layer
 
@@ -55,10 +57,24 @@ Não iniciar a Sprint 3 sem aprovação explícita.
 - nenhum seed ou hard delete no MVP;
 - testes de integração aplicam migrations em bancos SQLite temporários isolados.
 
+## AI Provider Layer
+
+- `core/ai-provider` registrado como workspace interno `@brq/ai-provider`;
+- interface e contratos abstratos independentes de SDK e endpoint;
+- OpenAIProvider como adapter inicial da Responses API, com `store: false`, endpoint oficial fixo e logging interno do SDK desligado;
+- FakeAIProvider determinístico para sucesso e cenários negativos;
+- timeout padrão de 60 segundos, cancelamento com `AbortSignal` e limites validados;
+- SDK configurado sem retries internos;
+- retry técnico somente para falha de conexão sem resposta HTTP válida;
+- respostas HTTP, recusas, JSON malformado e incompatibilidade de schema nunca geram retry técnico;
+- logs contêm somente metadados técnicos sanitizados;
+- teste real opcional separado e desabilitado por padrão.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
 - ADR-012 registra ports compartilhados, adapter Prisma, mapeamento físico, versionamento e política de delete;
+- ADR-013 registra a fronteira do AI Provider, a separação entre retries técnicos e funcionais e a política de segurança;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -91,13 +107,24 @@ Não iniciar a Sprint 3 sem aprovação explícita.
 - migration deploy: aprovado;
 - build: aprovado;
 - format check dos arquivos da Sprint: aprovado;
-- format check global: pendente apenas pelo arquivo externo não rastreado `.ai/DEVELOPMENT_WORKFLOW.md`, que não foi alterado.
+- format check global: aprovado após validação da newline final de `.ai/DEVELOPMENT_WORKFLOW.md`.
+
+## Validações da Sprint 3
+
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 124 aprovados, sendo 57 da Sprint 3, 66 anteriores de Shared/Persistence e 1 smoke da aplicação;
+- cobertura de `core/ai-provider`: 90,30% statements, 86,25% branches, 89,47% functions e 90,30% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- format check: aprovado;
+- teste live: separado, desabilitado por padrão e sem chamada externa durante a validação;
+- npm audit: zero vulnerabilidades.
 
 ## Fora do escopo confirmado
 
 - testes E2E;
 - agentes e prompts funcionais;
-- AIProvider e OpenAI;
 - Knowledge Loader, Prompt Builder e Agent Runner;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;

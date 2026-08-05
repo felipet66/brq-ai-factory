@@ -11,19 +11,21 @@
   "workspaces": [
     "apps/*",
     "shared",
-    "prisma"
+    "prisma",
+    "core/ai-provider"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @brq-ai-factory/web",
     "build": "npm run build --workspace @brq-ai-factory/web",
     "start": "npm run start --workspace @brq-ai-factory/web",
-    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared prisma *.ts *.mjs --max-warnings=0",
+    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared prisma core/ai-provider *.ts *.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
     "prebuild": "npm run prisma:generate",
     "pretypecheck": "npm run prisma:generate",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspace @brq-ai-factory/web",
     "pretest": "npm run prisma:generate",
     "test": "vitest run && npm run test --workspace @brq-ai-factory/web",
+    "test:ai:live": "vitest run --config vitest.ai-live.config.ts",
     "pretest:coverage": "npm run prisma:generate",
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate",

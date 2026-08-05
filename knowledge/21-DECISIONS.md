@@ -26,6 +26,7 @@ Este documento funciona apenas como índice.
 | ADR-010 | Human Review                               | Accepted |
 | ADR-011 | Repository Layout and Workspace Boundaries | Accepted |
 | ADR-012 | Persistence Boundary                       | Accepted |
+| ADR-013 | AI Provider Boundary and Resilience        | Accepted |
 
 ---
 
