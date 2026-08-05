@@ -201,6 +201,18 @@ O módulo preserva o `AgentRunResult` original e produz um resultado separado e 
 
 Logs do Validator nunca incluem conteúdo, `structuredData`, valor validado, schema completo, mensagens cruas do engine, prompts ou segredos. Somente IDs, hashes, formato, finish reason, duração, validade, quantidade e códigos de issues e indicador de truncamento são permitidos.
 
+## Artifact Generator
+
+O Artifact Generator aceita somente um `ValidationResult` com `valid: true` e um `validatedOutput` presente. A `ArtifactSpecification` é configuração server-side confiável, declarativa e versionada, mas ainda é validada na fronteira. Ela não contém callbacks, código executável, acesso a recursos nem templates selecionados pelo payload do modelo.
+
+Bindings apenas leem caminhos declarados no valor validado, com acesso a propriedades próprias e rejeição de segmentos de prototype traversal. O hash do valor é recalculado e comparado ao `validatedValueHash` antes da resolução. O `ResolvedArtifactModel` permanece interno, e valores resolvidos são tratados como dados opacos durante o rendering: não são executados, corrigidos, interpretados como template nem usados para criar novos fragments. Allowlist de media types e limites de quantidade, profundidade e bytes evitam destinos ou expansão descontrolados.
+
+Todo `filename` deve cumprir o contrato compartilhado de nome seguro, sem caminho absoluto, traversal ou separadores. Mesmo um nome válido não autoriza I/O: o módulo não cria diretórios, grava arquivos, exporta conteúdo, acessa Prisma ou persiste `Artifact`.
+
+Conteúdo validado estruturalmente continua não confiável para exibição ou execução. Consumers posteriores devem escapar a saída conforme o destino e nunca executar código gerado automaticamente no MVP.
+
+Logs do Generator nunca incluem conteúdo validado ou renderizado, valor de bindings, templates, specification completa, prompts, schemas, caminhos, segredos ou headers. Somente IDs, hashes, versão, quantidades, bytes, duração, estágio e códigos de erro são permitidos.
+
 ---
 
 # Saída dos Agentes

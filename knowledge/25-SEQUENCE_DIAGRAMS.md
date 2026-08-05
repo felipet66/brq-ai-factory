@@ -35,7 +35,9 @@ I --> J[Response Validator]
 
 J --> K[Artifact Generator]
 
-K --> L[Persistence]
+K --> KD[ArtifactGenerationResult em memória]
+
+KD --> L[Persistência posterior]
 
 L --> M[Frontend]
 ```
@@ -104,11 +106,11 @@ participant Orchestrator
 
 participant Knowledge
 
-participant Prompt
-
 participant Runner
 
-participant AI
+participant Prompt
+
+participant Provider
 
 participant Validator
 
@@ -120,25 +122,31 @@ Orchestrator->>Knowledge: carregar contexto
 
 Knowledge-->>Orchestrator: contexto
 
-Orchestrator->>Prompt: montar prompt
+Orchestrator->>Runner: run(AgentRunRequest)
 
-Prompt-->>Orchestrator: prompt final
+Runner->>Prompt: build(prompt mapeado)
 
-Orchestrator->>Runner: executar
+Prompt-->>Runner: PromptResult
 
-Runner->>AI: Responses API
+Runner->>Provider: generate(AIRequest abstrato)
 
-AI-->>Runner: resposta
+Provider-->>Runner: AIResponse normalizado
 
-Runner->>Validator: validar
+Runner-->>Orchestrator: AgentRunResult
 
-Validator-->>Runner: válido
+Orchestrator->>Validator: validate(resultado + contrato)
 
-Runner->>Artifact: gerar artefatos
+Validator-->>Orchestrator: ValidationResult
 
-Artifact->>DB: persistir
-
-DB-->>Orchestrator: sucesso
+alt resposta válida
+    Orchestrator->>Artifact: generate(validação + specification)
+    Artifact-->>Orchestrator: ArtifactGenerationResult
+    Orchestrator->>Orchestrator: enriquecer drafts
+    Orchestrator->>DB: persistir ArtifactCreateInput
+    DB-->>Orchestrator: Artifacts versionados
+else resposta inválida
+    Orchestrator->>Orchestrator: decidir próximo passo
+end
 ```
 
 ---

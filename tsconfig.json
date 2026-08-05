@@ -6,6 +6,7 @@
   "include": [
     "core/agent-runner/**/*.ts",
     "core/ai-provider/**/*.ts",
+    "core/artifact-generator/**/*.ts",
     "core/knowledge-loader/**/*.ts",
     "core/prompt-builder/**/*.ts",
     "core/response-validator/**/*.ts",

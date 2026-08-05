@@ -158,6 +158,10 @@ response.validation.accepted
 response.validation.rejected
 response.validation.failed
 
+artifact.generation.started
+artifact.generation.completed
+artifact.generation.failed
+
 artifact.created
 artifact.versioned
 
@@ -180,6 +184,8 @@ Eventos do Prompt Builder registram somente metadados aplicáveis ao evento: pro
 Eventos do Agent Runner usam `agentExecutionId` como correlação obrigatória e podem registrar executionId, agente, tentativa, versões, IDs de correlação, hashes, provider, modelos, responseId, finish reason, bytes, durações, tentativas, uso e código de erro. Nunca registram prompts, respostas, structured data, valores de contexto, segredos ou JSON Schemas completos. O Runner emite no máximo um ciclo de provider por invocação e não possui evento de retry próprio.
 
 Eventos do Response Validator podem registrar IDs de execução e correlação, identidade, versão e formato do contrato, finish reason, validade, hashes, duração, quantidade e códigos de issues e indicador de truncamento. Nunca registram conteúdo, `structuredData`, valor validado, schema completo, mensagens cruas do engine de schema, prompts ou segredos. O Validator emite uma decisão para a tentativa atual e não possui evento de retry ou correção.
+
+Eventos do Artifact Generator podem registrar IDs de execução e correlação, identidade e versão da specification, `sourceValidationHash`, `sourceValidatedValueHash`, hashes estruturais e de conteúdo, quantidade de templates e artifacts, bytes renderizados, duração, estágio, classificação e código de erro. Nunca registram conteúdo validado ou renderizado, templates, bindings, specification completa, valores resolvidos, prompts ou segredos. Eventos de geração em memória são distintos de `artifact.created` e `artifact.versioned`, emitidos somente pela futura integração de persistência.
 
 ---
 
@@ -224,6 +230,13 @@ Eventos do Response Validator podem registrar IDs de execução e correlação, 
 - JSON malformado e schema mismatch;
 - duração da validação.
 
+## Geração de artifacts
+
+- gerações concluídas e falhas;
+- quantidade de drafts e bytes renderizados;
+- duração total da geração;
+- erros por classificação, estágio e código.
+
 No Agent Runner, as métricas permanecem separadas por origem:
 
 - `observed`: `totalDurationMs`, `promptBuilderDurationMs`, `providerDurationMs`, `bytesSent` e `bytesReceived`, medidos localmente;
@@ -253,16 +266,19 @@ Execution
 │   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
+│   ├── Artifact generation
 │   └── Artifact persistence
 ├── Developer
 │   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
+│   ├── Artifact generation
 │   └── Artifact persistence
 └── QA
     ├── Prompt building
     ├── AI request
     ├── Schema validation
+    ├── Artifact generation
     └── Artifact persistence
 ```
 

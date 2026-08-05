@@ -1,0 +1,14 @@
+{
+  "name": "@brq/artifact-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/response-validator": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

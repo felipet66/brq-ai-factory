@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -162,6 +162,18 @@
       "order": 29
     },
     {
+      "id": "knowledge:artifact-generator-flow",
+      "locator": "30-ARTIFACT_GENERATOR_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 30
+    },
+    {
+      "id": "knowledge:artifact-lifecycle",
+      "locator": "31-ARTIFACT_LIFECYCLE.md",
+      "category": "ARCHITECTURE",
+      "order": 31
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -262,6 +274,12 @@
       "locator": "ADR/ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md",
       "category": "ADR",
       "order": 1017
+    },
+    {
+      "id": "adr:018",
+      "locator": "ADR/ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1018
     }
   ]
 }

@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 7 — Response Validator implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 8 — Artifact Generator implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 8 sem aprovação explícita.
+Não iniciar a Sprint 9 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -17,6 +17,7 @@ Não iniciar a Sprint 8 sem aprovação explícita.
 - Prompt Builder determinístico com AST imutável e renderização final em dois canais;
 - Agent Runner genérico integrando Prompt Builder e AI Provider sem regras de agente ou workflow;
 - Response Validator genérico para classificação funcional determinística de `AgentRunResult`;
+- Artifact Generator genérico para produzir drafts determinísticos a partir de saídas validadas e specifications declarativas;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -134,6 +135,23 @@ Não iniciar a Sprint 8 sem aprovação explícita.
 - logs registram apenas metadados, hashes, duração, quantidade e códigos de issues e indicador de truncamento, sem conteúdo, structured data ou schemas completos;
 - nenhuma chamada de IA, correção automática, retry, artifact, persistência, estado, regra específica de agente ou workflow.
 
+## Artifact Generator Layer
+
+- `core/artifact-generator` registrado como workspace interno `@brq/artifact-generator`;
+- `ArtifactGenerationRequest` combina exclusivamente um `ValidationResult` aceito com uma `ArtifactSpecification` declarativa e pronta;
+- pipeline determinística `Binding Resolution → ResolvedArtifactModel interno → Rendering → ArtifactDraft`;
+- templates e bindings locais por ID são genéricos, sem seleção ou regras específicas de Product Owner, Developer e QA;
+- o valor validado é preservado como dado não confiável e nunca é executado, corrigido ou reinterpretado como template;
+- `metadata.source` preserva correlação, metadados técnicos, vínculo contratual, `validationHash` e `validatedValueHash`, recalculado antes da geração;
+- hashes estruturais de specification, template, draft e geração permanecem distintos de `contentHash` e do `validatedValueHash` de origem;
+- configuração por instância usa defaults de 16 artifacts, 256 fragments, 64 bindings, path depth 32, specification 256 KiB, artifact 1 MiB, total 4 MiB e nesting 100;
+- templates `TEXT` suportam literal e bindings com serialização explícita, contagem incremental de bytes e cache de serializações repetidas antes do `join`; templates `JSON` usam valor raiz e rendering canônico indentado com newline final;
+- resultados e drafts são profundamente imutáveis e preservam ordem, metadados técnicos e rastreabilidade;
+- `ResolvedArtifactModel`, Resolver, Renderer e hashing interno não são expostos por entrypoint nem por alias TypeScript wildcard;
+- erros canônicos preservam IDs de execução/correlação depois da validação de fronteira e medem duração até o catch;
+- logs contêm somente IDs, hashes, contagens, bytes, duração, estágio e código de erro, sem conteúdo ou specification completa;
+- nenhuma IA, filesystem, persistência, versionamento, retry, estado, agente concreto ou workflow.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -143,6 +161,7 @@ Não iniciar a Sprint 8 sem aprovação explícita.
 - ADR-015 registra a fronteira do Prompt Builder, AST imutável, canais semânticos, renderização determinística, orçamento, hashes e comparação estrutural;
 - ADR-016 registra a fronteira do Agent Runner, suas integrações, a separação de métricas e a ausência de retry, persistência e regras de workflow;
 - ADR-017 registra a fronteira do Response Validator, a pipeline determinística, o report interno, a classificação funcional e a ausência de retry ou semântica específica de agente;
+- ADR-018 registra a fronteira do Artifact Generator, a specification declarativa, o modelo resolvido interno, a separação dos hashes e a ausência de filesystem, persistência e versionamento;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -237,6 +256,19 @@ Não iniciar a Sprint 8 sem aprovação explícita.
 - Prisma validate: aprovado;
 - build: aprovado;
 - nenhuma chamada externa, retry ou teste live executado.
+
+## Validações da Sprint 8
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 443 aprovados, sendo 72 do Artifact Generator, 370 anteriores da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/artifact-generator`: 95,15% statements, 82,55% branches, 100% functions e 96,72% lines;
+- cobertura global da suíte raiz: 93,52% statements, 84,96% branches, 98,01% functions e 93,66% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- teste de contrato Validator → Generator aprovado usando exclusivamente APIs públicas;
+- nenhuma chamada externa, persistência, filesystem, retry ou item da Sprint 9 executado.
 
 ## Fora do escopo confirmado
 

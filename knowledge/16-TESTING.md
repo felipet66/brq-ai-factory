@@ -80,8 +80,9 @@ Exemplos:
 - Route Handler e service
 - Agent Runner e AI Provider
 - Agent Runner e Response Validator por contratos públicos
+- Response Validator e Artifact Generator por contratos públicos
 - Prisma e banco de testes
-- geração e persistência de Artifact
+- geração de `ArtifactDraft` e persistência de `Artifact` como responsabilidades separadas
 - validação da resposta estruturada de um agente
 
 O banco utilizado nos testes deve ser isolado.
@@ -103,6 +104,7 @@ Principais contratos:
 - AI Provider
 - Agent Runner
 - Response Validator
+- Artifact Generator
 - repository
 
 Todos os contratos devem utilizar schemas versionados.
@@ -176,6 +178,8 @@ Cada agente deve possuir avaliações para:
 - consistência entre entrada e saída
 
 O Response Validator possui uma suíte independente e determinística para finish reasons, presença de conteúdo, `TEXT`, JSON malformado, JSON Schema, coerência de `structuredData`, hashes, issues, imutabilidade, logs sanitizados e dependências proibidas. Esses testes utilizam `AgentRunResult` sintético e não realizam chamadas a providers.
+
+O Artifact Generator possui suíte independente e determinística para request, specification, bindings, rendering, ordem, limites, colisões de filename, hashes estruturais e de conteúdo, imutabilidade, logs sanitizados e dependências proibidas. Casos unitários usam `ValidationResult` sintético; um teste de contrato também produz o resultado pela API pública do Response Validator e confirma a compatibilidade do `validatedValueHash`. Nenhum teste escreve no filesystem ou banco. Testes de repository continuam cobrindo versionamento e persistência separadamente.
 
 ---
 

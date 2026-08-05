@@ -22,11 +22,13 @@ flowchart LR
     PROVIDER["AI Provider"] -.->|"sem acesso"| VALIDATOR
     PROMPT["Prompt Builder"] -.->|"sem acesso"| VALIDATOR
     ORCHESTRATOR["Orchestrator"] -.->|"consumer posterior"| VALIDATOR
-    ARTIFACT["Artifact Generator"] -.->|"etapa posterior"| VALIDATOR
+    ARTIFACT["Artifact Generator"] -.->|"consumer posterior<br/>sem chamada reversa"| VALIDATOR
     DB["Persistence"] -.->|"sem acesso"| VALIDATOR
 ```
 
 O Validator recebe o resultado público do Runner; ele não pode importar ou reconstruir o `ResponseEnvelope` interno. Também não chama o Runner nem qualquer provider.
+
+Quando `valid: true`, um consumer futuro pode combinar este resultado com uma `ArtifactSpecification` e chamar o Artifact Generator. O Validator não seleciona essa specification e não chama o Generator. A integração visual entre as fronteiras está em [Artifact Generator Flow](30-ARTIFACT_GENERATOR_FLOW.md) e [Artifact Lifecycle](31-ARTIFACT_LIFECYCLE.md).
 
 ---
 

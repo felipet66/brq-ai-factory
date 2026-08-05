@@ -364,19 +364,36 @@ Uma resposta só pode seguir para componentes posteriores quando produzir um `Va
 
 Objetivo
 
-Converter respostas estruturadas em artefatos.
+Converter uma saída funcionalmente validada em drafts de artefatos determinísticos.
 
 Entregas
 
-- story.md
-- acceptance.md
-- implementation.md
-- quality-report.md
-- playwright.spec.ts
+- workspace `core/artifact-generator`
+- `ArtifactGenerationRequest`, `ArtifactSpecification` e templates declarativos
+- resolução determinística de bindings
+- `ResolvedArtifactModel` exclusivamente interno
+- rendering de conteúdo sem transformação semântica
+- `ArtifactGenerationResult` público e imutável
+- hashes estruturais e de conteúdo com funções distintas
+- limites configuráveis por instância
+- logs estruturados e sanitizados
+- testes unitários, de contrato, integração e fronteiras
+
+Decisões da implementação
+
+- somente `ValidationResult` com `valid: true` pode entrar na pipeline;
+- o Generator recalcula `validatedValueHash` e exige correspondência exata do `sourceContract` antes de resolver bindings;
+- o módulo recebe uma specification pronta e não escolhe templates por agente;
+- bindings são locais ao template, possuem IDs estáveis e são referenciados declarativamente;
+- a pipeline separa `Binding Resolution → ResolvedArtifactModel → Rendering → ArtifactDraft`;
+- o conteúdo validado continua sendo dado não confiável e nunca é executado ou reinterpretado como template;
+- nenhum filename representa caminho, e o módulo não acessa o filesystem;
+- o Generator não chama IA, não cria versões persistidas, não usa repositories, não altera estados e não coordena workflow;
+- enriquecimento de `ArtifactDraft` para `ArtifactCreateInput`, versionamento e persistência permanecem fora da fronteira.
 
 Critério
 
-Artefatos persistidos corretamente.
+O mesmo resultado validado e a mesma specification produzem drafts imutáveis, na ordem declarada, com conteúdo e hashes idênticos, sem I/O ou persistência.
 
 ---
 

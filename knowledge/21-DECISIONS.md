@@ -31,6 +31,7 @@ Este documento funciona apenas como índice.
 | ADR-015 | Prompt Builder Boundary and Deterministic Model          | Accepted |
 | ADR-016 | Agent Runner Boundary and Single-Call Execution          | Accepted |
 | ADR-017 | Response Validator Boundary and Deterministic Validation | Accepted |
+| ADR-018 | Artifact Generator Boundary and Deterministic Rendering  | Accepted |
 
 ---
 

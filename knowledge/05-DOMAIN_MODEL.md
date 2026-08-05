@@ -155,7 +155,7 @@ Atributos
 - createdAt
 - provenance
 
-Antes do enriquecimento pela plataforma, o agente produz um `ArtifactDraft` com `name`, `filename`, `type` e `content`. Tanto o draft quanto o artefato final aceitam somente um nome de arquivo seguro, sem caminhos absolutos, `../` ou separadores de diretório.
+Antes do enriquecimento pela plataforma, o Artifact Generator produz um `ArtifactDraft` com `name`, `filename`, `type` e `content` a partir de um `ValidationResult` aceito e de uma `ArtifactSpecification` declarativa. O agente não cria o registro persistido, e o Generator não atribui ID, versão ou provenance de banco. Tanto o draft quanto o artefato final aceitam somente um nome de arquivo seguro, sem caminhos absolutos, `../` ou separadores de diretório.
 
 ---
 
@@ -264,7 +264,7 @@ Um Project possui várias Executions.
 
 Uma Execution possui várias AgentExecutions.
 
-Cada AgentExecution produz zero ou mais Artifacts.
+Cada AgentExecution pode originar zero ou mais ArtifactDrafts e, após enriquecimento e persistência por componentes posteriores, zero ou mais Artifacts.
 
 Todo Artifact pertence a apenas uma Execution.
 

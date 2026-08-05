@@ -193,6 +193,8 @@ Todos os agentes devem retornar um formato comum.
 }
 ```
 
+O campo `artifacts` desse envelope descreve intenção de saída do agente; ele permanece conteúdo não confiável. Não é um registro persistido e não pode ignorar o Response Validator ou a `ArtifactSpecification` aplicada pelo Artifact Generator.
+
 ---
 
 # Status
@@ -429,6 +431,8 @@ Uma resposta só pode ser aceita quando:
 O Response Validator genérico verifica finish reason, presença e formato do conteúdo, JSON, schema e coerência do structured output mediante um contrato funcional versionado. Ele não conhece Product Owner, Developer ou QA e, portanto, não substitui avaliações semânticas específicas de agente, critérios de qualidade ou revisão humana.
 
 Respostas inválidas geram um `ValidationResult` imutável com issues classificadas e metadados rastreáveis. O Validator registra somente metadados técnicos e não corrige conteúdo, executa retry ou altera estados.
+
+Somente um `ValidationResult` aceito pode ser encaminhado ao Artifact Generator. Esse componente recebe separadamente uma specification declarativa, resolve bindings, renderiza drafts e retorna um resultado imutável. Ele não escolhe regras do agente, não revalida semanticamente a resposta, não persiste e não coordena o próximo passo.
 
 O fluxo posterior pode gerar:
 

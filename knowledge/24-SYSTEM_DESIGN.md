@@ -321,29 +321,15 @@ O Validator preserva o resultado original, não conhece agentes concretos e não
 
 ## Artifact Generator
 
-Transforma respostas estruturadas em artefatos.
+Transforma deterministicamente um `ValidationResult` aceito e uma `ArtifactSpecification` declarativa em `ArtifactDrafts`.
 
-Exemplo:
+A specification identifica e versiona templates genéricos, vincula-se exatamente ao contrato fonte da validação e declara bindings locais por IDs estáveis. A pipeline separa resolução de bindings, `ResolvedArtifactModel` interno, rendering e projeção de drafts. Templates `TEXT` combinam fragments literais e bindings serializados; templates `JSON` renderizam um único valor raiz como JSON canônico indentado, com newline final.
 
-```
-JSON
+O resultado público é um `ArtifactGenerationResult` imutável. Ele preserva correlação e hashes da validação, identifica specification e templates e distingue hashes estruturais (`specificationHash`, `templateHash`, `draftHash` e `generationHash`) de `contentHash`, calculado sobre os bytes UTF-8 renderizados.
 
-↓
+O Generator não escolhe specification por agente, não chama IA, não revalida semântica, não executa retry, não escreve arquivos, não cria `ArtifactCreateInput`, não persiste e não atribui versão. Enriquecimento com IDs e provenance e a chamada ao `ArtifactRepository` pertencem a uma integração posterior.
 
-story.md
-
-↓
-
-acceptance.md
-
-↓
-
-implementation.md
-
-↓
-
-playwright.spec.ts
-```
+[Fluxo visual do Artifact Generator](30-ARTIFACT_GENERATOR_FLOW.md) e [ciclo de vida dos Artifacts](31-ARTIFACT_LIFECYCLE.md).
 
 ---
 
@@ -574,6 +560,8 @@ O Agent Runner valida somente a estrutura técnica, mantém a resposta bruta em 
 
 O Response Validator usa um contrato server-side coerente com `expectedOutputContractHash`, reinterpreta o conteúdo original e não confia em `structuredData` isoladamente. O engine de JSON Schema não aplica coerção, defaults, remoção de campos, referências remotas ou mutações. Logs preservam somente metadados e hashes; conteúdo, valores e schemas completos permanecem fora deles.
 
+O Artifact Generator exige resultado aceito e vínculo exato com o contrato fonte declarado pela specification. Bindings leem somente o valor validado e seus resultados permanecem dados opacos; o renderer não executa ou reinterpreta conteúdo. Filenames são nomes lógicos seguros, nunca caminhos, e o módulo não acessa filesystem ou persistência. Logs registram somente IDs, hashes, formatos, contagens, bytes, duração, estágio e código de erro.
+
 O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 
 ---
@@ -642,9 +630,10 @@ sequenceDiagram
     Runner-->>Orchestrator: AgentRunResult
     Orchestrator->>Validator: validar resposta
     Validator-->>Orchestrator: resultado validado
-    Orchestrator->>Artifact: gerar artifacts
-    Artifact-->>Orchestrator: artifacts
-    Orchestrator->>DB: persistir
+    Orchestrator->>Artifact: generate(validation + specification)
+    Artifact-->>Orchestrator: ArtifactGenerationResult
+    Orchestrator->>Orchestrator: enriquecer drafts com IDs e provenance
+    Orchestrator->>DB: persistir ArtifactCreateInput
     DB-->>Orchestrator: concluído
     Orchestrator-->>Engine: resultado
     Engine-->>API: estado final

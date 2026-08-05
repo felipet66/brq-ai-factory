@@ -34,7 +34,8 @@ brq-ai-factory/
 │   │   ├── ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md
 │   │   ├── ADR-015-PROMPT-BUILDER-BOUNDARY.md
 │   │   ├── ADR-016-AGENT-RUNNER-BOUNDARY.md
-│   │   └── ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md
+│   │   ├── ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md
+│   │   └── ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -65,7 +66,9 @@ brq-ai-factory/
 │   ├── 26-REPOSITORY_STRUCTURE.md
 │   ├── 27-PROMPT_BUILDER_FLOW.md
 │   ├── 28-AGENT_RUNNER_FLOW.md
-│   └── 29-RESPONSE_VALIDATOR_FLOW.md
+│   ├── 29-RESPONSE_VALIDATOR_FLOW.md
+│   ├── 30-ARTIFACT_GENERATOR_FLOW.md
+│   └── 31-ARTIFACT_LIFECYCLE.md
 │
 ├── core/
 ├── agents/
@@ -145,6 +148,14 @@ O workspace `@brq/response-validator` recebe um `AgentRunResult` não confiável
 Falhas funcionais produzem um `ValidationResult` imutável com issues e hashes rastreáveis. O módulo não chama IA, não corrige respostas, não executa retry, não persiste dados e não contém regras específicas de Product Owner, Developer ou QA.
 
 [Fluxo visual do Response Validator](knowledge/29-RESPONSE_VALIDATOR_FLOW.md)
+
+## Artifact Generator
+
+O workspace `@brq/artifact-generator` transforma exclusivamente um `ValidationResult` aceito e uma `ArtifactSpecification` declarativa em `ArtifactDrafts` determinísticos. A pipeline resolve bindings contra o valor validado, cria um `ResolvedArtifactModel` interno, renderiza o conteúdo sem reinterpretá-lo e devolve um `ArtifactGenerationResult` imutável.
+
+O módulo distingue hashes estruturais — specification, template, draft e geração — do hash do conteúdo renderizado. Ele não conhece agentes concretos, não chama IA, não grava arquivos, não persiste nem versiona artifacts e não coordena o fluxo. Enriquecimento, versionamento e persistência permanecem responsabilidades posteriores.
+
+[Fluxo visual do Artifact Generator](knowledge/30-ARTIFACT_GENERATOR_FLOW.md) · [Ciclo de vida dos Artifacts](knowledge/31-ARTIFACT_LIFECYCLE.md)
 
 ## Validações
 

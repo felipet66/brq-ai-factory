@@ -326,7 +326,53 @@ O módulo depende somente da API pública do Agent Runner, de componentes transv
 
 ## Artifact Generator
 
-Transforma JSON em arquivos.
+Transforma um resultado funcionalmente validado em drafts de artifacts, sem criar arquivos físicos.
+
+Estrutura inicial:
+
+```text
+artifact-generator/
+
+package.json
+
+artifact-generator.ts
+
+binding-resolution.ts
+
+canonical-json.ts
+
+configuration.ts
+
+content-hashing.ts
+
+contracts.ts
+
+errors.ts
+
+immutability.ts
+
+index.ts
+
+logging.ts
+
+rendering.ts
+
+resolved-artifact-model.ts
+
+schemas.ts
+
+structural-hashing.ts
+
+validation.ts
+
+testing/
+
+*.spec.ts
+```
+
+Os contratos públicos incluem `ArtifactGenerationRequest`, `ArtifactSpecification`, templates e bindings declarativos, `GeneratedArtifact` e `ArtifactGenerationResult`. `ResolvedArtifactModel` permanece interno e separa binding resolution de rendering.
+
+O módulo depende somente da API pública de `core/response-validator` e de componentes transversais de `shared`. Não contém specifications de agentes concretos, não escreve no filesystem, não usa repositories, não persiste nem versiona artifacts e não coordena workflow.
 
 ---
 
@@ -454,7 +500,8 @@ Workspaces implementados:
 - `core/knowledge-loader`;
 - `core/prompt-builder`;
 - `core/agent-runner`;
-- `core/response-validator`.
+- `core/response-validator`;
+- `core/artifact-generator`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -513,6 +560,8 @@ O Prompt Builder é uma exceção mais restrita dentro de `core`: recebe estrutu
 O Agent Runner pode acessar somente as APIs públicas de `core/prompt-builder`, `core/ai-provider` e componentes transversais de `shared`. Não pode importar adapters concretos de provider, OpenAI, Responses API, `agents/`, Orchestrator, Knowledge Loader, `knowledge/`, Prisma ou `apps/`.
 
 O Response Validator pode acessar somente a API pública de `core/agent-runner`, componentes transversais de `shared` e seu engine local de JSON Schema. Não pode importar internals do Runner, Prompt Builder, AI Provider, adapters, `agents/`, Orchestrator, Artifact Generator, Knowledge Loader, Prisma ou `apps/`.
+
+O Artifact Generator pode acessar somente a API pública de `core/response-validator` e componentes transversais de `shared`. Não pode importar internals do Validator, Agent Runner, Prompt Builder, AI Provider, Knowledge Loader, `agents/`, Orchestrator, repositories, Prisma, `apps/` ou adapters de filesystem.
 
 ---
 
