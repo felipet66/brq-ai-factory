@@ -33,7 +33,8 @@ brq-ai-factory/
 │   │   ├── ADR-013-AI-PROVIDER-BOUNDARY.md
 │   │   ├── ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md
 │   │   ├── ADR-015-PROMPT-BUILDER-BOUNDARY.md
-│   │   └── ADR-016-AGENT-RUNNER-BOUNDARY.md
+│   │   ├── ADR-016-AGENT-RUNNER-BOUNDARY.md
+│   │   └── ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -63,7 +64,8 @@ brq-ai-factory/
 │   ├── 25-SEQUENCE_DIAGRAMS.md
 │   ├── 26-REPOSITORY_STRUCTURE.md
 │   ├── 27-PROMPT_BUILDER_FLOW.md
-│   └── 28-AGENT_RUNNER_FLOW.md
+│   ├── 28-AGENT_RUNNER_FLOW.md
+│   └── 29-RESPONSE_VALIDATOR_FLOW.md
 │
 ├── core/
 ├── agents/
@@ -135,6 +137,14 @@ O workspace `@brq/agent-runner` executa exatamente uma chamada abstrata de IA po
 O Runner não conhece OpenAI ou adapters concretos, não persiste dados, não valida regras funcionais da resposta e não executa retries. O `agentExecutionId` é a correlação obrigatória; cancelamento é encaminhado por `AbortSignal` e o timeout é aplicado exclusivamente pelo provider. A resposta bruta permanece em um `ResponseEnvelope` interno, enquanto o resultado público separa metadados, métricas observadas pelo Runner e valores reportados pelo provider.
 
 [Fluxo visual do Agent Runner](knowledge/28-AGENT_RUNNER_FLOW.md)
+
+## Response Validator
+
+O workspace `@brq/response-validator` recebe um `AgentRunResult` não confiável e um `ValidationContract` declarativo e versionado. Sua pipeline classifica finish reasons, valida presença e formato do conteúdo, reinterpreta JSON, aplica JSON Schema e verifica a coerência de `structuredData` sem modificar a resposta original.
+
+Falhas funcionais produzem um `ValidationResult` imutável com issues e hashes rastreáveis. O módulo não chama IA, não corrige respostas, não executa retry, não persiste dados e não contém regras específicas de Product Owner, Developer ou QA.
+
+[Fluxo visual do Response Validator](knowledge/29-RESPONSE_VALIDATOR_FLOW.md)
 
 ## Validações
 

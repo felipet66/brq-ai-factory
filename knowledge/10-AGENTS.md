@@ -426,7 +426,11 @@ Uma resposta só pode ser aceita quando:
 - não contém instruções maliciosas
 - não tenta alterar o próprio papel
 
-Respostas inválidas devem gerar:
+O Response Validator genérico verifica finish reason, presença e formato do conteúdo, JSON, schema e coerência do structured output mediante um contrato funcional versionado. Ele não conhece Product Owner, Developer ou QA e, portanto, não substitui avaliações semânticas específicas de agente, critérios de qualidade ou revisão humana.
+
+Respostas inválidas geram um `ValidationResult` imutável com issues classificadas e metadados rastreáveis. O Validator registra somente metadados técnicos e não corrige conteúdo, executa retry ou altera estados.
+
+O fluxo posterior pode gerar:
 
 - log
 - erro estruturado
@@ -447,6 +451,8 @@ O retry pode ocorrer quando:
 - faltar um campo obrigatório
 
 O retry não deve ser infinito.
+
+Esses critérios serão avaliados pelo Orchestrator. O Response Validator apenas classifica a tentativa atual e nunca inicia uma nova execução.
 
 Cada retry automático cria uma nova `AgentExecution` dentro da mesma `Execution`, com novo identificador e número de tentativa incrementado. Uma `AgentExecution` encerrada não retorna ao estado `RUNNING`.
 

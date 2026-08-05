@@ -153,6 +153,11 @@ agent.run.failed
 agent.run.cancelled
 agent.run.timed_out
 
+response.validation.started
+response.validation.accepted
+response.validation.rejected
+response.validation.failed
+
 artifact.created
 artifact.versioned
 
@@ -173,6 +178,8 @@ Eventos do AI Provider registram somente provider, modelo, IDs de correlação, 
 Eventos do Prompt Builder registram somente metadados aplicáveis ao evento: promptId, agente, versão, schemaVersion, `templateHash`, `instructionsHash`, `inputHash`, `outputContractHash`, `promptHash`, quantidades de seções e contextos, orçamento, bytes, duração, requestId, traceId e código de erro. Nunca registram o texto renderizado, contexto, entrada do usuário, valores de variáveis ou JSON Schemas completos.
 
 Eventos do Agent Runner usam `agentExecutionId` como correlação obrigatória e podem registrar executionId, agente, tentativa, versões, IDs de correlação, hashes, provider, modelos, responseId, finish reason, bytes, durações, tentativas, uso e código de erro. Nunca registram prompts, respostas, structured data, valores de contexto, segredos ou JSON Schemas completos. O Runner emite no máximo um ciclo de provider por invocação e não possui evento de retry próprio.
+
+Eventos do Response Validator podem registrar IDs de execução e correlação, identidade, versão e formato do contrato, finish reason, validade, hashes, duração, quantidade e códigos de issues e indicador de truncamento. Nunca registram conteúdo, `structuredData`, valor validado, schema completo, mensagens cruas do engine de schema, prompts ou segredos. O Validator emite uma decisão para a tentativa atual e não possui evento de retry ou correção.
 
 ---
 
@@ -208,6 +215,14 @@ Eventos do Agent Runner usam `agentExecutionId` como correlação obrigatória e
 - erros por modelo
 - erros por provider
 - uso por agente
+
+## Validação de respostas
+
+- respostas válidas e inválidas;
+- issues por categoria, código e severidade;
+- finish reasons rejeitados;
+- JSON malformado e schema mismatch;
+- duração da validação.
 
 No Agent Runner, as métricas permanecem separadas por origem:
 

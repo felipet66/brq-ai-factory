@@ -1,0 +1,16 @@
+{
+  "name": "@brq/response-validator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/agent-runner": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "zod": "^4.4.3"
+  }
+}

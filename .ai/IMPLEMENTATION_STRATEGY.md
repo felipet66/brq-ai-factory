@@ -324,20 +324,39 @@ Um `PromptRequest` válido gera um `AgentRunResult` rastreável por meio de uma 
 
 Objetivo
 
-Validar respostas da IA.
+Validar funcionalmente o resultado público de uma execução de agente.
 
 Entregas
 
-- validação JSON
-- validação Schema
-- validação Segurança
-- tratamento de erro
+- workspace `core/response-validator`
+- `ValidationRequest` e `ValidationContract` provider-neutral e versionado
+- `ValidationPipeline` determinística
+- `ValidationReport` exclusivamente interno e `ValidationResult` público imutável
+- classificação de finish reasons, conteúdo ausente e formato
+- reinterpretação de JSON e validação por JSON Schema
+- revalidação de structured output sem confiar em `structuredData`
+- issues classificadas por código, categoria e severidade
+- hashes de conteúdo, contrato, output validado e decisão
+- logs estruturados e sanitizados
+- testes unitários, de contrato, integração e fronteiras
 
-O Validator classifica ou rejeita a resposta. Ele não executa retries; uma eventual nova `AgentExecution` permanece decisão do Orchestrator.
+Decisões da implementação
+
+- o Validator recebe somente `AgentRunResult` e um contrato funcional próprio, sem acessar o `ResponseEnvelope` interno;
+- `expectedOutputContractHash` vincula o contrato funcional ao output contract usado na execução;
+- `output.content` é reinterpretado e permanece a fonte autoritativa para `JSON_SCHEMA`;
+- `structuredData` nunca é confiado isoladamente e precisa ser coerente com o valor reinterpretado;
+- JSON Schema utiliza exclusivamente o dialect `DRAFT_2020_12`, sem coerção, defaults, referências remotas ou mutação;
+- limites configuráveis e centralizados protegem conteúdo, schema, nesting e quantidade de issues;
+- falhas funcionais produzem `ValidationResult`, enquanto request, configuração ou contrato técnico inválido produzem erro canônico;
+- a severidade reserva `INFO` para evolução compatível, mas a pipeline de produção emite somente `ERROR` e `WARNING` nesta Sprint;
+- validação estrutural e declarativa não equivale a avaliação semântica específica de agente;
+- o Validator não chama IA, corrige conteúdo, cria artifacts, persiste dados, altera estados ou executa retry;
+- uma eventual nova `AgentExecution` permanece decisão do Orchestrator.
 
 Critério
 
-Nenhuma resposta inválida entra na aplicação.
+Uma resposta só pode seguir para componentes posteriores quando produzir um `ValidationResult` válido, rastreável e imutável.
 
 ---
 

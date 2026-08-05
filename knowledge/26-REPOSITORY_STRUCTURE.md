@@ -264,13 +264,63 @@ O módulo é genérico, executa uma única chamada ao provider e não contém re
 
 ## Response Validator
 
-Valida:
+Valida funcionalmente um `AgentRunResult` por meio de um contrato declarativo e versionado.
 
-- JSON
+Estrutura inicial:
 
-- Schema
+```text
+response-validator/
 
-- Segurança
+package.json
+
+canonical-json.ts
+
+configuration.ts
+
+contracts.ts
+
+errors.ts
+
+hashing.ts
+
+immutability.ts
+
+index.ts
+
+issues.ts
+
+json-schema-validator.ts
+
+logging.ts
+
+response-validator.ts
+
+schemas.ts
+
+pipeline/content-stage.ts
+
+pipeline/contract-stage.ts
+
+pipeline/request-stage.ts
+
+pipeline/result-stage.ts
+
+pipeline/schema-stage.ts
+
+pipeline/structured-output-stage.ts
+
+pipeline/validation-pipeline.ts
+
+pipeline/validation-report.ts
+
+testing/
+
+*.spec.ts
+```
+
+A `ValidationPipeline`, executada internamente por `executeValidationPipeline`, separa validação de request, contrato, conteúdo, JSON Schema e structured output. Findings são reunidos em um `ValidationReport` interno e projetados em um `ValidationResult` público imutável. Nenhum desses dois detalhes internos integra os exports do workspace. O dialect JSON inicial é `DRAFT_2020_12`, e `expectedOutputContractHash` vincula o contrato funcional ao output contract usado na execução.
+
+O módulo depende somente da API pública do Agent Runner, de componentes transversais de `shared` e do engine local de JSON Schema. Não chama IA, corrige respostas, executa retry, conhece agentes concretos, cria artifacts, persiste dados ou altera estados.
 
 ---
 
@@ -403,7 +453,8 @@ Workspaces implementados:
 - `core/ai-provider`;
 - `core/knowledge-loader`;
 - `core/prompt-builder`;
-- `core/agent-runner`.
+- `core/agent-runner`;
+- `core/response-validator`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -460,6 +511,8 @@ Pode acessar:
 O Prompt Builder é uma exceção mais restrita dentro de `core`: recebe estruturas prontas e não acessa `agents/`, `prompts/` ou `knowledge/`.
 
 O Agent Runner pode acessar somente as APIs públicas de `core/prompt-builder`, `core/ai-provider` e componentes transversais de `shared`. Não pode importar adapters concretos de provider, OpenAI, Responses API, `agents/`, Orchestrator, Knowledge Loader, `knowledge/`, Prisma ou `apps/`.
+
+O Response Validator pode acessar somente a API pública de `core/agent-runner`, componentes transversais de `shared` e seu engine local de JSON Schema. Não pode importar internals do Runner, Prompt Builder, AI Provider, adapters, `agents/`, Orchestrator, Artifact Generator, Knowledge Loader, Prisma ou `apps/`.
 
 ---
 

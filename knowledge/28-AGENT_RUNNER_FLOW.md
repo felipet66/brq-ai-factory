@@ -20,7 +20,7 @@ flowchart LR
     RUNNER -->|"AgentRunResult"| CALLER
 
     OPENAI["OpenAI / Responses API"] -.->|"não importado"| RUNNER
-    VALIDATOR["Response Validator"] -.->|"etapa posterior"| RUNNER
+    VALIDATOR["Response Validator"] -.->|"etapa seguinte externa"| RUNNER
     DB["Prisma / Persistence"] -.->|"sem acesso"| RUNNER
     ORC["Orchestrator"] -.->|"não importado"| RUNNER
 ```
@@ -178,7 +178,7 @@ flowchart TD
     H -->|"inválido"| ERR4["Falha técnica de projeção"]
     H -->|"válido"| OK["Retorno público"]
 
-    OK -.-> NEXT["Response Validator futuro"]
+    OK -.-> NEXT["Response Validator"]
 ```
 
 Essas validações garantem forma, tipos, limites e coerência técnica. Elas não garantem que:
@@ -188,7 +188,7 @@ Essas validações garantem forma, tipos, limites e coerência técnica. Elas n�
 - o conteúdo seja semanticamente seguro ou correto;
 - a resposta possa ser persistida ou convertida em artifact.
 
-O `AgentRunResult` continua sendo entrada não confiável do Response Validator futuro.
+O `AgentRunResult` continua sendo entrada não confiável do Response Validator. A validação funcional está detalhada no [fluxo visual da Sprint 7](29-RESPONSE_VALIDATOR_FLOW.md).
 
 ---
 

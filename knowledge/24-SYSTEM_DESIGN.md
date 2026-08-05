@@ -284,7 +284,7 @@ O `agentExecutionId` é obrigatório e identifica a invocação. O Runner não c
 
 O Runner não implementa retry, backoff ou timer. O timeout técnico é aplicado exclusivamente pelo AI Provider; cancelamento é propagado pelo signal recebido. Retentar funcionalmente permanece decisão do Orchestrator e exige uma nova `AgentExecution`.
 
-Suas validações são estruturais. Aderência ao output contract, regras de negócio, segurança semântica e contratos específicos de agentes pertencem ao Response Validator.
+Suas validações são estruturais. Aderência declarativa ao output contract pertence ao Response Validator; regras semânticas de negócio, segurança e qualidade específicas de agentes permanecem em avaliações posteriores.
 
 ---
 
@@ -307,17 +307,15 @@ Nenhum outro componente conhece a implementação concreta.
 
 ## Response Validator
 
-Responsável por validar toda resposta da IA.
+Responsável por classificar funcionalmente um único `AgentRunResult` por meio de um `ValidationContract` declarativo, provider-neutral e versionado.
 
-Valida:
+A `ValidationPipeline` verifica coerência do contrato, finish reason, presença e formato do conteúdo, reinterpreta JSON, aplica JSON Schema Draft 2020-12 e compara o valor validado com `structuredData`. Findings são reunidos em um `ValidationReport` interno e projetados como `ValidationResult` público, profundamente imutável.
 
-- JSON
-- Schema
-- Campos obrigatórios
-- Regras de negócio
-- Segurança
+`COMPLETED` é o único finish reason que permite validar conteúdo. Truncamento por limite, content filter e refusal são classificados sem interpretar o payload como válido. Para `JSON_SCHEMA`, o texto original é a fonte autoritativa; `structuredData` nunca é confiado isoladamente.
 
-Respostas inválidas são rejeitadas ou classificadas. O Validator não executa retry; o Orchestrator decide se deve criar uma nova `AgentExecution`.
+O Validator preserva o resultado original, não conhece agentes concretos e não executa avaliação semântica de negócio ou segurança. Não chama IA, corrige conteúdo, executa retry, cria artifacts, persiste dados ou altera estados. O Orchestrator futuro decide se uma classificação deve criar nova `AgentExecution` ou solicitar revisão.
+
+[Fluxo visual do Response Validator](29-RESPONSE_VALIDATOR_FLOW.md)
 
 ---
 
@@ -573,6 +571,8 @@ Validação obrigatória:
 Nunca confiar diretamente na resposta da IA.
 
 O Agent Runner valida somente a estrutura técnica, mantém a resposta bruta em envelope interno e não registra prompt, resposta, structured data, segredos ou JSON Schemas completos. Seu resultado continua não confiável até passar pelo Response Validator.
+
+O Response Validator usa um contrato server-side coerente com `expectedOutputContractHash`, reinterpreta o conteúdo original e não confia em `structuredData` isoladamente. O engine de JSON Schema não aplica coerção, defaults, remoção de campos, referências remotas ou mutações. Logs preservam somente metadados e hashes; conteúdo, valores e schemas completos permanecem fora deles.
 
 O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 

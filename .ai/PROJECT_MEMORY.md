@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 6 — Agent Runner implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 7 — Response Validator implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 7 sem aprovação explícita.
+Não iniciar a Sprint 8 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -16,6 +16,7 @@ Não iniciar a Sprint 7 sem aprovação explícita.
 - Knowledge Loader determinístico com origem filesystem abstraída por `KnowledgeSource`;
 - Prompt Builder determinístico com AST imutável e renderização final em dois canais;
 - Agent Runner genérico integrando Prompt Builder e AI Provider sem regras de agente ou workflow;
+- Response Validator genérico para classificação funcional determinística de `AgentRunResult`;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -119,6 +120,20 @@ Não iniciar a Sprint 7 sem aprovação explícita.
 - logs técnicos com allowlist estrita de IDs, hashes, durações, métricas, provider, modelo, estágio e código de erro, sem conteúdo sensível;
 - contratos validados nas fronteiras e resultados profundamente imutáveis.
 
+## Response Validator Layer
+
+- `core/response-validator` registrado como workspace interno `@brq/response-validator`;
+- `ValidationRequest` combina um `AgentRunResult` não confiável com um `ValidationContract` declarativo e versionado;
+- `ValidationPipeline` linear para coerência de contrato, finish reason, conteúdo, formato, JSON Schema e structured output;
+- `ValidationReport` permanece interno e é projetado como `ValidationResult` público profundamente imutável;
+- `COMPLETED` é o único finish reason que permite validar conteúdo; truncamento, content filter e refusal são classificados sem retry;
+- `output.content` é reinterpretado para `JSON_SCHEMA` Draft 2020-12 com Ajv 8 estrito, e `structuredData` nunca é aceito isoladamente;
+- issues possuem códigos, categorias e severidades estáveis; `INFO` permanece reservado e a produção emite somente `ERROR` e `WARNING` nesta Sprint;
+- limites configuráveis e centralizados protegem bytes de conteúdo e schema, nesting e quantidade de issues;
+- hashes SHA-256 distinguem resposta, conteúdo, contrato, schema, valor validado e decisão final;
+- logs registram apenas metadados, hashes, duração, quantidade e códigos de issues e indicador de truncamento, sem conteúdo, structured data ou schemas completos;
+- nenhuma chamada de IA, correção automática, retry, artifact, persistência, estado, regra específica de agente ou workflow.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -127,6 +142,7 @@ Não iniciar a Sprint 7 sem aprovação explícita.
 - ADR-014 registra a fronteira do Knowledge Loader, manifesto declarativo, índice imutável, seleção determinística, orçamento e segurança do filesystem;
 - ADR-015 registra a fronteira do Prompt Builder, AST imutável, canais semânticos, renderização determinística, orçamento, hashes e comparação estrutural;
 - ADR-016 registra a fronteira do Agent Runner, suas integrações, a separação de métricas e a ausência de retry, persistência e regras de workflow;
+- ADR-017 registra a fronteira do Response Validator, a pipeline determinística, o report interno, a classificação funcional e a ausência de retry ou semântica específica de agente;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -210,13 +226,24 @@ Não iniciar a Sprint 7 sem aprovação explícita.
 - build: aprovado;
 - nenhuma chamada externa ou teste live executado.
 
+## Validações da Sprint 7
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 371 aprovados, sendo 43 do Response Validator, 327 anteriores da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/response-validator`: 97,38% statements, 91,72% branches, 100% functions e 97,24% lines;
+- cobertura global da suíte raiz: 93,04% statements, 85,09% branches, 97,33% functions e 92,99% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- nenhuma chamada externa, retry ou teste live executado.
+
 ## Fora do escopo confirmado
 
 - testes E2E;
 - agentes e prompts funcionais;
 - assets de prompt, Prompt Manifest, loader, selector, registry e consumers de produção;
 - Product Owner Agent, Developer Agent e QA Agent;
-- Response Validator funcional;
 - retry funcional e workflow entre agentes;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;

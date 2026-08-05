@@ -8,6 +8,7 @@
     "core/ai-provider/**/*.ts",
     "core/knowledge-loader/**/*.ts",
     "core/prompt-builder/**/*.ts",
+    "core/response-validator/**/*.ts",
     "prisma.config.ts",
     "prisma/**/*.ts",
     "shared/**/*.ts",

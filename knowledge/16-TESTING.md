@@ -79,6 +79,7 @@ Exemplos:
 - Orchestrator e repository
 - Route Handler e service
 - Agent Runner e AI Provider
+- Agent Runner e Response Validator por contratos públicos
 - Prisma e banco de testes
 - geração e persistência de Artifact
 - validação da resposta estruturada de um agente
@@ -100,6 +101,8 @@ Principais contratos:
 - artefatos
 - eventos do Orchestrator
 - AI Provider
+- Agent Runner
+- Response Validator
 - repository
 
 Todos os contratos devem utilizar schemas versionados.
@@ -171,6 +174,8 @@ Cada agente deve possuir avaliações para:
 - ausência de conteúdo proibido
 - qualidade mínima
 - consistência entre entrada e saída
+
+O Response Validator possui uma suíte independente e determinística para finish reasons, presença de conteúdo, `TEXT`, JSON malformado, JSON Schema, coerência de `structuredData`, hashes, issues, imutabilidade, logs sanitizados e dependências proibidas. Esses testes utilizam `AgentRunResult` sintético e não realizam chamadas a providers.
 
 ---
 

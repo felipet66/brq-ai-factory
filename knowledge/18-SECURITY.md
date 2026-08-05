@@ -191,6 +191,16 @@ A resposta normalizada do provider permanece dado não confiável. O `ResponseEn
 
 Logs do Runner nunca incluem prompt, resposta, `structuredData`, contexto, variáveis, API keys, authorization headers, cookies, segredos ou JSON Schemas completos. Somente metadados técnicos, hashes, IDs, contagens, bytes, durações, uso e códigos de erro são permitidos.
 
+## Response Validator
+
+O `AgentRunResult` permanece não confiável. O Response Validator recebe separadamente um `ValidationContract` declarativo de origem server-side, valida sua coerência por `expectedOutputContractHash` e nunca utiliza schema fornecido pela resposta do modelo.
+
+Para `JSON_SCHEMA`, `output.content` é reinterpretado e validado em modo estrito com dialect `DRAFT_2020_12`. `structuredData` não é uma fonte autoritativa e precisa ser comparado ao valor reinterpretado. A validação não aplica defaults, coerção, remoção de campos, referências remotas, callbacks ou mutações.
+
+O módulo preserva o `AgentRunResult` original e produz um resultado separado e imutável. Validação estrutural não executa conteúdo, não garante segurança semântica e não substitui avaliações específicas de agente ou revisão humana.
+
+Logs do Validator nunca incluem conteúdo, `structuredData`, valor validado, schema completo, mensagens cruas do engine, prompts ou segredos. Somente IDs, hashes, formato, finish reason, duração, validade, quantidade e códigos de issues e indicador de truncamento são permitidos.
+
 ---
 
 # Saída dos Agentes

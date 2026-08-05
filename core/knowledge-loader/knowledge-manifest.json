@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -156,6 +156,12 @@
       "order": 28
     },
     {
+      "id": "knowledge:response-validator-flow",
+      "locator": "29-RESPONSE_VALIDATOR_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 29
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -250,6 +256,12 @@
       "locator": "ADR/ADR-016-AGENT-RUNNER-BOUNDARY.md",
       "category": "ADR",
       "order": 1016
+    },
+    {
+      "id": "adr:017",
+      "locator": "ADR/ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1017
     }
   ]
 }

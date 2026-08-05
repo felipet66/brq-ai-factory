@@ -209,6 +209,8 @@ Os formatos provider-neutral implementados são `TEXT` e `JSON_SCHEMA`.
 
 A validação do `PromptResult` confirma que o output contract corresponde ao fragmento da AST e que a proveniência corresponde às fontes efetivamente resolvidas.
 
+Após a execução, o Response Validator recebe separadamente um contrato funcional correspondente. Ele reinterpreta `output.content`, aplica o JSON Schema e verifica `structuredData` sem modificar a resposta. Essa etapa não retorna ao Prompt Builder nem altera o contrato usado no prompt.
+
 ---
 
 # Regras de Segurança
@@ -437,7 +439,7 @@ Todo prompt deve possuir testes para:
 - comparação estrutural com referências e paths imutáveis
 - ausência de conteúdo sensível nos logs
 
-Testes de resposta, aderência funcional do agente, ambiguidade e qualidade pertencem às Sprints de agentes, Response Validator e avaliações. A suíte do Builder não realiza chamadas de IA.
+Testes genéricos de formato, JSON Schema e structured output pertencem ao Response Validator. Aderência semântica, ambiguidade e qualidade específica pertencem às Sprints de agentes e avaliações. A suíte do Builder não realiza chamadas de IA.
 
 ---
 

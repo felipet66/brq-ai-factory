@@ -2,10 +2,10 @@
 
 ## Sprint atual
 
-Sprint 6 — Agent Runner implementada e aguardando aprovação humana.
+Sprint 7 — Response Validator implementada e aguardando aprovação humana.
 
 ## Próximas ações
 
 1. Revisar a implementação e os resultados registrados em `PROJECT_MEMORY.md`.
-2. Aguardar aprovação humana da Sprint 6.
-3. Não iniciar a Sprint 7 sem aprovação explícita.
+2. Aguardar aprovação humana da Sprint 7.
+3. Não iniciar a Sprint 8 sem aprovação explícita.
