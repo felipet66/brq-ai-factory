@@ -47,6 +47,8 @@ PROJECT_MEMORY.md
 
 CODEX_INSTRUCTIONS.md
 
+DEVELOPMENT_WORKFLOW.md
+
 IMPLEMENTATION_STRATEGY.md
 
 NEXT_STEPS.md
@@ -228,11 +230,35 @@ A transformação é pura e sem I/O de domínio ou acesso a recursos externos; o
 
 ## Agent Runner
 
-Executa agentes.
+Executa a fronteira genérica entre um prompt estruturado e o AI Provider.
 
-Único componente autorizado a chamar IA.
+Estrutura inicial:
 
-É genérico e não contém regras específicas de um agente.
+```text
+agent-runner/
+
+package.json
+
+agent-runner.ts
+
+contracts.ts
+
+errors.ts
+
+index.ts
+
+response-envelope.ts
+
+schemas.ts
+
+*.spec.ts
+```
+
+Único componente de produção autorizado a chamar a interface abstrata de IA.
+
+Seus contratos públicos incluem `PromptRequest`, `AgentRunRequest`, `AgentRunOptions` e `AgentRunResult`. `PromptRequest` pertence ao Runner e não expõe `PromptBuildInput`. O `ResponseEnvelope` que mantém o `AIResponse` validado, sua representação canônica, hash e tamanho é exclusivamente interno.
+
+O módulo é genérico, executa uma única chamada ao provider e não contém regras específicas de agente, retry, timer, persistência ou validação funcional. O timeout é aplicado pelo AI Provider, e o `AbortSignal` recebido é somente encaminhado.
 
 ---
 
@@ -256,7 +282,7 @@ Transforma JSON em arquivos.
 
 ## AI Provider
 
-Abstração da OpenAI.
+Abstração provider-neutral com OpenAI como adapter inicial.
 
 Permite múltiplos modelos.
 
@@ -376,7 +402,8 @@ Workspaces implementados:
 - `prisma`;
 - `core/ai-provider`;
 - `core/knowledge-loader`;
-- `core/prompt-builder`.
+- `core/prompt-builder`;
+- `core/agent-runner`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -431,6 +458,8 @@ Pode acessar:
 - shared
 
 O Prompt Builder é uma exceção mais restrita dentro de `core`: recebe estruturas prontas e não acessa `agents/`, `prompts/` ou `knowledge/`.
+
+O Agent Runner pode acessar somente as APIs públicas de `core/prompt-builder`, `core/ai-provider` e componentes transversais de `shared`. Não pode importar adapters concretos de provider, OpenAI, Responses API, `agents/`, Orchestrator, Knowledge Loader, `knowledge/`, Prisma ou `apps/`.
 
 ---
 

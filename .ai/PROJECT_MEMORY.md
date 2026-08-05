@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 5 — Prompt Builder implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 6 — Agent Runner implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 6 sem aprovação explícita.
+Não iniciar a Sprint 7 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -15,6 +15,7 @@ Não iniciar a Sprint 6 sem aprovação explícita.
 - SDK OpenAI 7.4 com Responses API isolada no adapter concreto;
 - Knowledge Loader determinístico com origem filesystem abstraída por `KnowledgeSource`;
 - Prompt Builder determinístico com AST imutável e renderização final em dois canais;
+- Agent Runner genérico integrando Prompt Builder e AI Provider sem regras de agente ou workflow;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -104,6 +105,20 @@ Não iniciar a Sprint 6 sem aprovação explícita.
 - logs limitados a identidade e versão do prompt, hashes finais, quantidades de seções e contextos, orçamento, duração, correlação e códigos de erro;
 - Prompt Manifest, assets, loader, selector, registry e consumers de produção adiados por ausência de uso concreto.
 
+## Agent Runner Layer
+
+- `core/agent-runner` registrado como workspace interno `@brq/agent-runner`;
+- executor genérico de um único agente, sem conhecer agentes concretos, workflow, Orchestrator ou persistência;
+- `PromptRequest` próprio e mínimo, mapeado internamente para o Prompt Builder sem expor `PromptBuildInput` no contrato público;
+- integração por interfaces abstratas `PromptBuilder` e `AIProvider`, sem dependência de OpenAI ou Responses API;
+- `ResponseEnvelope` interno entre a resposta do provider e o resultado público, preparado para futura validação funcional sem expor detalhes internos;
+- métricas observadas pelo Runner separadas das métricas reportadas pelo Provider;
+- hashes SHA-256 determinísticos do prompt e da resposta normalizada, além de contagem de bytes UTF-8 nas fronteiras abstratas;
+- cancelamento propagado por `AbortSignal` e timeout apenas encaminhado ao Provider, sem temporizador próprio;
+- exatamente uma chamada ao Provider por execução, sem retry, persistência, mutação de estados ou geração de artefatos;
+- logs técnicos com allowlist estrita de IDs, hashes, durações, métricas, provider, modelo, estágio e código de erro, sem conteúdo sensível;
+- contratos validados nas fronteiras e resultados profundamente imutáveis.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -111,6 +126,7 @@ Não iniciar a Sprint 6 sem aprovação explícita.
 - ADR-013 registra a fronteira do AI Provider, a separação entre retries técnicos e funcionais e a política de segurança;
 - ADR-014 registra a fronteira do Knowledge Loader, manifesto declarativo, índice imutável, seleção determinística, orçamento e segurança do filesystem;
 - ADR-015 registra a fronteira do Prompt Builder, AST imutável, canais semânticos, renderização determinística, orçamento, hashes e comparação estrutural;
+- ADR-016 registra a fronteira do Agent Runner, suas integrações, a separação de métricas e a ausência de retry, persistência e regras de workflow;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -182,12 +198,26 @@ Não iniciar a Sprint 6 sem aprovação explícita.
 - build: aprovado;
 - nenhuma chamada externa ou teste live executado.
 
+## Validações da Sprint 6
+
+- format check: aprovado;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 328 aprovados, sendo 31 do Agent Runner, 296 anteriores da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/agent-runner`: 95,83% statements, 86,25% branches, 97,14% functions e 96,20% lines;
+- cobertura global da suíte raiz: 92,38% statements, 84,03% branches, 96,88% functions e 92,35% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- nenhuma chamada externa ou teste live executado.
+
 ## Fora do escopo confirmado
 
 - testes E2E;
 - agentes e prompts funcionais;
 - assets de prompt, Prompt Manifest, loader, selector, registry e consumers de produção;
-- Agent Runner;
+- Product Owner Agent, Developer Agent e QA Agent;
+- Response Validator funcional;
+- retry funcional e workflow entre agentes;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;
 - métricas avançadas;

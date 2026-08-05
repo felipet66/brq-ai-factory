@@ -103,6 +103,8 @@ Backend
 ↓
 Orchestrator
 ↓
+Agent Runner
+↓
 AI Provider
 ```
 
@@ -176,6 +178,18 @@ O Prompt Builder deve manter identidade, regras e output contract confiáveis no
 Templates aceitam apenas slots tipados validados. A resolução ocorre em uma única passagem, e valores inseridos são tratados como dados opacos, sem reinterpretação como template ou criação de novos nós estruturais.
 
 O orçamento em bytes UTF-8 limita o tamanho do prompt sem resumir ou truncar conteúdo. Logs nunca incluem texto renderizado, contexto, entrada do usuário, valores de variáveis, segredos ou JSON Schemas completos.
+
+## Agent Runner
+
+O Agent Runner recebe somente contratos estruturados e validados. Seu `PromptRequest` é próprio e é convertido internamente para a entrada do Prompt Builder; nenhum caller pode fornecer diretamente `AIRequest`, instructions ou input já montados para contornar a separação de canais.
+
+O Runner conhece apenas a interface abstrata `AIProvider`. Adapters concretos, SDKs, OpenAI e Responses API não podem ser importados. `agentExecutionId` é correlação obrigatória, e apenas `requestId` e `traceId` validados podem ser propagados.
+
+Cancelamento é encaminhado pelo `AbortSignal` recebido. O Runner não cria timers; `timeoutMs` é validado e aplicado exclusivamente pelo provider. Cada invocação realiza uma chamada a `AIProvider.generate` e nunca executa retry.
+
+A resposta normalizada do provider permanece dado não confiável. O `ResponseEnvelope` interno calcula hash e tamanho para rastreabilidade e projeta um `AgentRunResult` sem expor o `AIResponse` bruto, mas não valida aderência funcional, segurança semântica ou regras específicas de agente. O Response Validator continua obrigatório antes de persistência ou geração de artifacts.
+
+Logs do Runner nunca incluem prompt, resposta, `structuredData`, contexto, variáveis, API keys, authorization headers, cookies, segredos ou JSON Schemas completos. Somente metadados técnicos, hashes, IDs, contagens, bytes, durações, uso e códigos de erro são permitidos.
 
 ---
 

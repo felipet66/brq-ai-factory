@@ -44,8 +44,11 @@ Entregas:
 - Next.js
 - Prisma
 - SQLite
+- AI Provider abstrato
 - Knowledge Loader
 - Prompt Builder determinístico
+- Agent Runner genérico
+- Response Validator
 - Orchestrator
 - Product Owner Agent
 - Developer Agent

@@ -56,6 +56,8 @@ Artifact Generator
 Persistence
 ```
 
+Esse fluxo representa a ordem das transformações de dados. Na chamada concreta, o Orchestrator fornece contexto e configuração ao Agent Runner, que invoca internamente o Prompt Builder injetado antes de chamar o AI Provider.
+
 ---
 
 # Princípios Arquiteturais
@@ -136,7 +138,7 @@ Funções:
 - controlar ordem dos agentes
 - persistir estados
 - controlar retries
-- controlar timeout
+- definir políticas e limites de timeout
 - controlar logs
 - decidir próximo passo
 
@@ -263,16 +265,26 @@ Prompt Manifest, assets, loader, selector, registry e consumers de produção pe
 
 ## Agent Runner
 
-Único componente autorizado a conversar com o AI Provider.
+Fronteira genérica e único componente de produção autorizado a conversar com o AI Provider.
 
 Responsabilidades:
 
-- enviar prompt
-- receber resposta
-- medir duração
-- medir tokens
-- registrar erros
-- retornar resposta
+- validar tecnicamente `AgentRunRequest` e `AgentRunOptions`;
+- mapear seu `PromptRequest` próprio para o Prompt Builder injetado, sem expor `PromptBuildInput`;
+- preservar os canais renderizados e transformar `PromptResult` em `AIRequest` provider-neutral;
+- executar exatamente uma chamada a `AIProvider.generate`;
+- encaminhar correlação, `AbortSignal` e `timeoutMs`;
+- validar tecnicamente a resposta normalizada;
+- manter o `AIResponse` em um `ResponseEnvelope` interno;
+- retornar `AgentRunResult` sem expor a resposta bruta;
+- separar métricas observadas pelo Runner das reportadas pelo provider;
+- registrar eventos e erros com metadados sanitizados.
+
+O `agentExecutionId` é obrigatório e identifica a invocação. O Runner não cria ou persiste `AgentExecution`, não altera estados, não seleciona agente, prompt, contexto ou modelo e não conhece provider concreto.
+
+O Runner não implementa retry, backoff ou timer. O timeout técnico é aplicado exclusivamente pelo AI Provider; cancelamento é propagado pelo signal recebido. Retentar funcionalmente permanece decisão do Orchestrator e exige uma nova `AgentExecution`.
+
+Suas validações são estruturais. Aderência ao output contract, regras de negócio, segurança semântica e contratos específicos de agentes pertencem ao Response Validator.
 
 ---
 
@@ -305,7 +317,7 @@ Valida:
 - Regras de negócio
 - Segurança
 
-Respostas inválidas geram retry.
+Respostas inválidas são rejeitadas ou classificadas. O Validator não executa retry; o Orchestrator decide se deve criar uma nova `AgentExecution`.
 
 ---
 
@@ -407,7 +419,7 @@ Knowledge Loader
 
 ↓
 
-Prompt Builder
+Contexto estruturado
 
 ↓
 
@@ -415,7 +427,19 @@ Agent Runner
 
 ↓
 
-OpenAI
+Prompt Builder injetado
+
+↓
+
+Agent Runner
+
+↓
+
+AI Provider abstrato
+
+↓
+
+Agent Runner
 
 ↓
 
@@ -531,6 +555,8 @@ Cada execução registra:
 - retries
 - erros
 
+No Agent Runner, durações e bytes observados localmente permanecem separados de duração, tentativas e uso reportados pelo provider. O Runner nunca recalcula tokens.
+
 ---
 
 # Segurança
@@ -545,6 +571,8 @@ Validação obrigatória:
 - Exportação
 
 Nunca confiar diretamente na resposta da IA.
+
+O Agent Runner valida somente a estrutura técnica, mantém a resposta bruta em envelope interno e não registra prompt, resposta, structured data, segredos ou JSON Schemas completos. Seu resultado continua não confiável até passar pelo Response Validator.
 
 O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 
@@ -568,6 +596,8 @@ core/
 
     prompt-builder/
 
+    agent-runner/
+
     response-validator/
 
     artifact-generator/
@@ -585,52 +615,40 @@ shared/
 
 # Sequência de Chamadas
 
-```
-Frontend
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant API
+    participant Engine as Execution Engine
+    participant Orchestrator
+    participant Knowledge as Knowledge Loader
+    participant Runner as Agent Runner
+    participant Prompt as Prompt Builder
+    participant Provider as AI Provider
+    participant Validator as Response Validator
+    participant Artifact as Artifact Generator
+    participant DB as Persistence
 
-↓
-
-API
-
-↓
-
-Execution Engine
-
-↓
-
-Orchestrator
-
-↓
-
-Knowledge Loader
-
-↓
-
-Prompt Builder
-
-↓
-
-Agent Runner
-
-↓
-
-AI Provider
-
-↓
-
-Response Validator
-
-↓
-
-Artifact Generator
-
-↓
-
-Persistence
-
-↓
-
-Frontend
+    Frontend->>API: iniciar fluxo
+    API->>Engine: criar execução
+    Engine->>Orchestrator: iniciar pipeline
+    Orchestrator->>Knowledge: carregar contexto
+    Knowledge-->>Orchestrator: contexto estruturado
+    Orchestrator->>Runner: run(AgentRunRequest)
+    Runner->>Prompt: build(prompt mapeado)
+    Prompt-->>Runner: PromptResult
+    Runner->>Provider: generate(AIRequest)
+    Provider-->>Runner: AIResponse
+    Runner-->>Orchestrator: AgentRunResult
+    Orchestrator->>Validator: validar resposta
+    Validator-->>Orchestrator: resultado validado
+    Orchestrator->>Artifact: gerar artifacts
+    Artifact-->>Orchestrator: artifacts
+    Orchestrator->>DB: persistir
+    DB-->>Orchestrator: concluído
+    Orchestrator-->>Engine: resultado
+    Engine-->>API: estado final
+    API-->>Frontend: resposta
 ```
 
 ---

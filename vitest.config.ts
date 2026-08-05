@@ -6,6 +6,7 @@ export default defineConfig({
     fileParallelism: false,
     hookTimeout: 60_000,
     include: [
+      'core/agent-runner/**/*.spec.ts',
       'core/ai-provider/**/*.spec.ts',
       'core/knowledge-loader/**/*.spec.ts',
       'core/prompt-builder/**/*.spec.ts',
@@ -16,6 +17,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'core/agent-runner/**/*.ts',
         'core/ai-provider/**/*.ts',
         'core/knowledge-loader/**/*.ts',
         'core/prompt-builder/**/*.ts',

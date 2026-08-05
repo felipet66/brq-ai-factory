@@ -1,0 +1,15 @@
+{
+  "name": "@brq/agent-runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/ai-provider": "0.1.0",
+    "@brq/prompt-builder": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

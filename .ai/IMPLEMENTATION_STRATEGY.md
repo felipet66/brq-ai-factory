@@ -287,7 +287,40 @@ O mesmo input válido produz uma estrutura imutável, os mesmos canais renderiza
 
 ---
 
-# Sprint 6 — Response Validator
+# Sprint 6 — Agent Runner
+
+Objetivo
+
+Executar a fronteira genérica entre prompts estruturados e o AI Provider.
+
+Entregas
+
+- workspace `core/agent-runner`
+- contratos e schemas Zod próprios de entrada e saída
+- `PromptRequest` independente de `PromptBuildInput`
+- integração somente pelas APIs públicas de Prompt Builder e AI Provider
+- mapeamento provider-neutral de `PromptResult` para `AIRequest`
+- `ResponseEnvelope` interno e `AgentRunResult` público sem expor `AIResponse`
+- correlação obrigatória por `agentExecutionId`
+- métricas observadas separadas das reportadas pelo provider
+- logs estruturados e sanitizados
+- testes unitários, de contrato, integração e fronteiras
+
+Decisões da implementação
+
+- cada execução realiza exatamente uma chamada a `AIProvider.generate` e o Runner não implementa retry;
+- cancelamento é encaminhado por `AbortSignal`, sem criação de timers no Runner;
+- o timeout configurado é apenas repassado e aplicado pelo AI Provider;
+- validações locais são técnicas e estruturais, nunca funcionais ou específicas de agente;
+- o Runner não conhece providers concretos, agentes, Orchestrator, Knowledge Loader, Prisma, API ou frontend.
+
+Critério
+
+Um `PromptRequest` válido gera um `AgentRunResult` rastreável por meio de uma única chamada abstrata ao provider, sem vazamento de detalhes internos.
+
+---
+
+# Sprint 7 — Response Validator
 
 Objetivo
 
@@ -299,7 +332,8 @@ Entregas
 - validação Schema
 - validação Segurança
 - tratamento de erro
-- retry
+
+O Validator classifica ou rejeita a resposta. Ele não executa retries; uma eventual nova `AgentExecution` permanece decisão do Orchestrator.
 
 Critério
 
@@ -307,7 +341,7 @@ Nenhuma resposta inválida entra na aplicação.
 
 ---
 
-# Sprint 7 — Artifact Generator
+# Sprint 8 — Artifact Generator
 
 Objetivo
 
@@ -327,7 +361,7 @@ Artefatos persistidos corretamente.
 
 ---
 
-# Sprint 8 — Product Owner Agent
+# Sprint 9 — Product Owner Agent
 
 Objetivo
 
@@ -337,7 +371,6 @@ Entregas
 
 agents/product-owner
 
-- runner
 - prompt
 - schema
 - testes
@@ -348,7 +381,7 @@ O agente produz User Story válida.
 
 ---
 
-# Sprint 9 — Developer Agent
+# Sprint 10 — Developer Agent
 
 Objetivo
 
@@ -364,7 +397,7 @@ O agente gera plano técnico e implementação.
 
 ---
 
-# Sprint 10 — QA Agent
+# Sprint 11 — QA Agent
 
 Objetivo
 
@@ -380,7 +413,7 @@ O agente produz plano de testes e relatório de qualidade.
 
 ---
 
-# Sprint 11 — Orchestrator
+# Sprint 12 — Orchestrator
 
 Objetivo
 
@@ -404,7 +437,7 @@ Os três agentes executam em sequência.
 
 ---
 
-# Sprint 12 — Execution Engine
+# Sprint 13 — Execution Engine
 
 Objetivo
 
@@ -423,7 +456,7 @@ Uma execução percorre todo o pipeline.
 
 ---
 
-# Sprint 13 — API
+# Sprint 14 — API
 
 Objetivo
 
@@ -442,7 +475,7 @@ Frontend consegue consumir a plataforma.
 
 ---
 
-# Sprint 14 — Frontend
+# Sprint 15 — Frontend
 
 Objetivo
 
@@ -463,7 +496,7 @@ Usuário consegue utilizar todo o fluxo.
 
 ---
 
-# Sprint 15 — Observabilidade
+# Sprint 16 — Observabilidade
 
 Objetivo
 
@@ -482,7 +515,7 @@ Toda execução pode ser auditada.
 
 ---
 
-# Sprint 16 — Segurança
+# Sprint 17 — Segurança
 
 Objetivo
 
@@ -502,7 +535,7 @@ Fluxo protegido.
 
 ---
 
-# Sprint 17 — Refino
+# Sprint 18 — Refino
 
 Objetivo
 
@@ -598,7 +631,7 @@ Ao terminar uma Sprint, aguarde aprovação antes de iniciar a próxima.
 
 # Objetivo Final
 
-Ao final da Sprint 17, o BRQ AI Factory deverá ser uma plataforma AI First completa, capaz de:
+Ao final da Sprint 18, o BRQ AI Factory deverá ser uma plataforma AI First completa, capaz de:
 
 - Orquestrar múltiplos agentes especializados.
 - Produzir artefatos rastreáveis.

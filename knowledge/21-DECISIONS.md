@@ -29,6 +29,7 @@ Este documento funciona apenas como índice.
 | ADR-013 | AI Provider Boundary and Resilience                 | Accepted |
 | ADR-014 | Knowledge Loader Boundary and Deterministic Context | Accepted |
 | ADR-015 | Prompt Builder Boundary and Deterministic Model     | Accepted |
+| ADR-016 | Agent Runner Boundary and Single-Call Execution     | Accepted |
 
 ---
 

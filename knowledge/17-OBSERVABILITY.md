@@ -80,7 +80,7 @@ Informações detalhadas para desenvolvimento.
 
 Exemplos:
 
-- payload transformado
+- metadados do payload transformado
 - transição interna
 - decisão de retry
 
@@ -145,6 +145,14 @@ agent.execution.completed
 agent.execution.failed
 agent.execution.retried
 
+agent.run.started
+agent.run.prompt.completed
+agent.run.provider.completed
+agent.run.completed
+agent.run.failed
+agent.run.cancelled
+agent.run.timed_out
+
 artifact.created
 artifact.versioned
 
@@ -163,6 +171,8 @@ ai.request.failed
 Eventos do AI Provider registram somente provider, modelo, IDs de correlação, tentativa, duração, tokens, código de erro e status técnico aplicável. Nunca registram prompts, respostas completas, chaves, headers de autorização, cookies ou JSON Schemas completos.
 
 Eventos do Prompt Builder registram somente metadados aplicáveis ao evento: promptId, agente, versão, schemaVersion, `templateHash`, `instructionsHash`, `inputHash`, `outputContractHash`, `promptHash`, quantidades de seções e contextos, orçamento, bytes, duração, requestId, traceId e código de erro. Nunca registram o texto renderizado, contexto, entrada do usuário, valores de variáveis ou JSON Schemas completos.
+
+Eventos do Agent Runner usam `agentExecutionId` como correlação obrigatória e podem registrar executionId, agente, tentativa, versões, IDs de correlação, hashes, provider, modelos, responseId, finish reason, bytes, durações, tentativas, uso e código de erro. Nunca registram prompts, respostas, structured data, valores de contexto, segredos ou JSON Schemas completos. O Runner emite no máximo um ciclo de provider por invocação e não possui evento de retry próprio.
 
 ---
 
@@ -198,6 +208,13 @@ Eventos do Prompt Builder registram somente metadados aplicáveis ao evento: pro
 - erros por modelo
 - erros por provider
 - uso por agente
+
+No Agent Runner, as métricas permanecem separadas por origem:
+
+- `observed`: `totalDurationMs`, `promptBuilderDurationMs`, `providerDurationMs`, `bytesSent` e `bytesReceived`, medidos localmente;
+- `reported`: `durationMs`, `attempts` e `usage`, preservados do AI Provider.
+
+O Runner não estima tokens nem substitui valores reportados. Divergências entre durações observadas e reportadas são esperadas porque medem limites distintos.
 
 ---
 

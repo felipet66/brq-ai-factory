@@ -7,6 +7,7 @@ brq-ai-factory/
 │
 ├── .ai/
 │   ├── CODEX_INSTRUCTIONS.md
+│   ├── DEVELOPMENT_WORKFLOW.md
 │   ├── IMPLEMENTATION_STRATEGY.md
 │   ├── PROJECT_MEMORY.md
 │   ├── NEXT_STEPS.md
@@ -31,7 +32,8 @@ brq-ai-factory/
 │   │   ├── ADR-012-PERSISTENCE_BOUNDARY.md
 │   │   ├── ADR-013-AI-PROVIDER-BOUNDARY.md
 │   │   ├── ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md
-│   │   └── ADR-015-PROMPT-BUILDER-BOUNDARY.md
+│   │   ├── ADR-015-PROMPT-BUILDER-BOUNDARY.md
+│   │   └── ADR-016-AGENT-RUNNER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -59,7 +61,9 @@ brq-ai-factory/
 │   ├── 23-FAQ.md
 │   ├── 24-SYSTEM_DESIGN.md
 │   ├── 25-SEQUENCE_DIAGRAMS.md
-│   └── 26-REPOSITORY_STRUCTURE.md
+│   ├── 26-REPOSITORY_STRUCTURE.md
+│   ├── 27-PROMPT_BUILDER_FLOW.md
+│   └── 28-AGENT_RUNNER_FLOW.md
 │
 ├── core/
 ├── agents/
@@ -123,6 +127,14 @@ O workspace `@brq/prompt-builder` transforma estruturas prontas em um `PromptRes
 Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. Assets, Prompt Manifest, loader, selector e consumers de produção permanecem adiados.
 
 [Fluxo visual do Prompt Builder](knowledge/27-PROMPT_BUILDER_FLOW.md)
+
+## Agent Runner
+
+O workspace `@brq/agent-runner` executa exatamente uma chamada abstrata de IA por invocação. Ele recebe um `PromptRequest` próprio, usa o `PromptBuilder` injetado, transforma o `PromptResult` validado em uma solicitação provider-neutral e chama somente a interface `AIProvider`.
+
+O Runner não conhece OpenAI ou adapters concretos, não persiste dados, não valida regras funcionais da resposta e não executa retries. O `agentExecutionId` é a correlação obrigatória; cancelamento é encaminhado por `AbortSignal` e o timeout é aplicado exclusivamente pelo provider. A resposta bruta permanece em um `ResponseEnvelope` interno, enquanto o resultado público separa metadados, métricas observadas pelo Runner e valores reportados pelo provider.
+
+[Fluxo visual do Agent Runner](knowledge/28-AGENT_RUNNER_FLOW.md)
 
 ## Validações
 

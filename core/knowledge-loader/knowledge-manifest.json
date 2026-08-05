@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -150,6 +150,12 @@
       "order": 27
     },
     {
+      "id": "knowledge:agent-runner-flow",
+      "locator": "28-AGENT_RUNNER_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 28
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -238,6 +244,12 @@
       "locator": "ADR/ADR-015-PROMPT-BUILDER-BOUNDARY.md",
       "category": "ADR",
       "order": 1015
+    },
+    {
+      "id": "adr:016",
+      "locator": "ADR/ADR-016-AGENT-RUNNER-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1016
     }
   ]
 }

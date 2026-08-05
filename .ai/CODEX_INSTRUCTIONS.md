@@ -100,6 +100,10 @@ Na seguinte ordem:
 25-SEQUENCE_DIAGRAMS.md
 
 26-REPOSITORY_STRUCTURE.md
+
+27-PROMPT_BUILDER_FLOW.md
+
+28-AGENT_RUNNER_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -331,6 +335,10 @@ core/knowledge-loader
 ↓
 
 core/prompt-builder
+
+↓
+
+core/agent-runner
 
 ↓
 
