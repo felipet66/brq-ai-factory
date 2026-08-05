@@ -1,0 +1,231 @@
+{
+  "version": "1.0.0",
+  "documents": [
+    { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
+    {
+      "id": "knowledge:project-context",
+      "locator": "01-PROJECT_CONTEXT.md",
+      "category": "PRODUCT",
+      "order": 1
+    },
+    {
+      "id": "knowledge:architecture",
+      "locator": "02-ARCHITECTURE.md",
+      "category": "ARCHITECTURE",
+      "order": 2
+    },
+    {
+      "id": "knowledge:workflow",
+      "locator": "03-WORKFLOW.md",
+      "category": "WORKFLOW",
+      "order": 3
+    },
+    {
+      "id": "knowledge:tech-stack",
+      "locator": "04-TECH_STACK.md",
+      "category": "TECHNOLOGY",
+      "order": 4
+    },
+    {
+      "id": "knowledge:domain-model",
+      "locator": "05-DOMAIN_MODEL.md",
+      "category": "DOMAIN",
+      "order": 5
+    },
+    {
+      "id": "knowledge:database",
+      "locator": "06-DATABASE.md",
+      "category": "DATABASE",
+      "order": 6
+    },
+    { "id": "knowledge:api", "locator": "07-API.md", "category": "API", "order": 7 },
+    {
+      "id": "knowledge:orchestrator",
+      "locator": "08-ORCHESTRATOR.md",
+      "category": "ORCHESTRATION",
+      "order": 8
+    },
+    {
+      "id": "knowledge:artifacts",
+      "locator": "09-ARTIFACTS.md",
+      "category": "ARTIFACT",
+      "order": 9
+    },
+    { "id": "knowledge:agents", "locator": "10-AGENTS.md", "category": "AGENT", "order": 10 },
+    {
+      "id": "knowledge:product-owner-agent",
+      "locator": "11-PO_AGENT.md",
+      "category": "AGENT",
+      "order": 11
+    },
+    {
+      "id": "knowledge:developer-agent",
+      "locator": "12-DEVELOPER_AGENT.md",
+      "category": "AGENT",
+      "order": 12
+    },
+    {
+      "id": "knowledge:qa-agent",
+      "locator": "13-QA_AGENT.md",
+      "category": "AGENT",
+      "order": 13
+    },
+    {
+      "id": "knowledge:prompts",
+      "locator": "14-PROMPTS.md",
+      "category": "PROMPT",
+      "order": 14
+    },
+    {
+      "id": "knowledge:coding-standards",
+      "locator": "15-CODING_STANDARDS.md",
+      "category": "ENGINEERING",
+      "order": 15
+    },
+    {
+      "id": "knowledge:testing",
+      "locator": "16-TESTING.md",
+      "category": "TESTING",
+      "order": 16
+    },
+    {
+      "id": "knowledge:observability",
+      "locator": "17-OBSERVABILITY.md",
+      "category": "OBSERVABILITY",
+      "order": 17
+    },
+    {
+      "id": "knowledge:security",
+      "locator": "18-SECURITY.md",
+      "category": "SECURITY",
+      "order": 18
+    },
+    {
+      "id": "knowledge:contributing",
+      "locator": "19-CONTRIBUTING.md",
+      "category": "GOVERNANCE",
+      "order": 19
+    },
+    {
+      "id": "knowledge:roadmap",
+      "locator": "20-ROADMAP.md",
+      "category": "PRODUCT",
+      "order": 20
+    },
+    {
+      "id": "knowledge:decisions",
+      "locator": "21-DECISIONS.md",
+      "category": "GOVERNANCE",
+      "order": 21
+    },
+    {
+      "id": "knowledge:glossary",
+      "locator": "22-GLOSSARY.md",
+      "category": "GLOSSARY",
+      "order": 22
+    },
+    { "id": "knowledge:faq", "locator": "23-FAQ.md", "category": "FAQ", "order": 23 },
+    {
+      "id": "knowledge:system-design",
+      "locator": "24-SYSTEM_DESIGN.md",
+      "category": "ARCHITECTURE",
+      "order": 24
+    },
+    {
+      "id": "knowledge:sequence-diagrams",
+      "locator": "25-SEQUENCE_DIAGRAMS.md",
+      "category": "ARCHITECTURE",
+      "order": 25
+    },
+    {
+      "id": "knowledge:repository-structure",
+      "locator": "26-REPOSITORY_STRUCTURE.md",
+      "category": "ARCHITECTURE",
+      "order": 26
+    },
+    {
+      "id": "adr:001",
+      "locator": "ADR/ADR-001-Orchestrator.md",
+      "category": "ADR",
+      "order": 1001
+    },
+    {
+      "id": "adr:002",
+      "locator": "ADR/ADR-002-Agent-Isolation.md",
+      "category": "ADR",
+      "order": 1002
+    },
+    {
+      "id": "adr:003",
+      "locator": "ADR/ADR-003-JSON-Contract.md",
+      "category": "ADR",
+      "order": 1003
+    },
+    {
+      "id": "adr:004",
+      "locator": "ADR/ADR-004-AI-First.md",
+      "category": "ADR",
+      "order": 1004
+    },
+    {
+      "id": "adr:005",
+      "locator": "ADR/ADR-005-Knowledge-Layer.md",
+      "category": "ADR",
+      "order": 1005
+    },
+    {
+      "id": "adr:006",
+      "locator": "ADR/ADR-006-SQLite-MVP.md",
+      "category": "ADR",
+      "order": 1006
+    },
+    {
+      "id": "adr:007",
+      "locator": "ADR/ADR-007-Prisma.md",
+      "category": "ADR",
+      "order": 1007
+    },
+    {
+      "id": "adr:008",
+      "locator": "ADR/ADR-008-NextJS.md",
+      "category": "ADR",
+      "order": 1008
+    },
+    {
+      "id": "adr:009",
+      "locator": "ADR/ADR-009-Prompt-Versioning.md",
+      "category": "ADR",
+      "order": 1009
+    },
+    {
+      "id": "adr:010",
+      "locator": "ADR/ADR-010-Human-Review.md",
+      "category": "ADR",
+      "order": 1010
+    },
+    {
+      "id": "adr:011",
+      "locator": "ADR/ADR-011-Repository-Layout.md",
+      "category": "ADR",
+      "order": 1011
+    },
+    {
+      "id": "adr:012",
+      "locator": "ADR/ADR-012-PERSISTENCE_BOUNDARY.md",
+      "category": "ADR",
+      "order": 1012
+    },
+    {
+      "id": "adr:013",
+      "locator": "ADR/ADR-013-AI-PROVIDER-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1013
+    },
+    {
+      "id": "adr:014",
+      "locator": "ADR/ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1014
+    }
+  ]
+}

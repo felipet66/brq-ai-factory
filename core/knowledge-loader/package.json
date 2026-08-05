@@ -1,0 +1,15 @@
+{
+  "name": "@brq/knowledge-loader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./filesystem": "./filesystem/filesystem-knowledge-source.ts",
+    "./testing": "./testing/fake-knowledge-source.ts"
+  },
+  "dependencies": {
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

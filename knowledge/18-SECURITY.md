@@ -128,6 +128,25 @@ Entradas inválidas devem ser rejeitadas antes de chegar ao Orchestrator.
 
 ---
 
+# Knowledge Layer
+
+O Knowledge Loader deve operar sobre uma raiz absoluta fornecida exclusivamente pela composição server-side.
+
+O adapter de filesystem deve:
+
+- autorizar documentos por manifesto declarativo validado;
+- rejeitar caminhos absolutos, traversal, segmentos ocultos e separadores inválidos;
+- rejeitar symlinks, arquivos não regulares e extensões não permitidas;
+- validar contenção pelo caminho real e exigir UTF-8 válido;
+- verificar hashes antes de compor o contexto;
+- aplicar limites configuráveis de documentos e bytes sem truncar conteúdo.
+
+Logs podem conter IDs, hashes, quantidades, bytes, duração e códigos de erro. Nunca devem conter conteúdo documental nem caminhos absolutos.
+
+O conteúdo Markdown é dado não confiável: o Loader não o executa, resume ou interpreta como instrução.
+
+---
+
 # Prompt Injection
 
 Demandas de usuários devem ser tratadas como conteúdo não confiável.

@@ -97,6 +97,12 @@ Arquivos:
 - AGENTS
 - ADRs
 
+`knowledge/` permanece como fonte documental. `core/knowledge-loader` autoriza documentos por manifesto JSON validado por Zod, abstrai a origem por `KnowledgeSource`, constrói um índice imutável com hashes e aplica uma política determinística de seleção.
+
+O contexto produzido preserva o conteúdo original e inclui ID, categoria, hash e delimitadores por documento. Orçamentos são configurados por instância e nunca causam truncamento silencioso.
+
+O Knowledge Loader não monta prompts, executa agentes, coordena o pipeline, persiste dados, resume conteúdo ou utiliza IA, embeddings, RAG e busca semântica.
+
 ---
 
 ### Agent Layer

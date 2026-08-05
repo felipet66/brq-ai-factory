@@ -148,7 +148,13 @@ O Orchestrator nunca chama diretamente a OpenAI.
 
 ## Knowledge Loader
 
-Responsável por carregar apenas o conhecimento necessário.
+Responsável por autorizar, indexar, selecionar e carregar apenas o conhecimento documental necessário.
+
+O contrato `KnowledgeSource` abstrai a origem. O MVP utiliza filesystem, enquanto consumidores operam somente com IDs lógicos e metadados. Um manifesto JSON versionado e validado por Zod define os documentos permitidos, com IDs explícitos e independentes de filenames.
+
+Cada instância mantém um índice imutável com hashes SHA-256. A seleção por contexto é determinística e versionada. Durante o carregamento, apenas documentos selecionados são relidos e comparados ao índice; mudanças não são incorporadas silenciosamente.
+
+O orçamento de documentos e bytes é configurado por instância. Documentos obrigatórios não são removidos nem truncados; opcionais que não couberem são omitidos de forma rastreável.
 
 Exemplo:
 
@@ -182,15 +188,16 @@ Prompt Context
 
 O objetivo é reduzir consumo de contexto.
 
+O Context Composer preserva cada documento sem resumo ou transformação e inclui delimitadores, ID, categoria e hash. O Knowledge Loader não monta prompts, executa agentes, coordena o pipeline, persiste dados ou utiliza IA, embeddings, RAG e busca semântica.
+
 ---
 
 ## Prompt Builder
 
 Recebe:
 
-- contexto
+- contexto estruturado do Knowledge Loader
 - prompt base
-- documentação
 - entrada do usuário
 
 Gera:
@@ -512,6 +519,8 @@ Validação obrigatória:
 - Exportação
 
 Nunca confiar diretamente na resposta da IA.
+
+O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 
 ---
 

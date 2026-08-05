@@ -65,7 +65,7 @@ QA Agent
 Resultado Final
 ```
 
-O Orchestrator é responsável por selecionar, validar e repassar o contexto necessário para cada etapa.
+O Orchestrator solicita o tipo de contexto necessário para cada etapa. O Knowledge Loader aplica a política documental determinística, e o Prompt Builder futuro combina esse contexto com as demais entradas. Nenhum desses componentes transfere suas responsabilidades ao agente.
 
 ---
 
@@ -247,6 +247,8 @@ Todo agente recebe um envelope de execução.
 # Contexto Mínimo
 
 Cada agente deve receber apenas o contexto necessário.
+
+Documentos da Knowledge Layer são selecionados pelo Knowledge Loader mediante política explícita e orçamento configurável. O Loader preserva o conteúdo e sua rastreabilidade; não monta o prompt nem interpreta regras funcionais do agente.
 
 Não enviar automaticamente:
 

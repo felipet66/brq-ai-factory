@@ -227,14 +227,25 @@ core/knowledge-loader
 
 Funções
 
-- localizar documentos
-- carregar contexto
-- resumir contexto
-- separar contexto por agente
+- autorizar documentos por manifesto JSON validado por Zod
+- manter IDs explícitos e independentes de filenames
+- construir índice imutável com hashes SHA-256
+- selecionar documentos por contexto mediante política determinística e versionada
+- carregar e verificar somente os documentos selecionados
+- compor contexto estruturado sem resumir ou alterar conteúdo
+- aplicar orçamento configurável por instância sem truncamento silencioso
+
+Decisões da implementação
+
+- `KnowledgeSource` abstrai a origem e o filesystem é o adapter inicial;
+- o manifesto é declarativo, versionado e mantido em `core/knowledge-loader`;
+- o contexto identifica cada documento por ID, categoria, hash e delimitadores;
+- o Loader não monta prompts, executa agentes, coordena o fluxo ou persiste dados;
+- IA, embeddings, RAG, busca semântica e cache de conteúdo permanecem fora do escopo.
 
 Critério
 
-Cada agente recebe apenas o conhecimento necessário.
+Cada contexto recebe somente os documentos autorizados e selecionados, com conteúdo íntegro e rastreável.
 
 ---
 

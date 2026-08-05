@@ -146,7 +146,31 @@ Nunca conversa diretamente com a OpenAI.
 
 ## Knowledge Loader
 
-Carrega apenas o conhecimento necessário.
+Autoriza, indexa, seleciona e carrega apenas o conhecimento necessário.
+
+Estrutura inicial:
+
+```text
+knowledge-loader/
+
+knowledge-manifest.json
+
+contracts.ts
+
+schemas.ts
+
+knowledge-source.ts
+
+knowledge-loader.ts
+
+filesystem/
+
+testing/
+```
+
+O manifesto é declarativo e validado por Zod. IDs documentais são explícitos e independentes dos nomes físicos. `KnowledgeSource` mantém consumidores desacoplados do filesystem.
+
+O módulo produz contexto íntegro e rastreável, com orçamento configurável. Não monta prompts, executa agentes, coordena o pipeline, persiste dados, resume conteúdo ou utiliza IA, embeddings, RAG e busca semântica.
 
 ---
 
@@ -300,7 +324,8 @@ Workspaces implementados:
 - `apps/web`;
 - `shared`;
 - `prisma`;
-- `core/ai-provider`.
+- `core/ai-provider`;
+- `core/knowledge-loader`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 

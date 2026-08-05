@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 3 — AI Provider implementada em 2026-08-05 e aguardando aprovação humana.
+Sprint 4 — Knowledge Loader implementada em 2026-08-05 e aguardando aprovação humana.
 
-Não iniciar a Sprint 4 sem aprovação explícita.
+Não iniciar a Sprint 5 sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -13,6 +13,7 @@ Não iniciar a Sprint 4 sem aprovação explícita.
 - Next.js 16 com App Router, TypeScript strict e Tailwind CSS;
 - Prisma 7 com SQLite local, models, migration inicial e repositories;
 - SDK OpenAI 7.4 com Responses API isolada no adapter concreto;
+- Knowledge Loader determinístico com origem filesystem abstraída por `KnowledgeSource`;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -70,11 +71,27 @@ Não iniciar a Sprint 4 sem aprovação explícita.
 - logs contêm somente metadados técnicos sanitizados;
 - teste real opcional separado e desabilitado por padrão.
 
+## Knowledge Loader Layer
+
+- `core/knowledge-loader` registrado como workspace interno `@brq/knowledge-loader`;
+- `KnowledgeSource` desacopla consumidores da origem física, com filesystem como adapter inicial;
+- manifesto JSON declarativo, versionado e validado por Zod;
+- IDs documentais explícitos, estáveis e independentes de filenames;
+- índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
+- seleção determinística e versionada para contextos canônicos;
+- orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
+- composição estruturada com delimitadores, ID, categoria e hash por documento;
+- verificação de hash entre indexação e leitura dos documentos selecionados;
+- proteção contra traversal, caminhos absolutos, symlinks, arquivos não regulares e UTF-8 inválido;
+- logs limitados a metadados técnicos, sem conteúdo documental ou caminhos absolutos;
+- nenhuma IA, embeddings, RAG, busca semântica, resumo, persistência ou montagem de prompt.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
 - ADR-012 registra ports compartilhados, adapter Prisma, mapeamento físico, versionamento e política de delete;
 - ADR-013 registra a fronteira do AI Provider, a separação entre retries técnicos e funcionais e a política de segurança;
+- ADR-014 registra a fronteira do Knowledge Loader, manifesto declarativo, índice imutável, seleção determinística, orçamento e segurança do filesystem;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -121,11 +138,24 @@ Não iniciar a Sprint 4 sem aprovação explícita.
 - teste live: separado, desabilitado por padrão e sem chamada externa durante a validação;
 - npm audit: zero vulnerabilidades.
 
+## Validações da Sprint 4
+
+- format check: aprovado;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 220 aprovados, sendo 96 do Knowledge Loader, 123 anteriores de Shared/Persistence/AI Provider e 1 smoke da aplicação;
+- cobertura de `core/knowledge-loader`: 92,33% statements, 82,68% branches, 97,87% functions e 92,22% lines;
+- cobertura global da suíte raiz: 91,81% statements, 82,79% branches, 96,05% functions e 91,84% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- smoke local do adapter filesystem: 41 documentos indexados, nenhum ausente e os 6 contextos canônicos carregados;
+- nenhuma chamada externa ou teste live executado.
+
 ## Fora do escopo confirmado
 
 - testes E2E;
 - agentes e prompts funcionais;
-- Knowledge Loader, Prompt Builder e Agent Runner;
+- Prompt Builder e Agent Runner;
 - Orchestrator e Execution Engine;
 - autenticação e autorização;
 - métricas avançadas;

@@ -12,13 +12,14 @@
     "apps/*",
     "shared",
     "prisma",
-    "core/ai-provider"
+    "core/ai-provider",
+    "core/knowledge-loader"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @brq-ai-factory/web",
     "build": "npm run build --workspace @brq-ai-factory/web",
     "start": "npm run start --workspace @brq-ai-factory/web",
-    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared prisma core/ai-provider *.ts *.mjs --max-warnings=0",
+    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared prisma core/ai-provider core/knowledge-loader *.ts *.mjs --max-warnings=0",
     "lint:fix": "npm run lint -- --fix",
     "prebuild": "npm run prisma:generate",
     "pretypecheck": "npm run prisma:generate",

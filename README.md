@@ -29,7 +29,8 @@ brq-ai-factory/
 │   │   ├── ADR-010-Human-Review.md
 │   │   ├── ADR-011-Repository-Layout.md
 │   │   ├── ADR-012-PERSISTENCE_BOUNDARY.md
-│   │   └── ADR-013-AI-PROVIDER-BOUNDARY.md
+│   │   ├── ADR-013-AI-PROVIDER-BOUNDARY.md
+│   │   └── ADR-014-KNOWLEDGE-LOADER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -107,6 +108,12 @@ O teste real opcional exige ativação e modelo explícitos:
 ```bash
 RUN_OPENAI_LIVE_TESTS=true OPENAI_LIVE_TEST_MODEL=nome-do-modelo npm run test:ai:live
 ```
+
+## Knowledge Loader
+
+O workspace `@brq/knowledge-loader` carrega documentos Markdown autorizados por um manifesto JSON validado por Zod. IDs são explícitos e independentes de filenames; seleção, ordem, hashes e orçamento de contexto são determinísticos e configuráveis por instância.
+
+O contexto preserva o conteúdo original e identifica cada documento por ID, categoria e hash. O módulo não monta prompts, resume conteúdo nem utiliza IA, embeddings, RAG ou busca semântica.
 
 ## Validações
 

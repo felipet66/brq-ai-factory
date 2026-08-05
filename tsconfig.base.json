@@ -15,6 +15,7 @@
     "exactOptionalPropertyTypes": true,
     "paths": {
       "@brq/ai-provider/*": ["./core/ai-provider/*"],
+      "@brq/knowledge-loader/*": ["./core/knowledge-loader/*"],
       "@brq/shared/*": ["./shared/*"]
     }
   }
