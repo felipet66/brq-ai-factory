@@ -114,6 +114,8 @@ Na seguinte ordem:
 32-PRODUCT_OWNER_AGENT_FLOW.md
 
 33-PIPELINE_OVERVIEW.md
+
+34-DEVELOPER_AGENT_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -385,7 +387,9 @@ Cada agente possui responsabilidade única.
 
 Os agentes nunca se comunicam diretamente.
 
-Todo fluxo passa pelo Orchestrator.
+No fluxo completo futuro, todo handoff passa pelo Orchestrator. As fachadas atuais de Product Owner e Developer representam somente uma tentativa isolada e não chamam Orchestrator, persistência ou outro agente. O Developer pode importar exclusivamente o tipo/schema público da `ProductOwnerSpecification` como contrato de entrada, conforme o ADR-020; isso não autoriza comunicação nem dependência operacional entre agentes.
+
+O Developer Agent da Sprint 10 atua como arquiteto: transforma uma `ProductOwnerSpecification` válida em uma `TechnicalSpecification` e drafts declarativos. Ele não gera código ou testes, não executa comandos e não altera estados.
 
 ---
 

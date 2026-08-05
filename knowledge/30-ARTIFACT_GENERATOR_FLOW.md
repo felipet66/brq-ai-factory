@@ -85,7 +85,7 @@ Esta árvore é conceitual: os schemas públicos são a definição executável 
 
 O source validado pode ter formato `TEXT` ou `JSON_SCHEMA`. O `sourceContract` da specification precisa corresponder exatamente a ID, versão, formato e `contractHash` registrados pelo Validator.
 
-Specifications específicas de Product Owner, Developer e QA não pertencem ao módulo genérico e serão criadas somente nas Sprints dos respectivos agentes.
+Specifications específicas não pertencem ao módulo genérico. Product Owner e Developer já mantêm as suas em bundles externos versionados; o QA fará o mesmo em sua Sprint.
 
 `mediaType` usa uma allowlist coerente com o formato: `TEXT` aceita `text/plain` ou `text/markdown`, e `JSON` exige `application/json`.
 

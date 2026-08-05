@@ -4,6 +4,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "agents/developer/**/*.ts",
     "agents/product-owner/**/*.ts",
     "core/agent-runner/**/*.ts",
     "core/ai-provider/**/*.ts",

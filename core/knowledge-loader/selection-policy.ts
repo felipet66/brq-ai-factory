@@ -30,10 +30,11 @@ const ADR_IDS = [
   'adr:017',
   'adr:018',
   'adr:019',
+  'adr:020',
 ] as const;
 
 const rawKnowledgeSelectionPolicy = {
-  version: '1.6.0',
+  version: '1.7.0',
   contexts: {
     GLOBAL: {
       required: [
@@ -63,13 +64,16 @@ const rawKnowledgeSelectionPolicy = {
         'knowledge:domain-model',
         'knowledge:agents',
         'knowledge:developer-agent',
-        'knowledge:coding-standards',
-        'knowledge:testing',
         'knowledge:security',
+      ],
+      optional: [
         'knowledge:system-design',
         'knowledge:repository-structure',
+        'knowledge:coding-standards',
+        'knowledge:testing',
+        'knowledge:workflow',
+        ...ADR_IDS,
       ],
-      optional: ['knowledge:workflow', ...ADR_IDS],
     },
     QA: {
       required: [
@@ -109,6 +113,7 @@ const rawKnowledgeSelectionPolicy = {
         'adr:017',
         'adr:018',
         'adr:019',
+        'adr:020',
       ],
     },
     ARCHITECTURE: {
@@ -130,6 +135,7 @@ const rawKnowledgeSelectionPolicy = {
         'knowledge:artifact-lifecycle',
         'knowledge:product-owner-agent-flow',
         'knowledge:pipeline-overview',
+        'knowledge:developer-agent-flow',
         ...ADR_IDS,
       ],
     },

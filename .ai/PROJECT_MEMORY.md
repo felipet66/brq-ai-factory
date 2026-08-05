@@ -2,9 +2,7 @@
 
 ## Estado atual
 
-Sprint 9 — Product Owner Agent implementada em 2026-08-05 e aguardando validação técnica final e aprovação humana.
-
-Não iniciar a Sprint 10 sem aprovação explícita.
+Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 11 não deve começar sem essa aprovação.
 
 ## Fundação técnica
 
@@ -19,6 +17,7 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - Response Validator genérico para classificação funcional determinística de `AgentRunResult`;
 - Artifact Generator genérico para produzir drafts determinísticos a partir de saídas validadas e specifications declarativas;
 - Product Owner Agent como fachada concreta de uma única tentativa sobre os componentes genéricos já existentes;
+- Developer Agent como segunda fachada concreta, responsável somente por proposta técnica declarativa e rastreável;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -84,6 +83,8 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - IDs documentais explícitos, estáveis e independentes de filenames;
 - índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
 - seleção determinística e versionada para contextos canônicos;
+- manifesto e política `1.7.0`, incluindo o fluxo do Developer e o ADR-020;
+- contexto `DEVELOPER` com seis documentos obrigatórios que cabem no orçamento padrão de 64 KiB e documentos adicionais opcionais em ordem determinística;
 - orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
 - composição estruturada com delimitadores, ID, categoria e hash por documento;
 - verificação de hash entre indexação e leitura dos documentos selecionados;
@@ -106,7 +107,7 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - hashes de seções preservados nos metadados do `PromptResult`;
 - comparação estrutural determinística de seções adicionadas, removidas, alteradas ou reordenadas, com paths imutáveis e sem avaliação semântica por IA;
 - logs limitados a identidade e versão do prompt, hashes finais, quantidades de seções e contextos, orçamento, duração, correlação e códigos de erro;
-- na Sprint 5, Prompt Manifest, assets e consumers foram adiados; a Sprint 9 adicionou o bundle estático do Product Owner, enquanto loader genérico, selector, registry e seleção dinâmica continuam adiados.
+- na Sprint 5, Prompt Manifest, assets e consumers foram adiados; as Sprints 9 e 10 adicionaram bundles estáticos de Product Owner e Developer, enquanto loader genérico, selector, registry e seleção dinâmica continuam adiados.
 
 ## Agent Runner Layer
 
@@ -169,6 +170,17 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - logs preservam apenas IDs, versões, hashes, contagens, tempos e códigos técnicos, sem demanda, contexto, prompt, resposta ou artifacts;
 - nenhuma persistência, retry, transição de estado, Orchestrator, Developer Agent ou QA Agent integra esta Sprint.
 
+## Developer Agent Layer
+
+- `agents/developer` é a segunda fachada concreta e representa uma única tentativa;
+- o request recebe contexto de execução, uma `ProductOwnerSpecification` válida pelo entrypoint público do Product Owner, modelo e limites opcionais;
+- a tentativa encadeia `Knowledge Loader → Agent Runner → Response Validator → Developer Business Validation → Artifact Generator`;
+- a saída funcional é uma `TechnicalSpecification` estrita com arquitetura, complexidade, story points, fases, plano, dependências internas e externas, riscos, decisões e rastreabilidade;
+- a Business Validation preserva IDs funcionais, rejeita referências inválidas, duplicidades e ciclos, deriva readiness e exige cobertura integral dos Acceptance Criteria da origem;
+- metadados preservam o hash canônico e a readiness da `ProductOwnerSpecification` recebida;
+- os assets versionados ficam em `prompts/developer/1.0.0` e geram exatamente `architecture.md`, `implementation-plan.md` e `technical-decisions.json` em memória;
+- o agente atua como arquiteto e não gera código ou testes, não executa comandos, não grava arquivos, não persiste, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -180,6 +192,7 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - ADR-017 registra a fronteira do Response Validator, a pipeline determinística, o report interno, a classificação funcional e a ausência de retry ou semântica específica de agente;
 - ADR-018 registra a fronteira do Artifact Generator, a specification declarativa, o modelo resolvido interno, a separação dos hashes e a ausência de filesystem, persistência e versionamento;
 - ADR-019 registra a fronteira do Product Owner Agent, a composição dos componentes genéricos, a Business Validation específica e a ausência de workflow, retry e persistência;
+- ADR-020 registra o handoff contratual para o Developer Agent, sua Business Validation, os três drafts técnicos e a ausência de geração de código, testes e workflow;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -300,12 +313,27 @@ Não iniciar a Sprint 10 sem aprovação explícita.
 - build: aprovado;
 - `git diff --check`: aprovado;
 - nenhuma chamada externa, teste live, persistência, retry ou transição de estado executada;
-- nenhum item da Sprint 10 foi iniciado.
+- naquele baseline, nenhum item da Sprint 10 havia sido iniciado.
+
+## Validações da Sprint 10
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck: aprovado;
+- testes: 581 aprovados, sendo 73 do Developer Agent, 1 nova integração de orçamento do Knowledge Loader, 506 previamente existentes na suíte raiz e 1 smoke da aplicação;
+- cobertura de `agents/developer`: 92,98% statements, 80,21% branches, 98,70% functions e 93,46% lines;
+- cobertura global da suíte raiz: 93,60% statements, 84,40% branches, 98,65% functions e 93,84% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- `git diff --check`: aprovado;
+- nenhuma chamada externa, teste live, persistência, retry funcional ou transição de estado executada;
+- nenhum item da Sprint 11 foi iniciado e nenhum commit foi criado.
 
 ## Fora do escopo confirmado
 
 - testes E2E;
-- Developer Agent e QA Agent;
+- QA Agent;
+- geração ou execução de código e testes pelo Developer Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional e workflow entre agentes;
 - Orchestrator e Execution Engine;

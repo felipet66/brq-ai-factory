@@ -1,5 +1,11 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it } from 'vitest';
 
+import { FilesystemKnowledgeSource } from './filesystem/filesystem-knowledge-source';
+import { createKnowledgeLoader, DEFAULT_CONTEXT_MAX_BYTES } from './knowledge-loader';
 import { KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST } from './manifest';
 import {
@@ -9,13 +15,13 @@ import {
 } from './selection-policy';
 
 const ADR_IDS = Array.from(
-  { length: 19 },
+  { length: 20 },
   (_, index) => `adr:${String(index + 1).padStart(3, '0')}`,
 );
 
 describe('Knowledge selection policy', () => {
   it('defines every canonical context under a versioned policy', () => {
-    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.6.0');
+    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.7.0');
     expect(Object.keys(KNOWLEDGE_SELECTION_POLICY.contexts)).toEqual([
       'GLOBAL',
       'PRODUCT_OWNER',
@@ -45,7 +51,19 @@ describe('Knowledge selection policy', () => {
   });
 
   it('makes the complete ADR set optional for DEVELOPER and ARCHITECTURE', () => {
+    expect(getKnowledgeSelectionRule('DEVELOPER').required).toEqual([
+      'knowledge:architecture',
+      'knowledge:tech-stack',
+      'knowledge:domain-model',
+      'knowledge:agents',
+      'knowledge:developer-agent',
+      'knowledge:security',
+    ]);
     expect(getKnowledgeSelectionRule('DEVELOPER').optional).toEqual([
+      'knowledge:system-design',
+      'knowledge:repository-structure',
+      'knowledge:coding-standards',
+      'knowledge:testing',
       'knowledge:workflow',
       ...ADR_IDS,
     ]);
@@ -58,8 +76,34 @@ describe('Knowledge selection policy', () => {
       'knowledge:artifact-lifecycle',
       'knowledge:product-owner-agent-flow',
       'knowledge:pipeline-overview',
+      'knowledge:developer-agent-flow',
       ...ADR_IDS,
     ]);
+  });
+
+  it('loads the canonical DEVELOPER context within the default byte budget', async () => {
+    const knowledgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../knowledge');
+    const source = new FilesystemKnowledgeSource({
+      sourceId: 'developer-budget-check',
+      rootPath: knowledgeRoot,
+      allowedLocators: KNOWLEDGE_MANIFEST.documents.map(({ locator }) => locator),
+    });
+    const loader = await createKnowledgeLoader({
+      source,
+      logger: createLogger({ sink: () => undefined }),
+    });
+
+    const context = await loader.load({ context: 'DEVELOPER' });
+    const developerRule = getKnowledgeSelectionRule('DEVELOPER');
+    const includedIds = new Set(context.includedDocuments.map(({ id }) => id));
+
+    expect(DEFAULT_CONTEXT_MAX_BYTES).toBe(64 * 1024);
+    expect(context.budget.maxBytes).toBe(DEFAULT_CONTEXT_MAX_BYTES);
+    expect(context.budget.usedBytes).toBeLessThanOrEqual(DEFAULT_CONTEXT_MAX_BYTES);
+    expect(developerRule.required).toHaveLength(6);
+    for (const documentId of developerRule.required) {
+      expect(includedIds.has(documentId)).toBe(true);
+    }
   });
 
   it('implements the approved QA and SECURITY matrices', () => {
@@ -101,6 +145,7 @@ describe('Knowledge selection policy', () => {
         'adr:017',
         'adr:018',
         'adr:019',
+        'adr:020',
       ],
     });
   });

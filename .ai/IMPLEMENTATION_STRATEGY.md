@@ -437,15 +437,30 @@ Uma demanda válida produz uma `ProductOwnerSpecification` rastreável e, quando
 
 Objetivo
 
-Implementar o segundo agente.
+Implementar o segundo agente concreto como arquiteto de uma única tentativa.
 
 Entregas
 
-agents/developer
+- workspace `agents/developer`
+- contrato estrito `ProductOwnerSpecification → TechnicalSpecification`
+- assets declarativos versionados em `prompts/developer/1.0.0`
+- composição `Knowledge Loader → Agent Runner → Response Validator → Developer Business Validation → Artifact Generator`
+- validação determinística de IDs, referências, dependências, ciclos, readiness, completude e cobertura integral dos Acceptance Criteria
+- drafts canônicos `architecture.md`, `implementation-plan.md` e `technical-decisions.json`
+- metadados com hash e readiness da specification funcional de origem
+- política `DEVELOPER` com seis documentos obrigatórios dentro do orçamento padrão de 64 KiB
+
+Decisões da implementação
+
+- o request recebe somente contexto de execução, uma `ProductOwnerSpecification` válida, modelo e limites opcionais;
+- o pacote reutiliza o contrato público do Product Owner sem criar ou executar outro agente;
+- a `TechnicalSpecification` registra complexidade, story points, fases, plano, dependências internas e externas, decisões e rastreabilidade;
+- o agente não gera código ou testes, não executa comandos, não acessa filesystem, não persiste, não retenta, não altera estados e não coordena QA ou Orchestrator;
+- os artifacts são drafts em memória produzidos exclusivamente pela Artifact Specification server-side.
 
 Critério
 
-O agente gera plano técnico e implementação.
+Uma `ProductOwnerSpecification` válida produz uma proposta técnica rastreável e, após os dois gates de validação, exatamente os três drafts canônicos sem executar a implementação.
 
 ---
 

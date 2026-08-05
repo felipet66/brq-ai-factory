@@ -6,6 +6,7 @@ export default defineConfig({
     fileParallelism: false,
     hookTimeout: 60_000,
     include: [
+      'agents/developer/**/*.spec.ts',
       'agents/product-owner/**/*.spec.ts',
       'core/agent-runner/**/*.spec.ts',
       'core/ai-provider/**/*.spec.ts',
@@ -20,6 +21,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'agents/developer/**/*.ts',
         'agents/product-owner/**/*.ts',
         'core/agent-runner/**/*.ts',
         'core/ai-provider/**/*.ts',
@@ -32,6 +34,7 @@ export default defineConfig({
       ],
       exclude: [
         '**/*.spec.ts',
+        'agents/developer/testing/**',
         'agents/product-owner/testing/**',
         'shared/types/**',
         'generated/**',

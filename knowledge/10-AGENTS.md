@@ -67,6 +67,8 @@ Resultado Final
 
 O Orchestrator solicita o tipo de contexto necessário para cada etapa. O Knowledge Loader aplica a política documental determinística, e o Prompt Builder combina esse contexto já preparado com as demais estruturas de entrada. Nenhum desses componentes transfere suas responsabilidades ao agente.
 
+Esse diagrama representa o pipeline completo futuro. Nas fachadas atuais, um caller executa uma tentativa isolada: o Developer recebe uma `ProductOwnerSpecification` válida, mas não chama o Product Owner nem acessa Orchestrator, estado ou persistência.
+
 ---
 
 # Estrutura de um Agente
@@ -88,7 +90,7 @@ agents/
 
 O runner de execução é genérico e permanece em `core/agent-runner`, conforme o ADR-011.
 
-O Product Owner é o primeiro agente concreto. Seus assets declarativos e versionados ficam em `prompts/product-owner/1.0.0`; a fachada recebe dependências injetadas e não chama `PromptBuilder.build` nem AI Provider diretamente. O workspace usa somente tipos, schemas e hashing canônico do entrypoint público do Prompt Builder para validar os assets. Developer e QA permanecem futuros.
+Product Owner e Developer são agentes concretos. Seus assets declarativos e versionados ficam, respectivamente, em `prompts/product-owner/1.0.0` e `prompts/developer/1.0.0`; cada fachada recebe dependências injetadas e não chama `PromptBuilder.build` nem AI Provider diretamente. Os workspaces usam somente contratos e utilitários permitidos pelos entrypoints públicos. QA permanece futuro.
 
 ---
 
@@ -107,7 +109,7 @@ Define:
 - formato de saída
 - critérios de qualidade
 
-No Product Owner, esses elementos ficam em arquivos JSON versionados sob `prompts/product-owner/1.0.0`, vinculados por um manifesto de filenames, IDs e versões. A factory valida o bundle e calcula seus hashes antes de aceitar requests.
+No Product Owner e no Developer, esses elementos ficam em arquivos JSON versionados sob o diretório próprio de cada agente, vinculados por um manifesto de filenames, IDs e versões. A factory valida o bundle e calcula seus hashes antes de aceitar requests.
 
 ---
 
@@ -141,6 +143,8 @@ Contém invariantes específicas do domínio:
 - completude mínima
 - unicidade de IDs
 - referências cruzadas
+- dependências e ciclos quando o domínio os declarar
+- cobertura de contratos recebidos da etapa anterior
 - limite de issues e indicador `issuesTruncated`
 
 ---
@@ -189,7 +193,7 @@ O Shared Layer preserva um envelope transversal para integrações futuras da pl
 }
 ```
 
-Esse envelope não é o contrato enviado ao modelo nem a API pública do Product Owner Agent. Na implementação concreta, o modelo retorna somente `ProductOwnerSpecification`, e a fachada retorna `ProductOwnerAgentResult` com outcome `GENERATED` ou `VALIDATION_REJECTED`. Drafts são produzidos exclusivamente pelo Artifact Generator.
+Esse envelope não é o contrato enviado ao modelo nem a API pública das fachadas concretas. O Product Owner retorna uma `ProductOwnerSpecification`; o Developer recebe esse valor validado e retorna uma `TechnicalSpecification`. Ambas as fachadas projetam outcomes `GENERATED` ou `VALIDATION_REJECTED`, e drafts são produzidos exclusivamente pelo Artifact Generator.
 
 ---
 
@@ -206,7 +210,7 @@ REQUIRES_REVIEW
 
 Esses valores representam o resultado final de uma tentativa de agente. `CREATED`, `RUNNING` e `CANCELLED` pertencem ao ciclo de vida de `AgentExecution`, não ao contrato de saída do agente.
 
-O Product Owner usa uma taxonomia funcional mais específica: readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`, separada do outcome técnico-funcional da fachada.
+Product Owner e Developer usam a taxonomia funcional `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`, separada do outcome técnico-funcional da fachada. No Developer, a derivação também respeita a readiness funcional de origem.
 
 ## SUCCESS
 
@@ -309,34 +313,35 @@ O Product Owner Agent não deve:
 
 # Responsabilidades do Developer Agent
 
-O Developer Agent transforma uma especificação funcional em uma proposta técnica e implementação.
+O Developer Agent atua como arquiteto e transforma uma `ProductOwnerSpecification` válida em uma `TechnicalSpecification` declarativa e rastreável.
 
 Entradas:
 
-- User Story aprovada
-- critérios de aceite
-- regras de negócio
-- stack permitida
-- padrões de código
-- contexto técnico necessário
+- contexto e metadados de uma tentativa
+- `ProductOwnerSpecification` validada pelo contrato público do Product Owner
+- modelo e limites opcionais
+- contexto técnico `DEVELOPER` selecionado pelo Knowledge Loader
 
 Saídas:
 
-- plano de implementação
-- estrutura de arquivos
-- código
-- documentação técnica
-- limitações
-- riscos
+- arquitetura, componentes, módulos, fluxos e contratos
+- complexidade, story points e fases de implementação
+- dependências internas e externas, riscos e decisões com trade-offs
+- plano e backlog técnicos com cobertura integral dos Acceptance Criteria
+- drafts `architecture.md`, `implementation-plan.md` e `technical-decisions.json`
+- metadados com hash e readiness da specification funcional de origem
 
 O Developer Agent não deve:
 
 - alterar requisitos de negócio
 - ignorar critérios de aceite
-- modificar arquitetura sem autorização
-- remover validações
+- gerar código-fonte, patches ou testes
+- executar comandos ou afirmar que a implementação foi validada
+- acessar filesystem, banco, repositories ou provider diretamente
+- executar Product Owner, QA ou Orchestrator
+- persistir drafts, alterar estados ou aplicar retry
 - executar deploy
-- publicar código automaticamente
+- publicar qualquer resultado automaticamente
 
 ---
 
@@ -379,7 +384,7 @@ Cada agente deve conhecer apenas:
 - seu contrato
 - sua entrada
 - suas regras
-- o contexto fornecido pelo Orchestrator
+- o contexto mínimo fornecido pelo caller e selecionado pelo Knowledge Loader
 
 Um agente não deve acessar diretamente:
 
@@ -431,11 +436,11 @@ Uma resposta só pode ser aceita quando:
 
 O Response Validator genérico verifica finish reason, presença e formato do conteúdo, JSON, schema e coerência do structured output mediante um contrato funcional versionado. Ele não conhece Product Owner, Developer ou QA e, portanto, não substitui avaliações semânticas específicas de agente, critérios de qualidade ou revisão humana.
 
-No Product Owner, uma etapa separada denominada Business Validation recalcula readiness e verifica completude, IDs únicos e referências cruzadas. Ela não altera a specification nem se confunde com o Response Validator genérico; seu resultado inclui `issuesTruncated` para sinalizar quando o limite de 100 issues foi atingido.
+No Product Owner, uma Business Validation separada recalcula readiness e verifica completude, IDs únicos e referências cruzadas. No Developer, o mesmo gate específico também verifica dependências e ciclos, coerência técnica e cobertura integral de todos os Acceptance Criteria da `ProductOwnerSpecification` de origem. Nenhuma das etapas altera a specification; seus resultados incluem `issuesTruncated` para sinalizar quando o limite de 100 issues foi atingido.
 
 Respostas inválidas geram um `ValidationResult` imutável com issues classificadas e metadados rastreáveis. O Validator registra somente metadados técnicos e não corrige conteúdo, executa retry ou altera estados.
 
-Somente um `ValidationResult` aceito e aprovado pelo gate da Business Validation pode ser encaminhado ao Artifact Generator. Esse componente recebe o `ValidationResult` e, separadamente, uma `ArtifactSpecification` declarativa, resolve bindings, renderiza exatamente os três drafts canônicos e retorna um resultado imutável. Ele não escolhe regras do agente, não revalida semanticamente a resposta, não persiste e não coordena o próximo passo.
+Somente um `ValidationResult` aceito e aprovado pelo gate da Business Validation pode ser encaminhado ao Artifact Generator. Esse componente recebe o `ValidationResult` e, separadamente, a `ArtifactSpecification` declarativa do agente, resolve bindings, renderiza exatamente os três drafts canônicos configurados e retorna um resultado imutável. Ele não escolhe regras do agente, não revalida semanticamente a resposta, não persiste e não coordena o próximo passo.
 
 O fluxo posterior pode gerar:
 

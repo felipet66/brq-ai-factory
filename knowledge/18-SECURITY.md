@@ -221,6 +221,14 @@ Conhecimento e demanda permanecem dados não confiáveis no canal `INPUT`; regra
 
 O agente não acessa OpenAI, SDKs, Prisma, repositories, filesystem de artifacts, outros agentes ou Orchestrator. Cancelamento é apenas propagado e uma invocação não executa retry. Logs nunca incluem demanda, contexto, documentos, prompt, resposta, specification, artifacts, schemas completos ou segredos; apenas metadados técnicos allowlisted.
 
+## Developer Agent
+
+A fachada do Developer aceita somente uma `ProductOwnerSpecification` válida pelo contrato público do Product Owner. Essa dependência de schema não autoriza chamar a fachada anterior. Specification funcional e Knowledge permanecem dados não confiáveis no canal `INPUT`; identidade, regras, output contract e Artifact Specification são assets server-side no canal `INSTRUCTIONS`.
+
+A `TechnicalSpecification` passa pelo Response Validator e por Business Validation específica, que verifica referências, dependências, ciclos, readiness, completude e cobertura integral dos Acceptance Criteria. Aderência estrutural não autoriza execução: o agente não produz código, testes, patches ou comandos, não acessa filesystem, não chama provider diretamente e não persiste drafts.
+
+Logs do Developer permitem somente IDs e correlação, versões, hashes, contagens, bytes, durações, provider, modelo, outcome, readiness técnica, readiness e hash da origem e códigos seguros. Product Owner Specification, conhecimento, prompt, resposta, Technical Specification, traceability, decisões, conteúdo de artifacts, schemas completos, caminhos e segredos permanecem proibidos.
+
 ---
 
 # Saída dos Agentes

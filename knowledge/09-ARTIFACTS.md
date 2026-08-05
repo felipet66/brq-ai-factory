@@ -22,13 +22,15 @@ backlog.json
 
 # Developer
 
-Arquivos previstos para a Sprint do agente; esta lista não é um manifesto do Artifact Generator:
+Drafts canônicos da Sprint 10, na ordem declarada pela Artifact Specification:
 
-implementation.md
+architecture.md
 
-source-code
+implementation-plan.md
 
-readme.md
+technical-decisions.json
+
+Esses drafts documentam a proposta técnica. Não representam código-fonte, testes, arquivos gravados ou uma implementação executada.
 
 ---
 

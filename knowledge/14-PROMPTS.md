@@ -55,7 +55,7 @@ agents/
 ├── product-owner/
 │   └── prompt-assets.ts
 ├── developer/
-│   └── (futuro)
+│   └── prompt-assets.ts
 └── qa/
     └── (futuro)
 ```
@@ -64,20 +64,27 @@ Versões podem ser armazenadas em:
 
 ```text
 prompts/
-└── product-owner/
-    └── 1.0.0/
-        ├── manifest.json
-        ├── template.json
-        ├── global-rules.json
-        ├── security-rules.json
-        ├── product-owner-rules.json
-        ├── output-contract.json
-        └── artifact-specification.json
+├── product-owner/1.0.0/
+│   ├── manifest.json
+│   ├── template.json
+│   ├── global-rules.json
+│   ├── security-rules.json
+│   ├── product-owner-rules.json
+│   ├── output-contract.json
+│   └── artifact-specification.json
+└── developer/1.0.0/
+    ├── manifest.json
+    ├── template.json
+    ├── global-rules.json
+    ├── security-rules.json
+    ├── developer-rules.json
+    ├── output-contract.json
+    └── artifact-specification.json
 ```
 
-O bundle declarativo do Product Owner possui IDs e versões explícitos, é importado server-side e validado como conjunto antes do uso. Seu manifesto fixa exatamente os assets da versão; descoberta dinâmica, alias `current`, registry e seleção automática continuam fora do MVP.
+Os bundles declarativos de Product Owner e Developer possuem IDs e versões explícitos, são importados server-side e validados como conjuntos antes do uso. Cada manifesto fixa exatamente os assets da versão; descoberta dinâmica, alias `current`, registry e seleção automática continuam fora do MVP.
 
-O Prompt Builder não lê `agents/` nem `prompts/`. A fachada do Product Owner carrega o bundle estático, projeta estruturas prontas no contrato do Agent Runner e deixa a construção efetiva encapsulada no Runner.
+O Prompt Builder não lê `agents/` nem `prompts/`. Cada fachada carrega seu bundle estático, projeta estruturas prontas no contrato do Agent Runner e deixa a construção efetiva encapsulada no Runner.
 
 ---
 
@@ -534,7 +541,7 @@ Quando um prompt falhar repetidamente:
 - solicitar revisão
 - não avançar o pipeline automaticamente
 
-Essas decisões pertencem ao futuro Orchestrator. Prompt Builder, Agent Runner e Product Owner Agent apenas reportam o resultado da tentativa atual e nunca executam retry funcional.
+Essas decisões pertencem ao futuro Orchestrator. Prompt Builder, Agent Runner, Product Owner Agent e Developer Agent apenas reportam o resultado da tentativa atual e nunca executam retry funcional.
 
 ---
 
@@ -571,17 +578,20 @@ Exemplo resumido:
 ```text
 Você é o Developer Agent do BRQ AI Factory.
 
-Implemente a User Story seguindo os documentos técnicos fornecidos.
+Transforme a ProductOwnerSpecification validada em uma TechnicalSpecification declarativa e rastreável.
 
-Antes de implementar:
-- analise os critérios
-- consulte arquitetura
-- identifique arquivos afetados
-- crie um plano
+Produza:
+- arquitetura, componentes, módulos e fluxos
+- contratos, APIs, eventos e modelo de dados
+- complexidade, story points, fases e plano
+- dependências, riscos, decisões e trade-offs
+- rastreabilidade integral dos Acceptance Criteria
 
 Não altere requisitos.
 Não mude arquitetura sem autorização.
 Não exponha segredos.
+Não gere código, testes, patches ou comandos executáveis.
+Não afirme que a implementação foi realizada ou validada.
 
 Retorne somente JSON válido de acordo com o schema.
 ```

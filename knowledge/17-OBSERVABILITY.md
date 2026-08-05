@@ -171,6 +171,15 @@ product_owner.artifacts.generated
 product_owner.agent.completed
 product_owner.agent.failed
 
+developer.agent.started
+developer.knowledge.loaded
+developer.run.completed
+developer.validation.accepted
+developer.validation.rejected
+developer.artifacts.generated
+developer.agent.completed
+developer.agent.failed
+
 artifact.created
 artifact.versioned
 
@@ -197,6 +206,8 @@ Eventos do Response Validator podem registrar IDs de execução e correlação, 
 Eventos do Artifact Generator podem registrar IDs de execução e correlação, identidade e versão da specification, `sourceValidationHash`, `sourceValidatedValueHash`, hashes estruturais e de conteúdo, quantidade de templates e artifacts, bytes renderizados, duração, estágio, classificação e código de erro. Nunca registram conteúdo validado ou renderizado, templates, bindings, specification completa, valores resolvidos, prompts ou segredos. Eventos de geração em memória são distintos de `artifact.created` e `artifact.versioned`, emitidos somente pela futura integração de persistência.
 
 Eventos do Product Owner Agent podem registrar IDs de execução e correlação, versões e hashes de assets, contexto documental por ID e hash, outcome, readiness, contagens, durações, provider, modelo e códigos técnicos ou de validação. Nunca registram demanda, contexto, prompt, resposta, specification, issues com valores, artifacts ou schemas completos. A fachada não emite evento de retry ou persistência.
+
+Eventos do Developer Agent seguem a mesma allowlist técnica e podem acrescentar `sourceSpecificationHash`, `sourceReadiness` e contagens de elementos técnicos. Nunca registram a `ProductOwnerSpecification`, a `TechnicalSpecification`, conhecimento, prompt, resposta, decisões, traceability, conteúdo de drafts ou schemas completos. A fachada não emite evento de execução de código, testes, retry, estado ou persistência.
 
 ---
 
@@ -256,6 +267,15 @@ Eventos do Product Owner Agent podem registrar IDs de execução e correlação,
 - quantidade e bytes dos drafts gerados;
 - versões e hashes dos assets usados.
 
+## Developer Agent
+
+- tentativas concluídas, rejeitadas e com falha;
+- readiness técnica e readiness funcional de origem;
+- duração total da fachada e códigos da Business Validation;
+- quantidade de Acceptance Criteria da origem e resultado do gate de cobertura;
+- quantidade e bytes dos três drafts técnicos;
+- versões, hashes de assets e hash da specification de origem.
+
 No Agent Runner, as métricas permanecem separadas por origem:
 
 - `observed`: `totalDurationMs`, `promptBuilderDurationMs`, `providerDurationMs`, `bytesSent` e `bytesReceived`, medidos localmente;
@@ -290,11 +310,13 @@ Execution
 │   ├── Artifact generation
 │   └── Resultado em memória
 ├── Developer
+│   ├── Knowledge loading
 │   ├── Prompt building
 │   ├── AI request
 │   ├── Schema validation
+│   ├── Business validation
 │   ├── Artifact generation
-│   └── Artifact persistence
+│   └── Resultado em memória
 └── QA
     ├── Prompt building
     ├── AI request

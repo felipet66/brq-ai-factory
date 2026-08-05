@@ -2,10 +2,10 @@
 
 ## Sprint atual
 
-Sprint 9 — Product Owner Agent implementada, validada tecnicamente e aguardando aprovação humana.
+Sprint 10 — Developer Agent implementada e validada tecnicamente, aguardando aprovação humana.
 
 ## Próximas ações
 
-1. Revisar a implementação, o ADR-019 e os documentos visuais 32 e 33.
-2. Aguardar aprovação humana da Sprint 9.
-3. Não iniciar a Sprint 10 sem aprovação explícita.
+1. Revisar o fechamento técnico, o ADR-020 e o fluxo 34 apresentados para a Sprint 10.
+2. Confirmar os resultados de validação e cobertura registrados em `PROJECT_MEMORY.md`.
+3. Aguardar aprovação humana antes de qualquer commit ou início da Sprint 11.

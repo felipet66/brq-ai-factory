@@ -1,0 +1,19 @@
+{
+  "name": "@brq/developer-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/agent-runner": "0.1.0",
+    "@brq/artifact-generator": "0.1.0",
+    "@brq/knowledge-loader": "0.1.0",
+    "@brq/product-owner-agent": "0.1.0",
+    "@brq/prompt-builder": "0.1.0",
+    "@brq/response-validator": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

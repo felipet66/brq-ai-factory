@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O Developer Agent transforma uma especificação funcional aprovada em uma proposta técnica e uma implementação compatível com a arquitetura do BRQ AI Factory.
+O Developer Agent atua como arquiteto: transforma uma `ProductOwnerSpecification` válida em uma `TechnicalSpecification` declarativa, rastreável e compatível com a arquitetura do BRQ AI Factory. Ele não implementa, executa ou valida código.
 
 ---
 
@@ -10,14 +10,14 @@ O Developer Agent transforma uma especificação funcional aprovada em uma propo
 
 O agente deve:
 
-- compreender a User Story
-- analisar critérios de aceite
-- consultar a arquitetura
-- planejar a implementação
-- criar ou modificar código
-- documentar decisões
-- criar testes unitários e de integração quando aplicável
-- reportar riscos e limitações
+- compreender a specification funcional sem alterar seus requisitos
+- analisar e cobrir integralmente os critérios de aceite
+- consultar arquitetura, stack, modelo de domínio e segurança pelo contexto `DEVELOPER`
+- propor componentes, módulos, fluxos, contratos, APIs, eventos e modelo de dados
+- estimar complexidade e story points
+- ordenar fases, plano e backlog técnicos
+- documentar decisões, alternativas e trade-offs
+- reportar dependências, riscos, premissas, dúvidas e limites de escopo
 
 ---
 
@@ -25,30 +25,29 @@ O agente deve:
 
 O Developer Agent deve receber:
 
+O trecho abaixo é uma visão abreviada do envelope e não constitui um payload validável; `productOwnerSpecification` deve conter integralmente o contrato público do Product Owner.
+
 ```json
 {
-  "executionId": "execution_123",
-  "userStory": {},
-  "acceptanceCriteria": [],
-  "businessRules": [],
-  "constraints": [],
-  "technicalContext": {
-    "architecture": "",
-    "techStack": "",
-    "codingStandards": "",
-    "securityRules": ""
+  "context": {
+    "executionId": "execution_123",
+    "agentExecutionId": "agent_execution_123",
+    "attempt": 1,
+    "agentVersion": "1.0.0"
   },
-  "projectFiles": []
+  "productOwnerSpecification": {},
+  "model": "configured-model",
+  "limits": {}
 }
 ```
 
 Entradas obrigatórias:
 
-- User Story
-- critérios de aceite
-- stack
-- padrões de código
-- regras de arquitetura
+- contexto técnico da tentativa
+- `ProductOwnerSpecification` válida pelo schema público do Product Owner
+- modelo configurado
+
+Limites são opcionais. Prompt, rule sets, output contract, Artifact Specification, filenames, demanda bruta, arquivos do projeto e conteúdo executável não fazem parte do request. Arquitetura, stack e segurança são carregadas pelo Knowledge Loader mediante a política fixa `DEVELOPER`.
 
 ---
 
@@ -56,61 +55,54 @@ Entradas obrigatórias:
 
 O Developer Agent deve produzir:
 
-- entendimento técnico
-- plano de implementação
-- arquivos criados
-- arquivos modificados
-- código
-- decisões técnicas
-- testes
-- limitações
-- riscos
-- instruções de validação
-- artefatos
+- `TechnicalSpecification` com readiness, objetivo, complexidade e story points
+- arquitetura, componentes, módulos e fluxos
+- contratos, APIs, eventos e modelo de dados
+- dependências internas e externas e riscos
+- fases, plano e backlog técnicos
+- definição de pronto, decisões, alternativas e trade-offs
+- rastreabilidade integral dos Acceptance Criteria
+- premissas, dúvidas e itens fora de escopo
+- três `ArtifactDrafts` em memória e metadados de proveniência
 
 ---
 
 # Contrato de Saída
 
+O mapa abaixo é apenas uma visão conceitual da raiz, não um exemplo validável. Os objetos internos e as coleções mínimas exigidas são definidos pelos schemas versionados e pela Business Validation.
+
 ```json
 {
-  "status": "SUCCESS",
-  "summary": "Implementação concluída.",
-  "understanding": {
-    "goal": "",
-    "scope": [],
-    "outOfScope": []
-  },
-  "implementationPlan": [
-    {
-      "order": 1,
-      "description": "",
-      "affectedModules": []
-    }
-  ],
-  "files": {
-    "created": [],
-    "modified": [],
-    "deleted": []
-  },
-  "technicalDecisions": [],
-  "tests": {
-    "created": [],
-    "updated": [],
-    "commands": []
-  },
+  "readiness": "READY",
+  "title": "Proposta técnica",
+  "summary": "Resumo técnico rastreável.",
+  "objective": "Objetivo preservado da specification funcional.",
+  "complexity": "MEDIUM",
+  "estimatedStoryPoints": 8,
+  "architecture": {},
+  "components": [],
+  "modules": [],
+  "flows": [],
+  "contracts": [],
+  "apis": [],
+  "events": [],
+  "dataModel": {},
+  "internalDependencies": [],
+  "externalDependencies": [],
   "risks": [],
-  "limitations": [],
-  "artifacts": [],
-  "nextContext": {},
-  "warnings": [],
-  "metadata": {
-    "agent": "DEVELOPER",
-    "promptVersion": "1.0.0",
-    "schemaVersion": "1.0.0"
-  }
+  "implementationPhases": [],
+  "implementationPlan": [],
+  "technicalBacklog": [],
+  "definitionOfDone": [],
+  "decisions": [],
+  "traceability": [],
+  "assumptions": [],
+  "openQuestions": [],
+  "outOfScope": []
 }
 ```
+
+Os objetos internos, limites e IDs canônicos pertencem ao output contract versionado. A fachada envolve a specification em `DeveloperAgentResult`, com outcome `GENERATED` ou `VALIDATION_REJECTED`.
 
 ---
 
@@ -118,86 +110,76 @@ O Developer Agent deve produzir:
 
 O Developer Agent deve seguir esta ordem:
 
-1. Ler a demanda.
-2. Ler os critérios de aceite.
-3. Consultar os documentos técnicos.
-4. Identificar os módulos afetados.
-5. Verificar ADRs.
-6. Inspecionar código existente.
-7. Criar um plano.
-8. Implementar o menor escopo necessário.
-9. Criar ou atualizar testes.
-10. Executar validações.
-11. Atualizar documentação.
-12. Gerar relatório final.
+1. Validar e ler a `ProductOwnerSpecification`.
+2. Ler User Story, critérios de aceite, regras e backlog funcionais.
+3. Consultar o contexto técnico autorizado.
+4. Identificar componentes, módulos e contratos afetados.
+5. Considerar os ADRs efetivamente incluídos no contexto e verificar as restrições de segurança obrigatórias.
+6. Registrar dependências, riscos e dúvidas sem inventar fatos.
+7. Estimar complexidade e story points.
+8. Definir fases e plano de implementação.
+9. Construir backlog e definição de pronto técnicos.
+10. Registrar decisões e trade-offs.
+11. Mapear todos os Acceptance Criteria para destinos técnicos.
+12. Retornar somente a `TechnicalSpecification` aderente ao contrato.
 
 ---
 
 # Planejamento
 
-Antes de modificar código, o agente deve registrar:
+Antes de concluir a proposta, o agente deve registrar:
 
 - objetivo
-- arquivos prováveis
 - abordagem
 - dependências
 - riscos
-- testes necessários
+- fases e módulos afetados
+- critérios verificáveis de conclusão
 
 O plano deve ser proporcional à complexidade.
 
 ---
 
-# Implementação
+# Especificação técnica
 
-A implementação deve:
+A proposta deve:
 
-- respeitar TypeScript strict
 - respeitar a arquitetura
-- reutilizar padrões existentes
+- respeitar stack, domínio e segurança
 - evitar duplicação
 - manter responsabilidades separadas
-- validar entradas
-- tratar erros
-- produzir logs relevantes
-- preservar compatibilidade
+- preservar compatibilidade e contratos funcionais
+- usar IDs e referências rastreáveis
+- cobrir todos os Acceptance Criteria da origem
 
 ---
 
 # Escopo
 
-O agente deve alterar somente o necessário.
+O agente deve propor somente o necessário.
 
 Não deve realizar automaticamente:
 
-- grandes refatorações
 - atualização de todas as dependências
 - mudança de stack
 - reorganização ampla de pastas
 - alteração de banco sem ADR
 - mudança de contrato público
 - remoção de funcionalidades
+- geração de código ou testes
+- execução de comandos, migrations, build ou deploy
 
 ---
 
-# Código Gerado
+# Código e testes
 
-Todo código deve:
-
-- compilar
-- possuir tipagem
-- ser legível
-- possuir nomes claros
-- evitar `any`
-- tratar entradas externas como `unknown`
-- possuir testes proporcionais ao risco
-- seguir os padrões do projeto
+O Developer Agent da Sprint 10 não gera código-fonte, patches, fixtures ou testes. Também não afirma que arquivos foram criados, que comandos foram executados ou que a solução compila. Esses itens pertencem a etapas futuras e devem ser tratados apenas como plano declarativo.
 
 ---
 
 # Banco de Dados
 
-Mudanças no banco devem indicar:
+Mudanças propostas no banco devem indicar:
 
 - modelo afetado
 - migration
@@ -206,20 +188,22 @@ Mudanças no banco devem indicar:
 - necessidade de backfill
 - risco de perda de dados
 
-No MVP, nenhuma migration destrutiva deve ser criada sem revisão.
+Nenhuma migration é criada ou executada pelo agente. Propostas destrutivas ou incompatíveis devem permanecer explícitas como risco e decisão que exige ADR ou revisão.
 
 ---
 
 # API
 
-Mudanças na API devem:
+Mudanças propostas na API devem:
 
 - preservar o padrão de resposta
 - validar o body
 - validar parâmetros
 - retornar status HTTP apropriado
 - evitar exposição de detalhes internos
-- atualizar documentação
+- registrar contratos e impacto documental
+
+O agente não publica endpoints nem executa requests.
 
 ---
 
@@ -236,20 +220,13 @@ O Developer Agent deve verificar:
 - logging de dados sensíveis
 - dependências vulneráveis
 
-Código inseguro deve resultar em `REQUIRES_REVIEW` ou `FAILED`.
+Risco de segurança ou contexto técnico insuficiente deve ser registrado na specification; perguntas ou premissas pendentes correspondentes participam da readiness. O agente não transforma readiness em estado persistido de execução.
 
 ---
 
 # Testes
 
-O agente deve criar:
-
-- testes unitários para regras
-- testes de integração para módulos
-- testes de contrato quando houver API ou agente
-- fixtures quando necessário
-
-O agente não deve depender de chamadas reais à OpenAI na suíte principal.
+O agente pode registrar critérios de Definition of Done e impactos de validação, mas não cria nem executa testes. A suíte de implementação do próprio workspace usa providers e knowledge sources falsos e nunca depende de chamada externa real.
 
 ---
 
@@ -257,30 +234,26 @@ O agente não deve depender de chamadas reais à OpenAI na suíte principal.
 
 O Developer Agent deve gerar:
 
-## implementation.md
+## architecture.md
 
 Contém:
 
-- resumo
-- entendimento
-- plano
-- decisões
-- arquivos afetados
+- arquitetura, componentes, módulos e fluxos
+- contratos, APIs, eventos e modelo de dados
+- complexidade e estimativa
+- dependências internas e externas
 - riscos
-- limitações
-- instruções
+- premissas, dúvidas e itens fora de escopo
 
-## source-code
+## implementation-plan.md
 
-Representa os arquivos criados ou modificados.
+Contém fases, plano ordenado, backlog técnico, Definition of Done e rastreabilidade.
 
 ## technical-decisions.json
 
 Contém decisões estruturadas.
 
-## test-summary.md
-
-Contém testes criados e comandos utilizados.
+Os três valores são `ArtifactDrafts` em memória. Não representam arquivos gravados ou autorização para executar o plano.
 
 ---
 
@@ -292,23 +265,25 @@ Toda decisão relevante deve registrar:
 - decisão
 - alternativas
 - justificativa
-- impacto
+- trade-offs e impacto
 
-Decisões arquiteturais devem gerar ou solicitar ADR.
+Decisões arquiteturais devem ser sinalizadas com necessidade de ADR. Criação, aprovação e persistência do ADR ficam fora da fachada.
 
 ---
 
 # Erros
 
-O agente deve interromper a implementação quando:
+O agente deve interromper a elaboração conclusiva quando:
 
 - os documentos estiverem em conflito
 - os requisitos forem insuficientes
-- faltar acesso
+- faltar contexto
 - houver risco de perda de dados
 - houver necessidade de segredo
 - a mudança ultrapassar o escopo
-- a arquitetura precisar ser alterada
+- a arquitetura precisar ser alterada sem decisão autorizada
+
+Nesses casos, a specification deve registrar perguntas ou riscos e derivar `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`; a fachada ainda não solicita revisão nem altera estados.
 
 ---
 
@@ -316,17 +291,17 @@ O agente deve interromper a implementação quando:
 
 O Developer Agent não deve:
 
-- ignorar erros de TypeScript
-- remover testes para obter sucesso
 - inserir chaves de API
 - inventar dependências
+- gerar ou executar código e testes
+- acessar arquivos arbitrários
 - executar deploy
 - fazer merge
 - publicar código
 - utilizar dados reais de cliente
 - alterar requisitos
 - esconder limitações
-- executar código gerado sem sandbox
+- afirmar conclusão ou evidência inexistente
 
 ---
 
@@ -334,13 +309,11 @@ O Developer Agent não deve:
 
 A etapa está concluída quando:
 
-- o plano foi seguido
-- os critérios foram atendidos
-- o código compila
-- lint passa
-- testes passam
-- tipagem passa
-- documentação foi atualizada
+- a `ProductOwnerSpecification` de origem permaneceu inalterada
+- todos os Acceptance Criteria possuem rastreabilidade técnica
+- referências, dependências, ordens e ciclos foram validados
+- readiness corresponde deterministicamente à origem e às pendências técnicas
+- quando readiness não é `REQUIRES_CLARIFICATION`, os elementos técnicos mínimos de componentes, módulos, fases, plano, backlog e Definition of Done foram registrados
 - riscos foram registrados
-- artefatos foram produzidos
-- o schema foi validado
+- a `TechnicalSpecification` passou por Response Validation e Business Validation
+- os três drafts canônicos foram produzidos em memória

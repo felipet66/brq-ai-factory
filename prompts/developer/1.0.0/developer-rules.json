@@ -1,0 +1,40 @@
+{
+  "id": "rules:developer",
+  "version": "1.0.0",
+  "scope": "AGENT",
+  "agent": "DEVELOPER",
+  "rules": [
+    {
+      "id": "developer:technical-only",
+      "content": "Produza somente uma especificação técnica declarativa; não escreva código-fonte, testes automatizados, patches ou conteúdo pronto para execução."
+    },
+    {
+      "id": "developer:architecture-alignment",
+      "content": "Mantenha a solução compatível com a arquitetura, stack, padrões, segurança e fronteiras descritos no contexto técnico."
+    },
+    {
+      "id": "developer:preserve-business-contract",
+      "content": "Não altere requisitos, critérios de aceite ou regras de negócio; registre lacunas como perguntas abertas e preserve referências aos IDs funcionais existentes."
+    },
+    {
+      "id": "developer:traceability",
+      "content": "Use IDs estáveis com os prefixos definidos pelo contrato e mantenha rastreabilidade explícita entre AC, BR e BL e os componentes técnicos relacionados."
+    },
+    {
+      "id": "developer:no-execution-claims",
+      "content": "Não afirme que arquivos foram criados, comandos executados, código compilado, testes executados ou validações concluídas."
+    },
+    {
+      "id": "developer:review-boundaries",
+      "content": "Sinalize decisões arquiteturais, dependências externas, mudanças de contrato, banco, segurança ou infraestrutura como riscos e decisões que exigem revisão."
+    },
+    {
+      "id": "developer:ambiguity",
+      "content": "Nunca eleve a readiness recebida: preserve REQUIRES_CLARIFICATION da origem; depois considere dúvidas técnicas bloqueantes; preserve PARTIALLY_READY da origem; depois considere perguntas não bloqueantes e premissas pendentes; use READY somente quando a origem estiver READY e o plano técnico estiver completo."
+    },
+    {
+      "id": "developer:deterministic-order",
+      "content": "Mantenha listas na ordem lógica de execução, use listas vazias quando não houver informação suportada e nunca crie itens apenas para preencher o contrato."
+    }
+  ]
+}

@@ -44,12 +44,15 @@ Saída
 
 Entrada
 
-User Story
+`ProductOwnerSpecification` válida
 
 Saída
 
-- source-code
-- implementation.md
+- architecture.md
+- implementation-plan.md
+- technical-decisions.json
+
+Na Sprint 10, essa etapa produz somente uma `TechnicalSpecification` declarativa e os três drafts em memória. Não gera código ou testes, não executa o plano e não persiste artifacts.
 
 ---
 
@@ -83,8 +86,8 @@ O usuário recebe:
 
 Nenhum agente conversa diretamente com outro.
 
-Todos os agentes recebem contexto apenas através do Orchestrator.
+No fluxo completo futuro, o Orchestrator entregará o contrato validado de uma etapa à seguinte. As fachadas atuais não chamam outros agentes; o Developer recebe a `ProductOwnerSpecification` diretamente de seu caller sem executar o Product Owner.
 
-Todo artefato deve ser persistido.
+Persistência de artifacts pertence ao fluxo futuro. Product Owner e Developer retornam somente drafts em memória.
 
 Toda execução deve gerar logs.

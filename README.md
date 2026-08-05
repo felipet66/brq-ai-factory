@@ -36,7 +36,8 @@ brq-ai-factory/
 │   │   ├── ADR-016-AGENT-RUNNER-BOUNDARY.md
 │   │   ├── ADR-017-RESPONSE-VALIDATOR-BOUNDARY.md
 │   │   ├── ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md
-│   │   └── ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md
+│   │   ├── ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md
+│   │   └── ADR-020-DEVELOPER-AGENT-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -71,13 +72,16 @@ brq-ai-factory/
 │   ├── 30-ARTIFACT_GENERATOR_FLOW.md
 │   ├── 31-ARTIFACT_LIFECYCLE.md
 │   ├── 32-PRODUCT_OWNER_AGENT_FLOW.md
-│   └── 33-PIPELINE_OVERVIEW.md
+│   ├── 33-PIPELINE_OVERVIEW.md
+│   └── 34-DEVELOPER_AGENT_FLOW.md
 │
 ├── core/
 ├── agents/
-│   └── product-owner/
+│   ├── product-owner/
+│   └── developer/
 ├── prompts/
-│   └── product-owner/1.0.0/
+│   ├── product-owner/1.0.0/
+│   └── developer/1.0.0/
 ├── shared/
 ├── prisma/
 ├── package.json
@@ -134,7 +138,7 @@ O contexto preserva o conteúdo original e identifica cada documento por ID, cat
 
 O workspace `@brq/prompt-builder` transforma estruturas prontas em um `PromptResult` determinístico. A hierarquia conceitual `PromptDocument → PromptSection → PromptBlock → PromptFragment` é representada por `PromptTemplate` antes da resolução e por `ResolvedPromptDocument` depois dela. O renderer produz separadamente os canais `instructions` e `input`.
 
-Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. O Product Owner já possui assets e manifesto estáticos; loader genérico de prompts, registry, descoberta e seleção dinâmica de versões permanecem adiados.
+Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. Product Owner e Developer possuem bundles estáticos próprios; loader genérico de prompts, registry, descoberta e seleção dinâmica de versões permanecem adiados.
 
 [Fluxo visual do Prompt Builder](knowledge/27-PROMPT_BUILDER_FLOW.md)
 
@@ -169,6 +173,16 @@ O workspace `agents/product-owner` implementa a primeira fachada concreta de age
 O contrato funcional produz uma `ProductOwnerSpecification` com readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`. A Business Validation recalcula essa decisão, verifica completude, IDs e referências cruzadas sem alterar a resposta e sinaliza truncamento quando excede o limite de issues. Somente uma saída aceita gera exatamente os drafts canônicos `story.md`, `acceptance.md` e `backlog.json`. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. Persistência, retry e avanço de workflow continuam fora do agente.
 
 [Fluxo visual do Product Owner Agent](knowledge/32-PRODUCT_OWNER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-019](knowledge/ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md)
+
+## Developer Agent
+
+O workspace `agents/developer` implementa a segunda fachada concreta, com uma única tentativa por `Knowledge Loader → Agent Runner → Response Validator → Developer Business Validation → Artifact Generator`. O request recebe uma `ProductOwnerSpecification` válida pelo contrato público do Product Owner; não executa nem chama o agente anterior.
+
+A saída é uma `TechnicalSpecification` declarativa com arquitetura, complexidade, story points, fases, plano, dependências, decisões e rastreabilidade integral dos Acceptance Criteria. Readiness considera tanto a specification funcional de origem quanto perguntas e premissas técnicas. Somente uma saída aceita gera, nessa ordem, `architecture.md`, `implementation-plan.md` e `technical-decisions.json`, preservando o hash e a readiness da origem nos metadados.
+
+O Developer atua como arquiteto: não gera código ou testes, não executa comandos, não persiste drafts, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator. O contexto `DEVELOPER` mantém seis documentos obrigatórios dentro do orçamento padrão de 64 KiB; documentos adicionais continuam opcionais e determinísticos.
+
+[Fluxo visual do Developer Agent](knowledge/34-DEVELOPER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-020](knowledge/ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md)
 
 ## Validações
 

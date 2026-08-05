@@ -153,9 +153,47 @@ end
 
 # Developer
 
-Mesmo fluxo do Product Owner.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Consumer
+    participant Developer as Developer Agent
+    participant Knowledge as Knowledge Loader
+    participant Runner as Agent Runner
+    participant Prompt as Prompt Builder
+    participant Provider as AI Provider
+    participant Validator as Response Validator
+    participant Business as Developer Business Validation
+    participant Artifact as Artifact Generator
 
-A única diferença é o Prompt.
+    Consumer->>Developer: execute(ProductOwnerSpecification válida)
+    Developer->>Knowledge: load(DEVELOPER)
+    Knowledge-->>Developer: contexto dentro do orçamento
+    Developer->>Runner: run(AgentRunRequest)
+    Runner->>Prompt: build(prompt mapeado)
+    Prompt-->>Runner: PromptResult
+    Runner->>Provider: generate(AIRequest abstrato)
+    Provider-->>Runner: AIResponse normalizada
+    Runner-->>Developer: AgentRunResult
+    Developer->>Validator: validate(resultado + contrato)
+    Validator-->>Developer: ValidationResult
+
+    alt resposta aceita
+        Developer->>Business: validar TechnicalSpecification + origem PO
+        Business-->>Developer: readiness + issues + cobertura dos AC
+        alt Business Validation aceita
+            Developer->>Artifact: generate(validação + specification)
+            Artifact-->>Developer: 3 ArtifactDrafts
+            Developer-->>Consumer: GENERATED
+        else Business Validation rejeitada
+            Developer-->>Consumer: VALIDATION_REJECTED
+        end
+    else resposta rejeitada
+        Developer-->>Consumer: VALIDATION_REJECTED
+    end
+```
+
+A fachada atua como arquiteto e encerra a tentativa em memória. Não gera código ou testes, não executa comandos, não persiste artifacts, não altera estados, não retenta e não chama Product Owner, QA ou Orchestrator.
 
 ---
 

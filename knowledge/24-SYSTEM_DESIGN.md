@@ -259,7 +259,7 @@ Execution Context
 PromptResult
 ```
 
-O Product Owner já possui um manifesto e assets estáticos como consumer concreto. Loader genérico de prompts, selector, registry, descoberta e seleção dinâmica de versões permanecem adiados; o Prompt Builder continua recebendo estruturas prontas e não lê esses assets.
+Product Owner e Developer possuem manifestos e assets estáticos como consumers concretos. Loader genérico de prompts, selector, registry, descoberta e seleção dinâmica de versões permanecem adiados; o Prompt Builder continua recebendo estruturas prontas e não lê esses assets.
 
 ---
 
@@ -448,7 +448,53 @@ O JSON Schema inicial do Product Owner evita `$schema` e `uniqueItems` para a co
 
 [Fluxo visual do Product Owner Agent](32-PRODUCT_OWNER_AGENT_FLOW.md) e [visão geral do pipeline](33-PIPELINE_OVERVIEW.md).
 
-Developer e QA poderão seguir a mesma composição geral, com contratos, Business Validation e artifacts próprios quando suas Sprints forem aprovadas.
+---
+
+# Fluxo Interno do Developer
+
+```
+Factory: validar dependências e assets
+
+↓
+
+DeveloperAgentRequest com ProductOwnerSpecification válida
+
+↓
+
+Knowledge Loader — contexto DEVELOPER
+
+↓
+
+Projeção de Knowledge + specification funcional como INPUT/UNTRUSTED
+
+↓
+
+Agent Runner → Prompt Builder injetado → AI Provider abstrato
+
+↓
+
+Response Validator
+
+↓
+
+Business Validation (Developer + origem funcional)
+
+↓
+
+Artifact Generator
+
+↓
+
+DeveloperAgentResult
+```
+
+O Developer atua como arquiteto e produz uma `TechnicalSpecification`, não uma implementação. A Business Validation verifica IDs, referências, dependências, ciclos, readiness, completude e cobertura integral dos Acceptance Criteria; o resultado preserva hash e readiness da `ProductOwnerSpecification` de origem. Depois do gate, a Artifact Specification gera exatamente `architecture.md`, `implementation-plan.md` e `technical-decisions.json` em memória.
+
+Cada invocação é uma única tentativa. A fachada não gera código ou testes, não executa comandos, não acessa filesystem, não persiste, não altera estados, não executa retry e não chama Product Owner, QA ou Orchestrator. A política `DEVELOPER` mantém seis documentos obrigatórios abaixo do orçamento padrão de 64 KiB e trata os demais documentos autorizados como opcionais.
+
+[Fluxo visual do Developer Agent](34-DEVELOPER_AGENT_FLOW.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md) e [visão geral do pipeline](33-PIPELINE_OVERVIEW.md).
+
+O QA poderá seguir a mesma composição geral, com contrato, Business Validation e artifacts próprios quando sua Sprint for aprovada.
 
 ---
 
@@ -574,6 +620,8 @@ O Artifact Generator exige resultado aceito e vínculo exato com o contrato font
 
 O Product Owner Agent valida a demanda e o bundle declarativo antes da execução, preserva conhecimento e input no canal não confiável e separa Response Validation de Business Validation. A fachada não registra conteúdo, não corrige a specification e não possui acesso direto ao provider, banco ou filesystem.
 
+O Developer Agent valida uma `ProductOwnerSpecification` recebida sem executar o agente anterior. Knowledge e specification funcional permanecem em `INPUT/UNTRUSTED`; a saída declarativa passa por Response Validation e Business Validation antes do rendering. A fachada não registra conteúdo, gera ou executa código e testes, acessa filesystem, persiste drafts ou coordena workflow.
+
 O Knowledge Loader opera com manifesto allowlist, raiz server-side, contenção por caminho real e rejeição de traversal, symlinks, arquivos não regulares e conteúdo alterado após a indexação.
 
 ---
@@ -608,9 +656,13 @@ agents/
 
     product-owner/
 
+    developer/
+
 prompts/
 
     product-owner/1.0.0/
+
+    developer/1.0.0/
 
 shared/
 ```

@@ -2,19 +2,20 @@
 
 ## Objetivo
 
-Este documento apresenta a visão integrada do pipeline do BRQ AI Factory após a introdução do primeiro agente concreto. Ele mostra o que já existe, como o Product Owner Agent reutiliza componentes genéricos e onde entram Developer Agent, QA Agent e Orchestrator nas Sprints futuras.
+Este documento apresenta a visão integrada do pipeline do BRQ AI Factory após a introdução dos agentes concretos de Product Owner e Developer. Ele mostra como cada fachada reutiliza os componentes genéricos e separa essas capacidades atuais da integração futura com QA e Orchestrator.
 
-As decisões normativas permanecem nos ADRs de cada componente. Para a fronteira específica do primeiro agente, consulte o [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md) e o [fluxo detalhado do Product Owner Agent](32-PRODUCT_OWNER_AGENT_FLOW.md).
+As decisões normativas permanecem nos ADRs de cada componente. Consulte o [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), o [fluxo do Product Owner](32-PRODUCT_OWNER_AGENT_FLOW.md), o [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md) e o [fluxo do Developer](34-DEVELOPER_AGENT_FLOW.md).
 
 ## Visão macro por estágio
 
 ```mermaid
 flowchart LR
     DEMAND["Demanda"] --> PO["Product Owner Agent<br/>Sprint 9"]
-    PO --> POOUT["Especificação funcional<br/>+ drafts"]
+    PO --> POOUT["ProductOwnerSpecification<br/>+ 3 drafts"]
 
-    POOUT -.-> DEV["Developer Agent<br/>Sprint 10 — futuro"]
-    DEV -.-> DEVOUT["Plano técnico<br/>+ implementação"]
+    POOUT -.->|"handoff futuro"| DEVIN["ProductOwnerSpecification<br/>válida"]
+    DEVIN --> DEV["Developer Agent<br/>Sprint 10"]
+    DEV --> DEVOUT["TechnicalSpecification<br/>+ 3 drafts técnicos"]
     DEVOUT -.-> QA["QA Agent<br/>Sprint 11 — futuro"]
     QA -.-> QAOUT["Plano de testes<br/>+ relatório"]
 
@@ -25,15 +26,15 @@ flowchart LR
 
     classDef current fill:#d9f2e6,stroke:#1b7f4d,color:#103d29
     classDef future fill:#f2f2f2,stroke:#777,color:#333,stroke-dasharray: 5 5
-    class PO,POOUT current
-    class DEV,DEVOUT,QA,QAOUT,ORCH,PERSIST future
+    class PO,POOUT,DEVIN,DEV,DEVOUT current
+    class QA,QAOUT,ORCH,PERSIST future
 ```
 
-As setas contínuas representam a capacidade entregue pelo primeiro agente. Setas tracejadas representam integração futura; não indicam chamadas existentes na Sprint 9.
+As setas contínuas representam as duas fachadas entregues. A seta tracejada entre elas é o handoff futuro: hoje o Developer recebe uma `ProductOwnerSpecification` válida de seu caller, mas não chama o Product Owner. QA, Orchestrator, persistência e sequência multiagente continuam futuros.
 
 ## Pipeline reutilizável de uma tentativa
 
-Cada agente concreto reutilizará o mesmo esqueleto, mantendo assets, contratos e Business Validation próprios.
+Product Owner e Developer reutilizam o mesmo esqueleto, mantendo assets, contratos e Business Validation próprios. O QA poderá seguir esse padrão em uma Sprint futura.
 
 ```mermaid
 flowchart TD
@@ -70,7 +71,7 @@ O Response Validator não recebe regras específicas de Product Owner, Developer
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as Consumer futuro
+    participant C as Consumer
     participant PO as ProductOwnerAgent
     participant K as Knowledge Loader
     participant R as Agent Runner
@@ -114,6 +115,44 @@ O Agent Runner mantém a única chamada ao provider e encapsula o Prompt Builder
 
 O JSON Schema inicial evita `$schema` e `uniqueItems` para permanecer no subconjunto de Structured Outputs visado pelos modelos-base suportados pelo adapter. A compatibilidade de modelos fine-tuned deve ser verificada explicitamente e permanece um risco conhecido.
 
+## Implementação atual do Developer
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Consumer
+    participant D as DeveloperAgent
+    participant K as Knowledge Loader
+    participant R as Agent Runner
+    participant V as Response Validator
+    participant B as Business Validation Developer
+    participant A as Artifact Generator
+
+    C->>D: execute(ProductOwnerSpecification válida)
+    D->>K: contexto DEVELOPER
+    K-->>D: 6 documentos obrigatórios dentro de 64 KiB
+    D->>R: AgentRunRequest + signal
+    R-->>D: AgentRunResult de uma chamada
+    D->>V: contrato técnico confiável
+    V-->>D: ValidationResult
+
+    alt resposta rejeitada
+        D-->>C: VALIDATION_REJECTED
+    else resposta aceita
+        D->>B: validar TechnicalSpecification + origem PO
+        B-->>D: readiness + cobertura AC + issues
+        alt regra de negócio rejeitada
+            D-->>C: VALIDATION_REJECTED (BUSINESS_VALIDATION)
+        else regra de negócio aceita
+            D->>A: ValidationResult aceito + ArtifactSpecification
+            A-->>D: architecture.md + implementation-plan.md + technical-decisions.json
+            D-->>C: GENERATED
+        end
+    end
+```
+
+O Developer reutiliza o schema público da `ProductOwnerSpecification`, mas não cria ou executa o Product Owner Agent. Sua saída preserva hash e readiness da origem, exige cobertura integral dos Acceptance Criteria e descreve apenas uma proposta técnica. Não há código, testes, comandos, filesystem, retry, estado, persistência, QA ou Orchestrator dentro da tentativa.
+
 ## Componentes e ownership
 
 | Componente                | Responsabilidade atual                                                 | Não faz                                                  |
@@ -126,9 +165,9 @@ O JSON Schema inicial evita `$schema` e `uniqueItems` para permanecer no subconj
 | Business Validation       | valida invariantes do domínio do agente e deriva readiness             | não corrige resposta nem muda estado                     |
 | Artifact Generator        | resolve bindings e produz drafts determinísticos                       | não escolhe specification, não grava e não versiona      |
 | Product Owner Agent       | compõe uma tentativa usando APIs públicas e assets PO                  | não coordena outro agente, retry, estado ou persistência |
-| Developer Agent — futuro  | transformará especificação funcional em resultado técnico              | não existe na Sprint 9                                   |
-| QA Agent — futuro         | avaliará especificação e implementação                                 | não existe na Sprint 9                                   |
-| Orchestrator — futuro     | coordenará ordem, estados, retries, revisão, provenance e persistência | não está antecipado pelo Product Owner Agent             |
+| Developer Agent           | transforma specification funcional válida em proposta técnica          | não gera código/testes nem coordena workflow             |
+| QA Agent — futuro         | avaliará specification e implementação futuras                         | não existe na Sprint 10                                  |
+| Orchestrator — futuro     | coordenará ordem, estados, retries, revisão, provenance e persistência | não integra as fachadas atuais                           |
 | Execution Engine — futuro | iniciará, acompanhará e encerrará uma Execution completa               | não chama IA diretamente                                 |
 
 ## Contratos entre fronteiras
@@ -139,14 +178,20 @@ flowchart LR
     PC --> ARR["AgentRunRequest"]
     ARR --> ARR2["AgentRunResult"]
     ARR2 --> VR["ValidationResult"]
-    VR --> BVR["BusinessValidationResult<br/>issues + issuesTruncated"]
-    BVR --> PS["Specification funcional tipada"]
+    VR --> PS["Specification tipada do agente"]
+    PS --> BVR["BusinessValidationResult<br/>issues + issuesTruncated"]
+    BVR -->|"gate aceito"| AGR
     VR -->|"aceito após gate de negócio"| AGR["ArtifactGenerationResult"]
     ASPEC2["ArtifactSpecification"] --> AGR
-    PS --> PAD["ProductOwnerAgentResult"]
-    AGR --> PAD
+    PS --> ARESULT["AgentResult<br/>PO ou Developer"]
+    AGR --> ARESULT
 
-    PAD -.->|"futuro"| CREATE["ArtifactCreateInput"]
+    POSOURCE["ProductOwnerSpecification válida"] --> DREQUEST["DeveloperAgentRequest"]
+    DREQUEST --> PC
+    POSOURCE --> LINEAGE["sourceSpecificationHash<br/>+ sourceReadiness"]
+    LINEAGE --> ARESULT
+
+    ARESULT -.->|"futuro"| CREATE["ArtifactCreateInput"]
     CREATE -.->|"futuro"| ARTIFACT["Artifact persistido"]
 ```
 
@@ -166,6 +211,7 @@ flowchart TB
     subgraph UNTRUSTED["Conteúdo não confiável"]
         DEMAND2["demanda"]
         KNOWLEDGE2["knowledge content"]
+        POSPEC2["ProductOwnerSpecification"]
         RESPONSE2["resposta do modelo"]
         DRAFT2["conteúdo dos drafts"]
     end
@@ -175,6 +221,7 @@ flowchart TB
     CONTRACTS --> INSTRUCTIONS
     DEMAND2 --> INPUT["INPUT"]
     KNOWLEDGE2 --> INPUT
+    POSPEC2 --> INPUT
     INSTRUCTIONS --> MODEL["modelo"]
     INPUT --> MODEL
     MODEL --> RESPONSE2
@@ -198,6 +245,8 @@ flowchart LR
     PAYLOAD["instructions + input renderizados<br/>+ output contract"] --> PROMPTHASH["promptHash"]
     ASSETHASH["asset hashes + bundleHash"] --> AUDIT["metadados de auditoria"]
     KNOWHASH["contextHash"] --> AUDIT
+    POSOURCE2["ProductOwnerSpecification canônica"] --> SOURCEHASH["sourceSpecificationHash<br/>+ sourceReadiness"]
+    SOURCEHASH --> AUDIT
     PROMPTHASH --> RESPONSEHASH["responseHash"]
     RESPONSEHASH --> VALIDATIONHASH["validationHash"]
     VALIDATIONHASH --> GENERATIONHASH["generationHash"]
@@ -212,14 +261,18 @@ Metadados da tentativa preservam as identidades e versões do agente, assets, pr
 
 ```mermaid
 flowchart TD
-    ATTEMPT["Tentativa PO"] --> VALID{"ValidationResult.valid"}
+    ATTEMPT["Tentativa PO ou Developer"] --> VALID{"ValidationResult.valid"}
     VALID -->|"false"| REJECT["outcome=VALIDATION_REJECTED"]
     VALID -->|"true"| BUSINESS_VALID{"Business Validation valid"}
     BUSINESS_VALID -->|"false"| BUSINESS_REJECT["outcome=VALIDATION_REJECTED<br/>rejectedAt=BUSINESS_VALIDATION"]
-    BUSINESS_VALID -->|"true"| QUESTIONS{"Pergunta BLOCKING?"}
-    QUESTIONS -->|"sim"| CLARIFY2["readiness=REQUIRES_CLARIFICATION"]
-    QUESTIONS -->|"não"| PENDING{"Pergunta NON_BLOCKING<br/>ou premissa pendente?"}
-    PENDING -->|"sim"| PARTIAL2["readiness=PARTIALLY_READY"]
+    BUSINESS_VALID -->|"true"| SOURCE_BLOCKING{"Origem PO requer<br/>esclarecimento?"}
+    SOURCE_BLOCKING -->|"sim, no Developer"| CLARIFY2["readiness=REQUIRES_CLARIFICATION"]
+    SOURCE_BLOCKING -->|"não ou não aplicável"| QUESTIONS{"Pergunta BLOCKING?"}
+    QUESTIONS -->|"sim"| CLARIFY2
+    QUESTIONS -->|"não"| SOURCE_PARTIAL{"Origem PO está<br/>PARTIALLY_READY?"}
+    SOURCE_PARTIAL -->|"sim"| PARTIAL2["readiness=PARTIALLY_READY"]
+    SOURCE_PARTIAL -->|"não"| PENDING{"Pergunta NON_BLOCKING<br/>ou premissa pendente?"}
+    PENDING -->|"sim"| PARTIAL2
     PENDING -->|"não"| READY2["readiness=READY"]
     READY2 --> GENERATED["outcome=GENERATED"]
     PARTIAL2 --> GENERATED
@@ -232,6 +285,8 @@ flowchart TD
 
 Outcome e readiness não alteram `ExecutionStatus` ou `AgentExecutionStatus`. Uma `AgentExecution` e seu número de tentativa serão criados e persistidos pelo fluxo futuro, não pela fachada do agente.
 
+No Developer, `PARTIALLY_READY` da origem também impede readiness técnica `READY`; perguntas não bloqueantes ou premissas técnicas pendentes produzem o mesmo efeito. Essa herança é regra da Business Validation, não transição de estado.
+
 ## Pipeline futuro com três agentes
 
 ```mermaid
@@ -239,7 +294,7 @@ sequenceDiagram
     participant E as Execution Engine futuro
     participant O as Orchestrator futuro
     participant PO as Product Owner Agent
-    participant D as Developer Agent futuro
+    participant D as Developer Agent
     participant Q as QA Agent futuro
     participant DB as Persistence
 
@@ -271,7 +326,7 @@ sequenceDiagram
     O-->>E: estado final
 ```
 
-Esse diagrama é deliberadamente futuro. Na Sprint 9 não existem chamadas a Developer, QA, Orchestrator, Execution Engine ou Persistence.
+Esse diagrama é deliberadamente futuro. Na Sprint 10, Product Owner e Developer existem como fachadas isoladas, mas não há chamada entre elas nem integração com QA, Orchestrator, Execution Engine ou Persistence.
 
 ## Retry e revisão humana futuros
 
@@ -300,7 +355,8 @@ Componente genérico
 └── artifact.generation.*
 
 Fachada do agente
-└── product_owner.*
+├── product_owner.*
+└── developer.*
 
 Workflow futuro
 ├── execution.*
@@ -309,11 +365,11 @@ Workflow futuro
 └── artifact.versioned
 ```
 
-Os níveis não são equivalentes. `product_owner.agent.completed` informa apenas que a tentativa em memória terminou. Não afirma que um estado foi persistido ou que artifacts foram versionados.
+Os níveis não são equivalentes. `product_owner.agent.completed` e `developer.agent.completed` informam apenas que uma tentativa em memória terminou. Não afirmam que um estado foi persistido, que artifacts foram versionados ou que a etapa seguinte iniciou.
 
-## O que não existe na Sprint 9
+## O que não existe na Sprint 10
 
-- Developer Agent e QA Agent;
+- QA Agent;
 - sequência multiagente;
 - criação ou transição de estados;
 - retry funcional;
@@ -322,6 +378,7 @@ Os níveis não são equivalentes. `product_owner.agent.completed` informa apena
 - persistência ou versionamento de artifacts;
 - API, frontend ou deploy;
 - execução de código ou exportação de arquivos;
+- geração de código ou testes pelo Developer Agent;
 - seleção dinâmica, registry global ou hot reload de prompts;
 - avaliação semântica por outro modelo.
 
@@ -334,9 +391,13 @@ Product Owner Agent compõe uma tentativa
                 ↓
 Specification funcional + 3 drafts em memória
                 ↓
-Developer e QA ainda futuros
+Developer Agent recebe uma specification válida
+                ↓
+Specification técnica + 3 drafts em memória
+                ↓
+QA ainda futuro
                 ↓
 Orchestrator futuro controla workflow, estado, retry e persistência
 ```
 
-Ao diagnosticar o pipeline, identifique primeiro o nível do evento e o contrato em mãos. Um `ProductOwnerAgentResult` ainda não é uma Execution concluída, um artifact persistido nem autorização para iniciar automaticamente o próximo agente.
+Ao diagnosticar o pipeline, identifique primeiro o nível do evento e o contrato em mãos. `ProductOwnerAgentResult` e `DeveloperAgentResult` não são uma Execution concluída, artifacts persistidos nem autorização para iniciar automaticamente a próxima etapa.

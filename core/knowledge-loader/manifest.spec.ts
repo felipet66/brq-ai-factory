@@ -4,20 +4,20 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 34 canonical documents and ADRs 001 through 019', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.6.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(53);
+  it('loads the 35 canonical documents and ADRs 001 through 020', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.7.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(55);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      34,
+      35,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      19,
+      20,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:019',
-      locator: 'ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md',
+      id: 'adr:020',
+      locator: 'ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md',
       category: 'ADR',
-      order: 1019,
+      order: 1020,
     });
     expect(
       KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
@@ -74,6 +74,14 @@ describe('Knowledge manifest', () => {
       locator: '33-PIPELINE_OVERVIEW.md',
       category: 'ARCHITECTURE',
       order: 33,
+    });
+    expect(
+      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:developer-agent-flow'),
+    ).toEqual({
+      id: 'knowledge:developer-agent-flow',
+      locator: '34-DEVELOPER_AGENT_FLOW.md',
+      category: 'ARCHITECTURE',
+      order: 34,
     });
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST.documents)).toBe(true);

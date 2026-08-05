@@ -83,6 +83,10 @@ Cada agente possui:
 - configuração
 - versão
 
+Product Owner e Developer expõem contratos de valor específicos, sem criar relação de execução direta entre os agentes. O Developer recebe uma `ProductOwnerSpecification` já válida e produz uma `TechnicalSpecification`; o handoff preserva o hash canônico e a readiness funcional de origem nos metadados da tentativa técnica.
+
+Uma `TechnicalSpecification` descreve arquitetura, componentes, módulos, fluxos, contratos, APIs, eventos, modelo de dados, dependências internas e externas, complexidade, story points, fases de implementação, plano, backlog técnico, decisões e rastreabilidade integral dos Acceptance Criteria. Ela é um valor declarativo: não contém código, testes ou comandos executáveis.
+
 ---
 
 ## AgentExecution
@@ -139,7 +143,9 @@ Exemplos
 
 - story.md
 - acceptance.md
-- implementation.md
+- architecture.md
+- implementation-plan.md
+- technical-decisions.json
 - playwright.spec.ts
 
 Atributos
@@ -270,6 +276,6 @@ Todo Artifact pertence a apenas uma Execution.
 
 Todo Artifact referencia a AgentExecution que o produziu.
 
-Nenhum Agent conhece outro Agent.
+Nenhum Agent executa ou chama outro Agent. A dependência do Developer no contrato público de `ProductOwnerSpecification` não constitui comunicação entre fachadas.
 
-Toda comunicação acontece através do Orchestrator.
+No fluxo completo futuro, todo handoff entre tentativas será mediado pelo Orchestrator. Até essa integração existir, cada fachada recebe seu input validado diretamente do caller e não altera workflow ou estado.
