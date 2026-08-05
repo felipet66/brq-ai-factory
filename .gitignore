@@ -1,0 +1,16 @@
+node_modules/
+.next/
+coverage/
+dist/
+generated/
+
+.env
+.env.*
+!.env.example
+
+*.db
+*.db-journal
+*.tsbuildinfo
+
+.DS_Store
+*.log

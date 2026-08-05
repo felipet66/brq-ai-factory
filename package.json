@@ -1,0 +1,42 @@
+{
+  "name": "brq-ai-factory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11.0.0"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @brq-ai-factory/web",
+    "build": "npm run build --workspace @brq-ai-factory/web",
+    "start": "npm run start --workspace @brq-ai-factory/web",
+    "lint": "eslint apps/web/src apps/web/*.ts apps/web/*.mjs shared *.ts *.mjs --max-warnings=0",
+    "lint:fix": "npm run lint -- --fix",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspace @brq-ai-factory/web",
+    "test": "vitest run && npm run test --workspace @brq-ai-factory/web",
+    "prisma:validate": "prisma validate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "dotenv": "^17.4.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6",
+    "prisma": "^7.9.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}
