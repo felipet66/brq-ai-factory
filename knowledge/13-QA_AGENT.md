@@ -99,7 +99,9 @@ Falha de conteúdo retorna `VALIDATION_REJECTED` em `RESPONSE_VALIDATION` ou `BU
 
 Logs aceitam somente IDs, versões, contagens, readiness, métricas e hashes. Especificações, knowledge, prompts, respostas, cenários, artifacts, valores de issues, segredos, stack e causa crua são proibidos.
 
-Todos os assets e outputs têm hashes canônicos. Hashes separados preservam as duas fontes; a ligação persistida entre execuções pertence ao Orchestrator futuro.
+Todos os assets e outputs têm hashes canônicos. Hashes separados preservam as duas fontes; o
+Orchestrator da Sprint 12 verifica esses handoffs em `lineage`. A ligação persistida entre
+execuções continua futura.
 
 ## Out of scope
 

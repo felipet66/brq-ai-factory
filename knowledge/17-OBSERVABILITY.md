@@ -209,6 +209,13 @@ Eventos do Product Owner Agent podem registrar IDs de execução e correlação,
 
 Eventos do Developer Agent seguem a mesma allowlist técnica e podem acrescentar `sourceSpecificationHash`, `sourceReadiness` e contagens de elementos técnicos. Nunca registram a `ProductOwnerSpecification`, a `TechnicalSpecification`, conhecimento, prompt, resposta, decisões, traceability, conteúdo de drafts ou schemas completos. A fachada não emite evento de execução de código, testes, retry, estado ou persistência.
 
+Eventos do Orchestrator da Sprint 12 usam `workflow.started`, `workflow.stage.started`,
+`workflow.stage.completed`, `workflow.stage.rejected`, `workflow.completed`, `workflow.failed` e
+`workflow.cancelled`. O contexto contém somente `workflowId`, `executionId`, etapa, agente,
+duração, hashes, métricas e erro sanitizado. Timeline, demanda, specifications, artifacts, prompts e
+respostas nunca são serializados em logs. Timestamps da timeline e do logger são observacionais e
+não integram hashes.
+
 ---
 
 # Métricas

@@ -50,7 +50,7 @@ Resultado
 
 ## Objetivos do MVP
 
-Os objetivos abaixo descrevem o produto completo. A implementação é incremental: a Sprint 11 entrega somente a especificação declarativa de qualidade; geração de código, testes automatizados, Orchestrator, frontend e persistência funcional continuam futuros.
+Os objetivos abaixo descrevem o produto completo. A implementação é incremental: a Sprint 12 entrega o Orchestrator sequencial e efêmero sobre as três fachadas já existentes. Execution Engine, geração e execução de código ou testes, frontend e persistência funcional continuam futuros.
 
 - Criar uma demanda
 - Gerar User Story

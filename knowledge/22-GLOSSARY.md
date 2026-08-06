@@ -8,7 +8,35 @@ Componente especializado responsável por executar uma única responsabilidade.
 
 ## Orchestrator
 
-Camada responsável por controlar toda execução da plataforma.
+Camada responsável por coordenar a ordem entre agentes por suas APIs públicas. Na Sprint 12 seu
+estado é efêmero e seu único workflow é Product Owner → Developer → QA.
+
+---
+
+## WorkflowResult
+
+Resultado terminal consolidado pelo Orchestrator, com resultados públicos disponíveis, timeline,
+lineage, provenance, métricas e hashes.
+
+---
+
+## Lineage
+
+Vínculo verificável entre specifications transportadas de uma etapa para outra.
+
+---
+
+## Provenance
+
+Origem técnica de um resultado, expressa por identidades e hashes de assets, knowledge, prompt,
+response, validação, geração e artifacts.
+
+---
+
+## Timeline
+
+Sequência observacional de eventos do workflow. Seus timestamps e durações não participam de
+hashes determinísticos.
 
 ---
 

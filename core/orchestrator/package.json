@@ -1,0 +1,16 @@
+{
+  "name": "@brq/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/developer-agent": "0.1.0",
+    "@brq/product-owner-agent": "0.1.0",
+    "@brq/qa-agent": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

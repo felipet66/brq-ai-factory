@@ -11,6 +11,7 @@
     "core/ai-provider/**/*.ts",
     "core/artifact-generator/**/*.ts",
     "core/knowledge-loader/**/*.ts",
+    "core/orchestrator/**/*.ts",
     "core/prompt-builder/**/*.ts",
     "core/response-validator/**/*.ts",
     "prisma.config.ts",

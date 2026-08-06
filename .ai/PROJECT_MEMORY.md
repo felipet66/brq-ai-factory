@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-Sprint 11 — QA Agent implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 12 não deve começar sem essa aprovação.
+Sprint 12 — Orchestrator implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 13 não deve começar sem essa aprovação.
 
 ## Fundação técnica
 
@@ -19,6 +19,7 @@ Sprint 11 — QA Agent implementada e validada tecnicamente em 2026-08-05, aguar
 - Product Owner Agent como fachada concreta de uma única tentativa sobre os componentes genéricos já existentes;
 - Developer Agent como segunda fachada concreta, responsável somente por proposta técnica declarativa e rastreável;
 - QA Agent como terceira fachada concreta, responsável somente por especificação de qualidade declarativa e rastreável;
+- Orchestrator como coordenador central do workflow fixo Product Owner → Developer → QA, sem Execution Engine, retry ou persistência;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -209,6 +210,7 @@ Sprint 11 — QA Agent implementada e validada tecnicamente em 2026-08-05, aguar
 - ADR-019 registra a fronteira do Product Owner Agent, a composição dos componentes genéricos, a Business Validation específica e a ausência de workflow, retry e persistência;
 - ADR-020 registra o handoff contratual para o Developer Agent, sua Business Validation, os três drafts técnicos e a ausência de geração de código, testes e workflow;
 - ADR-021 registra o handoff contratual para o QA Agent, a validação determinística das duas origens, a cobertura funcional e técnica, os três drafts de qualidade e a ausência de execução, geração de código, workflow e persistência;
+- ADR-022 registra a fronteira do Orchestrator, o workflow sequencial, timeline observacional, lineage e provenance separados, hashes determinísticos e ausência de retry, persistência e Execution Engine;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -362,14 +364,44 @@ Sprint 11 — QA Agent implementada e validada tecnicamente em 2026-08-05, aguar
 - nenhuma chamada externa, teste live, persistência, retry funcional, transição de estado, execução de testes ou geração de código foi executada;
 - nenhum item da Sprint 12 foi iniciado e nenhum commit foi criado.
 
+## Implementação da Sprint 12
+
+- workspace `@brq/orchestrator` criado em `core/orchestrator`, preservando o layout do ADR-011;
+- workflow fixo Human Request → Product Owner → Developer → QA → `WorkflowResult`;
+- fachadas injetadas e acessadas somente pelos entrypoints públicos;
+- `WorkflowRequest`, `WorkflowResult`, estados, timeline, lineage, provenance, métricas, hashes e erros sanitizados validados por Zod;
+- timeline monotônica e observacional, explicitamente excluída dos hashes;
+- lineage de specifications separado da provenance técnica das execuções;
+- mesmo `AbortSignal` propagado e checkpoints entre todas as etapas;
+- rejeição funcional retorna `FAILED`; falhas técnicas e cancelamento propagam `OrchestratorError` com resultado parcial;
+- sem geração de IDs, `Math.random`, `Date.now`, retry, persistência, revisão humana ou concorrência;
+- manifesto e política de Knowledge atualizados para `1.9.0`, com fluxo 36 e ADR-022;
+- nenhum arquivo de Product Owner, Developer ou QA foi alterado.
+
+## Validações da Sprint 12
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck raiz e aplicação: aprovado;
+- 35 testes específicos de `core/orchestrator` aprovados;
+- 673 testes aprovados, sendo 672 da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/orchestrator`: 93,31% statements, 86,83% branches, 98,24% functions e 95,25% lines;
+- cobertura global da suíte raiz: 93,33% statements, 84,68% branches, 98,42% functions e 93,70% lines;
+- Prisma validate: aprovado;
+- build de produção Next.js: aprovado com backend Webpack; o Turbopack não pôde abrir sua porta interna no sandbox de validação;
+- `git diff --check`: aprovado;
+- nenhum ADR histórico entre ADR-001 e ADR-021 foi alterado; somente o ADR-022 foi criado;
+- nenhuma chamada externa, teste live, persistência funcional, retry, revisão humana, execução de testes de QA ou geração de código foi executada;
+- nenhum item da Sprint 13 foi iniciado e nenhum commit foi criado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
 - geração ou execução de código e testes por agentes;
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
-- retry funcional e workflow entre agentes;
-- Orchestrator e Execution Engine;
+- retry funcional, workflows dinâmicos e concorrência;
+- Execution Engine;
 - API e frontend funcional;
 - persistência funcional das execuções dos agentes;
 - revisão humana integrada ao fluxo;

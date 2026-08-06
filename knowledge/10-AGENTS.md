@@ -67,7 +67,11 @@ Resultado Final
 
 O Orchestrator solicita o tipo de contexto necessário para cada etapa. O Knowledge Loader aplica a política documental determinística, e o Prompt Builder combina esse contexto já preparado com as demais estruturas de entrada. Nenhum desses componentes transfere suas responsabilidades ao agente.
 
-Esse diagrama representa o pipeline completo futuro. Nas fachadas atuais, um caller executa uma tentativa isolada: o Developer recebe uma `ProductOwnerSpecification` válida, mas não chama o Product Owner nem acessa Orchestrator, estado ou persistência.
+Desde a Sprint 12, o caller das três fachadas no workflow inicial é o Orchestrator. Cada fachada ainda executa uma tentativa isolada: o Developer recebe uma `ProductOwnerSpecification` válida, mas não chama o Product Owner nem acessa estado ou persistência.
+
+O Orchestrator usa somente os entrypoints públicos e não entra no pipeline interno de nenhum
+agente. Ele preserva a ordem Product Owner → Developer → QA, propaga cancelamento e consolida o
+resultado. Retry, persistência e revisão humana permanecem futuros.
 
 ---
 

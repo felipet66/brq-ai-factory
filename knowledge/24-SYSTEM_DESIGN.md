@@ -313,7 +313,7 @@ A `ValidationPipeline` verifica coerência do contrato, finish reason, presença
 
 `COMPLETED` é o único finish reason que permite validar conteúdo. Truncamento por limite, content filter e refusal são classificados sem interpretar o payload como válido. Para `JSON_SCHEMA`, o texto original é a fonte autoritativa; `structuredData` nunca é confiado isoladamente.
 
-O Validator preserva o resultado original, não conhece agentes concretos e não executa avaliação semântica de negócio ou segurança. Não chama IA, corrige conteúdo, executa retry, cria artifacts, persiste dados ou altera estados. O Orchestrator futuro decide se uma classificação deve criar nova `AgentExecution` ou solicitar revisão.
+O Validator preserva o resultado original, não conhece agentes concretos e não executa avaliação semântica de negócio ou segurança. Não chama IA, corrige conteúdo, executa retry, cria artifacts, persiste dados ou altera estados. O Orchestrator da Sprint 12 somente interrompe ou avança pelo outcome público; uma evolução futura decidirá se a classificação deve criar nova `AgentExecution` ou solicitar revisão.
 
 [Fluxo visual do Response Validator](29-RESPONSE_VALIDATOR_FLOW.md)
 
@@ -540,6 +540,9 @@ A fachada não recebe código, não executa testes, não gera Playwright, não p
 
 # Estados
 
+O Orchestrator da Sprint 12 usa localmente `CREATED`, `RUNNING`, `SUCCESS`, `FAILED` e
+`CANCELLED`. Esses estados efêmeros não criam nem alteram registros de `Execution`.
+
 Estados de `Execution`:
 
 ```text
@@ -570,6 +573,9 @@ Os resultados de uma `AgentExecution` são terminais para aquela tentativa.
 ---
 
 # Retry
+
+O workflow da Sprint 12 não implementa retry. A seção abaixo permanece como desenho futuro e
+preserva a responsabilidade prevista no ADR-001 sem antecipar o Execution Engine.
 
 Quando permitido:
 

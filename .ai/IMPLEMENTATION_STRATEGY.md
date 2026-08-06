@@ -499,23 +499,29 @@ As duas specifications compatíveis produzem uma proposta de qualidade rastreáv
 
 Objetivo
 
-Coordenar toda a Software Factory.
+Coordenar deterministicamente o workflow inicial entre os três agentes públicos.
 
 Entregas
 
-core/orchestrator
+- workspace `@brq/orchestrator` em `core/orchestrator`, conforme ADR-011;
+- `WorkflowRequest` e `WorkflowResult` estritos;
+- timeline observacional fora dos hashes;
+- lineage e provenance em contratos separados;
+- métricas e hashes consolidados;
+- ADR-022 e fluxo visual 36.
 
 Responsabilidades
 
-- pipeline
-- estados
-- retries
-- logs
-- persistência
+- ordem fixa Product Owner → Developer → QA;
+- estados locais e efêmeros;
+- propagação de contexto público e `AbortSignal`;
+- interrupção imediata e preservação de resultados anteriores;
+- logs allowlisted;
+- sem retry, persistência, revisão humana ou Execution Engine.
 
 Critério
 
-Os três agentes executam em sequência.
+Os três agentes executam no máximo uma vez e em sequência; rejeições, erros e cancelamento impedem chamadas posteriores e produzem um resultado terminal rastreável.
 
 ---
 

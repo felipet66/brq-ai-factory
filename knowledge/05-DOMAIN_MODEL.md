@@ -280,4 +280,11 @@ Todo Artifact referencia a AgentExecution que o produziu.
 
 Nenhum Agent executa ou chama outro Agent. A dependência do Developer no contrato público de `ProductOwnerSpecification` não constitui comunicação entre fachadas.
 
-No fluxo completo futuro, todo handoff entre tentativas será mediado pelo Orchestrator. Até essa integração existir, cada fachada recebe seu input validado diretamente do caller e não altera workflow ou estado.
+No workflow da Sprint 12, todo handoff entre as três tentativas é mediado pelo Orchestrator por contratos públicos. Cada fachada continua recebendo seu input do caller e não altera workflow ou estado.
+
+## WorkflowResult
+
+`WorkflowResult` consolida os três resultados públicos disponíveis, status terminal, etapa final,
+timeline, métricas e hashes. `lineage` representa vínculos entre specifications; `provenance`
+representa a origem técnica de cada resultado. Timeline e métricas temporais são observacionais e
+não integram os hashes determinísticos.

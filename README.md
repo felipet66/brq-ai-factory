@@ -38,7 +38,8 @@ brq-ai-factory/
 │   │   ├── ADR-018-ARTIFACT-GENERATOR-BOUNDARY.md
 │   │   ├── ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md
 │   │   ├── ADR-020-DEVELOPER-AGENT-BOUNDARY.md
-│   │   └── ADR-021-QA-AGENT-BOUNDARY.md
+│   │   ├── ADR-021-QA-AGENT-BOUNDARY.md
+│   │   └── ADR-022-ORCHESTRATOR-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -75,9 +76,11 @@ brq-ai-factory/
 │   ├── 32-PRODUCT_OWNER_AGENT_FLOW.md
 │   ├── 33-PIPELINE_OVERVIEW.md
 │   ├── 34-DEVELOPER_AGENT_FLOW.md
-│   └── 35-QA_AGENT_FLOW.md
+│   ├── 35-QA_AGENT_FLOW.md
+│   └── 36-ORCHESTRATOR_FLOW.md
 │
 ├── core/
+│   └── orchestrator/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -197,6 +200,23 @@ Cada tentativa projeta exatamente três contextos `INPUT/UNTRUSTED` e segue `Kno
 Uma saída aceita gera, nessa ordem, `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA Agent não recebe código, não executa testes, não gera Playwright, não persiste drafts, não retenta e não afirma aprovação operacional.
 
 [Fluxo visual do QA Agent](knowledge/35-QA_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-021](knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md)
+
+## Orchestrator
+
+O workspace `@brq/orchestrator`, localizado em `core/orchestrator` conforme o ADR-011, coordena o
+único workflow da Sprint 12: Human Request → Product Owner → Developer → QA → `WorkflowResult`.
+As três fachadas são injetadas e chamadas uma vez, em ordem fixa, somente por seus entrypoints
+públicos.
+
+`WorkflowResult` consolida resultados, timeline, lineage, provenance, métricas e hashes. Timeline
+e durações são observacionais e não participam dos hashes determinísticos. Rejeições funcionais
+retornam `FAILED`; falhas técnicas e cancelamentos propagam `OrchestratorError` com resultado
+parcial imutável.
+
+O módulo não chama OpenAI, não monta prompts, não valida respostas do modelo, não gera artifacts,
+não persiste, não executa retry e não conhece Execution Engine, API ou frontend.
+
+[Fluxo visual do Orchestrator](knowledge/36-ORCHESTRATOR_FLOW.md) · [ADR-022](knowledge/ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md)
 
 ## Validações
 

@@ -4,20 +4,20 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 36 canonical documents and ADRs 001 through 021', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.8.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(57);
+  it('loads the 37 canonical documents and ADRs 001 through 022', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.9.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(59);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      36,
+      37,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      21,
+      22,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:021',
-      locator: 'ADR/ADR-021-QA-AGENT-BOUNDARY.md',
+      id: 'adr:022',
+      locator: 'ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md',
       category: 'ADR',
-      order: 1021,
+      order: 1022,
     });
     expect(
       KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
@@ -83,6 +83,14 @@ describe('Knowledge manifest', () => {
         order: 35,
       },
     );
+    expect(
+      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:orchestrator-flow'),
+    ).toEqual({
+      id: 'knowledge:orchestrator-flow',
+      locator: '36-ORCHESTRATOR_FLOW.md',
+      category: 'ARCHITECTURE',
+      order: 36,
+    });
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST.documents)).toBe(true);
   });

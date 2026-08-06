@@ -152,21 +152,29 @@ Fluxos mínimos do MVP:
 
 O Orchestrator é um componente crítico.
 
-Deve possuir testes para:
+Na Sprint 12, possui testes determinísticos para:
 
-- criação da execução
 - execução sequencial dos agentes
-- persistência antes da próxima etapa
+- chamada única por agente e ausência de retry
+- propagação de contexts, specifications e `AbortSignal`
 - falha no Product Owner
 - falha no Developer
 - falha no QA
-- retry
+- rejeição funcional em cada etapa
 - cancelamento
-- timeout
-- retomada de execução
-- geração de logs
-- criação de artefatos
+- erro técnico e contrato público malformado
+- lineage incompatível
+- separação entre lineage e provenance
+- timeline monotônica fora dos hashes
+- métricas observadas e reportadas
+- hashes determinísticos com relógios diferentes
+- logs allowlisted sem conteúdo
+- imutabilidade
+- dependency boundaries e package exports
 - transições de estado inválidas
+
+Criação persistente, retry, retomada, revisão humana e persistência de artifacts pertencem a
+Sprints futuras e não devem aparecer como comportamento do teste atual.
 
 ---
 

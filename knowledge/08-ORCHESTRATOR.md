@@ -2,126 +2,109 @@
 
 ## Objetivo
 
-O Orchestrator é o cérebro do BRQ AI Factory.
+O Orchestrator é a fronteira central de coordenação entre agentes. Na Sprint 12 ele executa um
+único workflow fixo, sequencial e efêmero, sem assumir responsabilidades internas das fachadas.
 
-Nenhuma execução acontece sem passar por ele.
+Decisão normativa: [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md).
 
----
+## Workflow implementado
 
-# Responsabilidades
+```text
+Human Request
+  → Product Owner Agent
+  → Developer Agent
+  → QA Agent
+  → WorkflowResult
+```
 
-- iniciar pipeline
-- controlar ordem
-- validar contratos
-- registrar logs
-- persistir artefatos
-- tratar erros
-- executar retries
+Cada etapa inicia somente depois de um resultado `GENERATED` da anterior. Uma readiness diferente
+de `READY` é preservada, mas não bloqueia o avanço nesta Sprint porque revisão humana não integra o
+workflow.
 
----
+## Responsabilidades atuais
 
-# Pipeline
+- validar `WorkflowRequest`;
+- controlar a ordem fixa das três chamadas;
+- projetar somente contracts e specifications públicas;
+- fixar `attempt: 1` e usar IDs fornecidos pelo caller;
+- propagar o mesmo `AbortSignal`;
+- validar o `AgentResult` na fronteira pública;
+- interromper imediatamente em rejeição, erro ou cancelamento;
+- preservar resultados concluídos;
+- verificar lineage dos handoffs;
+- consolidar timeline, lineage, provenance, métricas e hashes;
+- produzir `WorkflowResult` imutável;
+- emitir logs allowlisted.
 
-Nova Demanda
+Validar a fronteira pública não significa executar Response Validator: o Orchestrator não acessa a
+resposta do modelo e não interpreta a lógica funcional dos agentes.
 
-↓
+## Responsabilidades proibidas na Sprint 12
 
-Criar Execution
+- chamar OpenAI ou AI Provider;
+- carregar knowledge ou construir prompts;
+- executar Agent Runner, Response Validator ou Artifact Generator;
+- gerar ou persistir artifacts;
+- criar ou alterar entidades de execução;
+- retry, backoff ou nova tentativa;
+- revisão humana;
+- concorrência, filas ou scheduler;
+- API, frontend ou eventos externos.
 
-↓
+## Estados locais
 
-Executar Product Owner
+```text
+CREATED → RUNNING → SUCCESS | FAILED | CANCELLED
+CREATED → CANCELLED
+```
 
-↓
+Esses estados existem somente durante `execute`. Eles não substituem os estados persistentes de
+`Execution` e não usam o Execution Engine.
 
-Persistir
+## Falhas
 
-↓
+`VALIDATION_REJECTED` é uma falha funcional controlada e retorna `WorkflowResult` com `FAILED`.
+Erros técnicos e cancelamento são propagados como `OrchestratorError`, que mantém um
+`WorkflowResult` terminal parcial quando o request já foi validado.
 
-Executar Developer
+Nenhuma falha chama o agente seguinte. Não há retry.
 
-↓
+## Timeline
 
-Persistir
+A timeline registra eventos ordenados de início e término do workflow e das etapas. Cada evento
+possui sequência, estágio, agente, `timestampMs` monotônico e duração opcional. Timestamps e
+durações são observacionais e ficam fora de todos os hashes determinísticos.
 
-↓
+## Lineage
 
-Executar QA
+Lineage registra hashes canônicos das specifications e verifica os três handoffs possíveis:
 
-↓
+- Product Owner → Developer;
+- Product Owner → QA;
+- Developer → QA.
 
-Persistir
+## Provenance
 
-↓
+Provenance registra separadamente as identidades de execução e hashes públicos de assets,
+knowledge, prompt, response, validação, geração e artifacts. Não contém specifications ou conteúdo
+de artifacts.
 
-Finalizar
+## Logs
 
----
+Além do envelope do logger, somente `workflowId`, `executionId`, etapa, agente, duração, hashes,
+métricas e erro sanitizado são permitidos. Prompts, specifications, artifacts, resposta do modelo e
+conteúdo do usuário são proibidos.
 
-# Estados
+## Evolução futura preservada
 
-Estados canônicos de `Execution`:
+ADRs e documentos de domínio preveem persistência, revisão humana, retomada e retries
+centralizados. Essas responsabilidades não foram transferidas para agentes e continuam futuras;
+serão integradas somente em Sprints próprias com Execution Engine e Persistence.
 
-- `CREATED`
-- `RUNNING`
-- `REQUIRES_REVIEW`
-- `SUCCESS`
-- `FAILED`
-- `CANCELLED`
+## Regras
 
-Transições permitidas:
-
-| Origem            | Destinos                                            |
-| ----------------- | --------------------------------------------------- |
-| `CREATED`         | `RUNNING`, `CANCELLED`                              |
-| `RUNNING`         | `REQUIRES_REVIEW`, `SUCCESS`, `FAILED`, `CANCELLED` |
-| `REQUIRES_REVIEW` | `RUNNING`, `FAILED`, `CANCELLED`                    |
-| `FAILED`          | `RUNNING`                                           |
-
-`SUCCESS` e `CANCELLED` são estados terminais.
-
-`FAILED → RUNNING` representa exclusivamente uma retomada explícita e nunca pode ocorrer automaticamente.
-
-`REQUIRES_REVIEW → RUNNING` deverá exigir uma resolução humana auditável. A implementação de usuários, auditoria e do fluxo de revisão pertence a Sprints posteriores.
-
----
-
-# Retry
-
-Cada agente poderá ser executado novamente.
-
-Sem reiniciar toda a pipeline.
-
-Retry automático encerra a tentativa atual e cria uma nova `AgentExecution`, com `attempt` incrementado, dentro da mesma `Execution`. `RETRY` é um evento, não um estado.
-
-Essa regra descreve retries funcionais de agente. O `AIProvider` pode repetir internamente apenas uma falha de conexão sem resposta HTTP válida; essas tentativas técnicas permanecem dentro da mesma chamada e não criam `AgentExecution`. Qualquer resposta HTTP, recusa ou conteúdo inválido retorna sem retry técnico.
-
----
-
-# Contrato
-
-Entrada
-
-Execution
-
-↓
-
-Saída
-
-Artifacts
-
-Logs
-
-Status
-
----
-
-# Regras
-
-Nunca executar dois agentes simultaneamente no MVP.
-
-Sempre persistir antes de chamar o próximo agente.
-
-Nunca permitir comunicação direta entre agentes.
-
-Toda decisão deverá ser registrada em logs.
+- nunca executar dois agentes simultaneamente no workflow inicial;
+- nunca permitir comunicação operacional direta entre agentes;
+- nunca gerar IDs aleatórios;
+- nunca incluir timeline ou métricas nos hashes;
+- nunca acessar deep imports das fachadas.

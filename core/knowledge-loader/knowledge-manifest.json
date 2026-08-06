@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -198,6 +198,12 @@
       "order": 35
     },
     {
+      "id": "knowledge:orchestrator-flow",
+      "locator": "36-ORCHESTRATOR_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 36
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -322,6 +328,12 @@
       "locator": "ADR/ADR-021-QA-AGENT-BOUNDARY.md",
       "category": "ADR",
       "order": 1021
+    },
+    {
+      "id": "adr:022",
+      "locator": "ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1022
     }
   ]
 }

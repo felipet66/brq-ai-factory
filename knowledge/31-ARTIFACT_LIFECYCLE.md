@@ -101,7 +101,7 @@ Na Sprint 8 não existe:
 ```mermaid
 sequenceDiagram
     autonumber
-    participant O as Orchestrator futuro
+    participant O as Integração futura do Orchestrator
     participant V as Response Validator
     participant G as Artifact Generator
     participant R as ArtifactRepository
@@ -126,7 +126,10 @@ sequenceDiagram
     end
 ```
 
-O diagrama é deliberadamente futuro. O Orchestrator deverá decidir atomicidade, comportamento diante de falha parcial de persistência e quais hashes da geração entram na provenance de banco antes de integrar essas fronteiras.
+O diagrama é deliberadamente futuro. O Orchestrator da Sprint 12 apenas consolida os artifacts já
+presentes nos resultados públicos e não chama Validator, Generator ou Repository. Uma integração
+posterior deverá decidir atomicidade, comportamento diante de falha parcial de persistência e quais
+hashes da geração entram na provenance de banco.
 
 ---
 

@@ -2,29 +2,30 @@
 
 ## Objetivo
 
-Este documento apresenta o pipeline implementado até a Sprint 11. Product Owner, Developer e QA são fachadas isoladas de tentativa única; a sequência multiagente continua dependente do Orchestrator futuro.
+Este documento apresenta o pipeline implementado até a Sprint 12. Product Owner, Developer e QA continuam fachadas isoladas de tentativa única; o Orchestrator coordena a sequência exclusivamente pelos entrypoints públicos.
 
-Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md) e [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md).
+Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md), [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md) e [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md).
 
 ## Visão macro
 
 ```mermaid
 flowchart LR
-    DEMAND["Demanda"] --> PO["Product Owner Agent — Sprint 9"]
+    DEMAND["Demanda"] --> ORCH["Orchestrator — Sprint 12"]
+    ORCH --> PO["Product Owner Agent — Sprint 9"]
     PO --> POS["ProductOwnerSpecification + 3 drafts"]
-    POS -.->|"handoff pelo caller"| DEV["Developer Agent — Sprint 10"]
+    POS --> ORCH
+    ORCH -->|"ProductOwnerSpecification"| DEV["Developer Agent — Sprint 10"]
     DEV --> TS["TechnicalSpecification + 3 drafts"]
-    POS -.->|"handoff pelo caller"| QA["QA Agent — Sprint 11"]
-    TS -.->|"handoff pelo caller"| QA
+    TS --> ORCH
+    ORCH -->|"duas specifications"| QA["QA Agent — Sprint 11"]
     QA --> QS["QASpecification + 3 drafts"]
-
-    ORCH["Orchestrator — futuro"] -.-> PO
-    ORCH -.-> DEV
-    ORCH -.-> QA
-    ORCH -.-> PERSIST["Estados, retry, revisão e persistência"]
+    QS --> ORCH
+    ORCH --> RESULT["WorkflowResult"]
+    ORCH -.-> FUTURE["Execution Engine, retry, review e persistência — futuros"]
 ```
 
-As setas tracejadas entre agentes representam contratos entregues pelo caller, não chamadas entre fachadas.
+Nenhuma seta representa comunicação direta entre fachadas. O Orchestrator recebe os resultados e
+projeta somente as specifications públicas necessárias para a próxima chamada.
 
 ## Esqueleto reutilizável
 
@@ -147,7 +148,9 @@ flowchart LR
     GENERATIONHASH --> AUDIT
 ```
 
-O QA preserva hashes separados das duas fontes. Sem Orchestrator ou persistência, eles não constituem prova de que as fontes vieram da mesma cadeia de execuções.
+O QA preserva hashes separados das duas fontes. O Orchestrator calcula os hashes canônicos das
+specifications recebidas, verifica os valores declarados e consolida os vínculos no contrato
+`lineage`, separado de `provenance`.
 
 ## Readiness e outcomes
 
@@ -176,23 +179,24 @@ Fachadas
 ├── developer.*
 └── qa.*
 
-Workflow futuro
-├── execution.*
-├── agent.execution.*
-└── artifact.versioned
+Workflow Sprint 12
+├── workflow.started
+├── workflow.stage.started|completed|rejected
+└── workflow.completed|failed|cancelled
 ```
 
 Eventos das fachadas indicam somente o término de uma tentativa em memória.
 
-## Pipeline futuro
+## Evolução futura
 
-O Orchestrator será responsável por criar requests, escolher continuidade, revisão ou nova tentativa, enriquecer e persistir drafts e ligar criptograficamente os handoffs. Nenhuma dessas responsabilidades está nas fachadas atuais.
+O Orchestrator atual cria requests, decide apenas continuidade sequencial, propaga cancelamento e
+liga criptograficamente os handoffs. Revisão, nova tentativa, enriquecimento e persistência de
+drafts permanecem futuros. Nenhuma dessas responsabilidades está nas fachadas.
 
-## O que não existe na Sprint 11
+## O que não existe na Sprint 12
 
-- sequência multiagente automática;
-- Orchestrator ou Execution Engine;
-- criação ou transição de estados;
+- Execution Engine;
+- criação ou transição de estados persistidos;
 - retry funcional;
 - revisão humana auditável;
 - persistência ou versionamento de artifacts;
@@ -210,7 +214,8 @@ Demanda -> Product Owner Specification
                       ↓
        QA Specification declarativa
                       ↓
-Orchestrator futuro controla workflow, estado e persistência
+WorkflowResult com timeline, lineage, provenance, métricas e hashes
 ```
 
-Os três resultados são contratos e drafts de tentativas isoladas, não uma Execution completa.
+Os três resultados continuam contratos e drafts de tentativas isoladas. `WorkflowResult` os
+coordena em memória, mas ainda não representa uma `Execution` persistida.

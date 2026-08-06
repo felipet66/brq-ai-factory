@@ -75,13 +75,17 @@ Controla toda execução.
 
 Responsabilidades:
 
-- iniciar execução
+- iniciar workflow
 - controlar pipeline
-- coordenar a validação de respostas
+- decidir progressão pelos outcomes públicos dos agentes
 - registrar logs
-- coordenar a persistência de artefatos
+- consolidar resultados, timeline, lineage, provenance, métricas e hashes
 
 O Orchestrator não monta prompts e não chama diretamente o AI Provider.
+
+Na implementação da Sprint 12, o estado é efêmero e o fluxo é fixo Product Owner → Developer →
+QA. Não há persistência, retry, revisão humana ou Execution Engine. As responsabilidades futuras
+de persistência e novas tentativas permanecem previstas, mas não são executadas por esta versão.
 
 ---
 

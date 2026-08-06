@@ -1,5 +1,10 @@
 # Sequence Diagrams
 
+O fluxo multiagente implementado na Sprint 12, incluindo Human → Orchestrator → Product Owner →
+Developer → QA → WorkflowResult, está documentado em
+[36-ORCHESTRATOR_FLOW.md](36-ORCHESTRATOR_FLOW.md). Diagramas com Execution Engine, persistência,
+review ou retry permanecem futuros.
+
 ## Objetivo
 
 Este documento descreve os principais fluxos de execução do BRQ AI Factory utilizando diagramas Mermaid.

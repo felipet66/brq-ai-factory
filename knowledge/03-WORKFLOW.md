@@ -89,7 +89,9 @@ O usuário recebe:
 
 Nenhum agente conversa diretamente com outro.
 
-No fluxo completo futuro, o Orchestrator entregará o contrato validado de uma etapa à seguinte. As fachadas atuais não chamam outros agentes; Developer e QA recebem contratos diretamente de seus callers.
+Desde a Sprint 12, o Orchestrator entrega o contrato público validado de uma etapa à seguinte no workflow fixo Product Owner → Developer → QA. As fachadas continuam sem chamar outros agentes; o Orchestrator injeta as specifications públicas nos requests posteriores e preserva resultados anteriores em qualquer interrupção.
+
+O workflow atual não persiste estado, não cria novas tentativas e não executa revisão humana. Essas integrações continuam futuras.
 
 Persistência de artifacts pertence ao fluxo futuro. Product Owner, Developer e QA retornam somente drafts em memória.
 

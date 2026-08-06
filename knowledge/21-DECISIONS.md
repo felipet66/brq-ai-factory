@@ -35,6 +35,7 @@ Este documento funciona apenas como índice.
 | ADR-019 | Product Owner Agent Boundary and Single-Agent Pipeline       | Accepted |
 | ADR-020 | Developer Agent Boundary and Technical Specification Handoff | Accepted |
 | ADR-021 | QA Agent Boundary and Dual-Specification Handoff             | Accepted |
+| ADR-022 | Orchestrator Boundary and Deterministic Sequential Workflow  | Accepted |
 
 ---
 

@@ -552,6 +552,7 @@ Workspaces implementados:
 - `agents/product-owner`;
 - `agents/developer`.
 - `agents/qa`.
+- `core/orchestrator`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -562,14 +563,18 @@ Cada módulo é registrado como workspace somente quando for implementado pela S
 ```text
 apps
   ↓
-core/orchestrator (futuro)
+core/orchestrator
   ↓
 agents
   ↓
 APIs públicas dos componentes core + shared
 ```
 
-Componentes genéricos de `core` não conhecem agentes concretos. O futuro Orchestrator poderá chamar fachadas em `agents`; cada fachada, por sua vez, compõe somente APIs públicas explicitamente permitidas pelo ADR correspondente.
+Componentes genéricos de `core` não conhecem agentes concretos. Como coordenador central, o Orchestrator é a exceção prevista pelo ADR-011 e chama somente as fachadas públicas em `agents`; cada fachada, por sua vez, compõe somente APIs públicas explicitamente permitidas pelo ADR correspondente.
+
+`core/orchestrator` não expõe deep imports e depende apenas de `@brq/product-owner-agent`,
+`@brq/developer-agent`, `@brq/qa-agent`, `@brq/shared` e Zod. O workspace não conhece componentes
+internos dos agentes nem camadas inferiores do pipeline.
 
 ---
 

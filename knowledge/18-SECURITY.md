@@ -366,6 +366,14 @@ Logs nunca devem conter:
 
 No QA Agent, knowledge, Product Owner Specification e Technical Specification são três contextos `INPUT/UNTRUSTED`. O request não pode substituir template, regras, contratos ou filenames. A saída precisa passar pelo Response Validator e pela QA Business Validation antes de gerar drafts.
 
+No Orchestrator, demanda e resultados dos agentes continuam dados não confiáveis. Cada retorno é
+validado pelo schema público da fachada e correlacionado ao request da etapa antes de ser aceito.
+Somente specifications públicas são transportadas; artifacts não entram em requests posteriores.
+Lineage verifica hashes de origem, enquanto provenance registra somente identidades e hashes
+técnicos. O módulo não acessa subpaths internos, providers, prompts, validators, generators,
+filesystem, banco ou rede e não executa retry. Logs são construídos por allowlist e não incluem
+conteúdo.
+
 ---
 
 # Uploads

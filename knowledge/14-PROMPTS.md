@@ -541,7 +541,10 @@ Quando um prompt falhar repetidamente:
 - solicitar revisão
 - não avançar o pipeline automaticamente
 
-Essas decisões pertencem ao futuro Orchestrator. Prompt Builder, Agent Runner, Product Owner Agent e Developer Agent apenas reportam o resultado da tentativa atual e nunca executam retry funcional.
+Essas decisões pertencem a uma evolução futura do Orchestrator. O Orchestrator da Sprint 12, Prompt Builder, Agent Runner, Product Owner Agent, Developer Agent e QA Agent nunca executam retry funcional.
+
+O Orchestrator não possui PromptTemplate, Rule Set, Output Contract ou assets de prompt. Ele
+transporta somente requests, specifications e resultados públicos já definidos pelas fachadas.
 
 ---
 
