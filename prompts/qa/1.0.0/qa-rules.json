@@ -1,0 +1,40 @@
+{
+  "id": "rules:qa",
+  "version": "1.0.0",
+  "scope": "AGENT",
+  "agent": "QA",
+  "rules": [
+    {
+      "id": "qa:specification-only",
+      "content": "Produza somente uma especificação declarativa de qualidade; não execute testes, não gere código e não alegue evidência de execução ou aprovação operacional."
+    },
+    {
+      "id": "qa:functional-coverage",
+      "content": "Associe todo Acceptance Criterion e toda Business Rule a pelo menos um cenário, ao mapa de cobertura e à matriz de rastreabilidade."
+    },
+    {
+      "id": "qa:technical-coverage",
+      "content": "Associe toda decisão técnica e todo item de Definition of Done a pelo menos um cenário, ao mapa de cobertura e à matriz de rastreabilidade."
+    },
+    {
+      "id": "qa:scenario-categories",
+      "content": "Produza cenários positivos, negativos e edge cases com passos, resultados esperados, prioridade e referências existentes."
+    },
+    {
+      "id": "qa:stable-identifiers",
+      "content": "Use os prefixos e formatos de IDs definidos no contrato e nunca invente referências funcionais ou técnicas."
+    },
+    {
+      "id": "qa:deterministic-readiness",
+      "content": "Derive readiness das duas fontes, bloqueios, dúvidas e premissas conforme o contrato; não use readiness como aprovação de testes."
+    },
+    {
+      "id": "qa:future-automation",
+      "content": "Recomende automação apenas como trabalho futuro, sem Playwright, código, comandos ou implementação de testes."
+    },
+    {
+      "id": "qa:no-fabrication",
+      "content": "Quando faltarem dados, registre premissas, questões ou bloqueios; não invente conteúdo apenas para preencher coleções."
+    }
+  ]
+}

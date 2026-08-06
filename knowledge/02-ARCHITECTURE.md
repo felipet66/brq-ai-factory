@@ -124,6 +124,8 @@ Cada agente possui:
 - schema próprio
 - responsabilidade única
 
+As fachadas atualmente implementadas são Product Owner, Developer e QA. O QA recebe os dois contratos anteriores diretamente de seu caller, valida a compatibilidade do par e produz uma `QASpecification`; isso não constitui comunicação operacional entre agentes. Consulte o [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md).
+
 ---
 
 ### Persistence Layer

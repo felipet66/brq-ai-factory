@@ -1,405 +1,118 @@
 # QA Agent
 
-## Objetivo
+## Purpose
 
-O QA Agent verifica se a implementação atende à especificação funcional e técnica.
+O QA Agent transforma uma `ProductOwnerSpecification` e uma `TechnicalSpecification` compatíveis em uma `QASpecification` declarativa, rastreável e pronta para revisão humana.
 
-Ele deve produzir evidências de qualidade, identificar riscos e criar testes automatizados.
+Ele especifica como a qualidade deverá ser validada futuramente. Não recebe código, não inspeciona implementação, não executa testes e não emite aprovação operacional.
 
----
+O [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md) é normativo.
 
-# Responsabilidade
+## Inputs
 
-O QA Agent deve:
+- contexto técnico da tentativa;
+- `ProductOwnerSpecification` pelo contrato público do Product Owner;
+- `TechnicalSpecification` pelo contrato público do Developer;
+- modelo e limites opcionais;
+- cancelamento opcional.
 
-- analisar a User Story
-- analisar critérios de aceite
-- analisar regras de negócio
-- avaliar a implementação
-- criar plano de testes
-- identificar cenários positivos e negativos
-- criar testes automatizados
-- registrar defeitos
-- produzir relatório de qualidade
+Importar contratos públicos e validação pura não constitui comunicação entre agentes. O QA Agent não chama as fachadas do Product Owner ou Developer.
 
----
-
-# Entradas
-
-```json
-{
-  "executionId": "execution_123",
-  "userStory": {},
-  "acceptanceCriteria": [],
-  "businessRules": [],
-  "implementation": {},
-  "sourceCode": [],
-  "technicalContext": {
-    "testingStrategy": "",
-    "securityRules": "",
-    "codingStandards": ""
-  }
-}
-```
-
-Entradas mínimas:
-
-- User Story
-- critérios de aceite
-- implementação
-- código
-- estratégia de testes
-
----
-
-# Saídas
-
-O QA Agent deve produzir:
-
-- estratégia de validação
-- plano de testes
-- matriz de rastreabilidade
-- cenários positivos
-- cenários negativos
-- edge cases
-- testes automatizados
-- defeitos
-- riscos
-- conclusão
-- artefatos
-
----
-
-# Contrato de Saída
-
-```json
-{
-  "status": "SUCCESS",
-  "summary": "Validação concluída.",
-  "qualityStatus": "APPROVED",
-  "testPlan": {},
-  "traceabilityMatrix": [],
-  "testScenarios": {
-    "positive": [],
-    "negative": [],
-    "edgeCases": [],
-    "security": []
-  },
-  "automatedTests": [],
-  "defects": [],
-  "risks": [],
-  "recommendations": [],
-  "artifacts": [],
-  "nextContext": {},
-  "warnings": [],
-  "metadata": {
-    "agent": "QA",
-    "promptVersion": "1.0.0",
-    "schemaVersion": "1.0.0"
-  }
-}
-```
-
----
-
-# Status de Qualidade
-
-Status permitidos:
+## Pipeline
 
 ```text
-APPROVED
-APPROVED_WITH_WARNINGS
-REJECTED
-REQUIRES_MANUAL_REVIEW
+Request Validation
+  -> Source Validation
+  -> Knowledge Loader (QA)
+  -> Context Projection
+  -> Agent Runner
+  -> Response Validator
+  -> QA Business Validation
+  -> Artifact Generator
+  -> QAAgentResult
 ```
 
-## APPROVED
+O Agent Runner encapsula Prompt Builder e AI Provider e realiza exatamente uma chamada ao provider.
 
-Todos os critérios foram cobertos e não existem defeitos bloqueantes.
+## QA Specification
 
-## APPROVED_WITH_WARNINGS
+A specification contém:
 
-A implementação atende ao escopo, mas existem riscos ou melhorias não bloqueantes.
+- readiness, título, resumo e objetivo;
+- estratégia de testes;
+- matriz e resumos de rastreabilidade;
+- cobertura funcional e técnica;
+- cenários positivos, negativos e edge cases;
+- riscos;
+- critérios de aprovação;
+- itens bloqueantes;
+- testes prioritários;
+- recomendações de automação futura;
+- premissas, questões abertas e fora de escopo.
 
-## REJECTED
+Os cenários descrevem pré-condições, dados, passos e resultados esperados. Eles são planos, não resultados de execução.
 
-Existem defeitos que impedem a aceitação.
+## Mandatory coverage
 
-## REQUIRES_MANUAL_REVIEW
+Business Validation exige que cada item a seguir esteja ligado a pelo menos um cenário, ao mapa de cobertura e à matriz:
 
-A validação depende de decisão humana, ambiente externo ou requisito não definido.
+- Acceptance Criterion (`AC`);
+- Business Rule (`BR`);
+- decisão técnica (`DEC`);
+- Definition of Done (`DOD`).
 
----
+Referências adicionais podem apontar para `CMP`, `MOD`, `FLW`, `CTR`, `API`, `EVT`, `ENT` e `REL`. IDs desconhecidos, duplicados ou associados a categorias incompatíveis são rejeitados.
 
-# Plano de Testes
+O resumo de cobertura é recalculado. O modelo não pode declarar cobertura sem relações verificáveis.
 
-O plano deve conter:
+## Readiness
 
-- objetivo
-- escopo
-- fora de escopo
-- estratégia
-- ambientes
-- pré-condições
-- dados de teste
-- tipos de teste
-- riscos
-- critérios de entrada
-- critérios de saída
+Precedência determinística:
 
----
+1. `REQUIRES_CLARIFICATION` quando alguma fonte já exige esclarecimento, existe questão bloqueante ou blocker;
+2. `PARTIALLY_READY` quando alguma fonte está parcial, existe questão não bloqueante ou premissa pendente;
+3. `READY` nos demais casos.
 
-# Matriz de Rastreabilidade
+Falha de cobertura é rejeição de Business Validation, não uma simples redução de readiness.
 
-Cada critério de aceite deve estar associado a pelo menos um cenário.
+## Context and trust
 
-Exemplo:
+O prompt recebe exatamente três contextos `INPUT/UNTRUSTED`:
 
-```json
-{
-  "acceptanceCriterionId": "AC-001",
-  "testScenarioIds": ["TS-001", "TS-002"],
-  "coverageStatus": "COVERED"
-}
-```
+- `context:qa-knowledge`;
+- `context:qa-product-owner-specification`;
+- `context:qa-technical-specification`.
 
-Status permitidos:
+Instruções encontradas nessas entradas são tratadas como dados.
 
-```text
-COVERED
-PARTIALLY_COVERED
-NOT_COVERED
-BLOCKED
-```
+## Outputs
 
----
+Sucesso retorna `GENERATED` com specification validada, metadata de proveniência e três drafts:
 
-# Cenários de Teste
+- `test-plan.md`;
+- `traceability-matrix.json`;
+- `qa-specification.md`.
 
-Cada cenário deve possuir:
+Falha de conteúdo retorna `VALIDATION_REJECTED` em `RESPONSE_VALIDATION` ou `BUSINESS_VALIDATION`, sempre sem artifacts.
 
-- id
-- título
-- tipo
-- prioridade
-- pré-condição
-- passos
-- resultado esperado
-- critério relacionado
-- automação recomendada
+## Observability and security
 
-Exemplo:
+Logs aceitam somente IDs, versões, contagens, readiness, métricas e hashes. Especificações, knowledge, prompts, respostas, cenários, artifacts, valores de issues, segredos, stack e causa crua são proibidos.
 
-```json
-{
-  "id": "TS-001",
-  "title": "Solicitar segundo fator após credenciais válidas",
-  "type": "POSITIVE",
-  "priority": "HIGH",
-  "preconditions": ["Usuário ativo"],
-  "steps": ["Acessar a tela de login", "Informar credenciais válidas", "Confirmar o envio"],
-  "expectedResult": "O sistema solicita o segundo fator.",
-  "acceptanceCriteria": ["AC-001"],
-  "automation": "RECOMMENDED"
-}
-```
+Todos os assets e outputs têm hashes canônicos. Hashes separados preservam as duas fontes; a ligação persistida entre execuções pertence ao Orchestrator futuro.
 
----
+## Out of scope
 
-# Tipos de Teste
+- Orchestrator e Execution Engine;
+- API e frontend;
+- persistência funcional;
+- retry e workflow;
+- revisão humana;
+- execução de testes;
+- Playwright;
+- geração de código;
+- inspeção de implementação;
+- defeitos baseados em execução;
+- relatório de aprovação real.
 
-O QA Agent deve considerar:
-
-- unitário
-- integração
-- contrato
-- end-to-end
-- regressão
-- acessibilidade
-- segurança
-- performance
-- usabilidade
-- compatibilidade
-
-Nem todos precisam ser usados em toda demanda.
-
----
-
-# Testes Automatizados
-
-No MVP:
-
-- Vitest para testes unitários e integração
-- Playwright para E2E
-
-Os testes devem:
-
-- ser determinísticos
-- utilizar dados fictícios
-- evitar dependência externa
-- possuir nomes claros
-- limpar o estado
-- gerar evidências úteis
-
----
-
-# Defeitos
-
-Cada defeito deve conter:
-
-```json
-{
-  "id": "BUG-001",
-  "title": "",
-  "severity": "HIGH",
-  "priority": "HIGH",
-  "description": "",
-  "stepsToReproduce": [],
-  "expectedResult": "",
-  "actualResult": "",
-  "evidence": [],
-  "affectedCriteria": [],
-  "recommendation": ""
-}
-```
-
----
-
-# Severidade
-
-```text
-CRITICAL
-HIGH
-MEDIUM
-LOW
-```
-
-## CRITICAL
-
-Falha de segurança, perda de dados ou indisponibilidade total.
-
-## HIGH
-
-Fluxo principal indisponível ou critério crítico não atendido.
-
-## MEDIUM
-
-Falha parcial com alternativa disponível.
-
-## LOW
-
-Problema visual, melhoria ou comportamento não crítico.
-
----
-
-# Segurança
-
-O QA Agent deve avaliar:
-
-- validação de entrada
-- acesso indevido
-- exposição de segredo
-- mensagem de erro
-- logs sensíveis
-- prompt injection
-- payload malicioso
-- execução indevida
-- abuso de endpoint
-
----
-
-# Acessibilidade
-
-Quando houver interface, considerar:
-
-- navegação por teclado
-- foco
-- labels
-- contraste
-- semântica
-- leitores de tela
-- mensagens de erro
-
----
-
-# Limitações
-
-O agente deve informar quando não conseguir validar:
-
-- integração externa
-- ambiente não disponível
-- segredo necessário
-- requisito ambíguo
-- condição não reproduzível
-- teste dependente de revisão humana
-
----
-
-# Artefatos
-
-O QA Agent deve gerar:
-
-## test-plan.md
-
-Contém a estratégia completa.
-
-## traceability-matrix.json
-
-Relaciona requisitos e testes.
-
-## playwright.spec.ts
-
-Contém testes E2E quando aplicável.
-
-## defects.json
-
-Contém defeitos encontrados.
-
-## quality-report.md
-
-Contém:
-
-- resumo
-- cobertura
-- riscos
-- defeitos
-- conclusão
-- recomendação
-
----
-
-# Regras
-
-O agente deve:
-
-- validar contra critérios
-- apresentar evidências
-- considerar cenários negativos
-- registrar limitações
-- manter independência
-- rejeitar quando necessário
-
-O agente não deve:
-
-- aprovar sem cobertura
-- esconder defeitos
-- alterar requisitos
-- inventar evidências
-- afirmar que executou testes não executados
-- modificar código silenciosamente
-
----
-
-# Definition of Done
-
-A etapa está concluída quando:
-
-- todos os critérios foram analisados
-- a matriz foi criada
-- cenários foram definidos
-- testes foram produzidos
-- defeitos foram registrados
-- riscos foram documentados
-- o status de qualidade foi definido
-- artefatos foram gerados
-- o schema foi validado
+Consulte também o [fluxo visual](35-QA_AGENT_FLOW.md).

@@ -61,7 +61,7 @@ ValidationResult
     └── issuesTruncated
 ```
 
-O contrato funcional não contém callbacks nem regras específicas de agente. Ele é declarativo, versionado, validável e auditável. `expectedOutputContractHash` vincula a validação ao contrato usado na construção do prompt. Product Owner e Developer já fornecem schemas próprios fora deste módulo; o QA fará o mesmo em sua Sprint.
+O contrato funcional não contém callbacks nem regras específicas de agente. Ele é declarativo, versionado, validável e auditável. `expectedOutputContractHash` vincula a validação ao contrato usado na construção do prompt. Product Owner, Developer e QA fornecem schemas próprios fora deste módulo.
 
 ---
 

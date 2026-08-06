@@ -421,7 +421,20 @@ developer/
     testing/
     *.spec.ts
 
-qa/ (futuro)
+qa/
+    package.json
+    qa-agent.ts
+    contracts.ts
+    schemas.ts
+    errors.ts
+    business-validation.ts
+    knowledge-projection.ts
+    prompt-request.ts
+    prompt-assets.ts
+    result.ts
+    logging.ts
+    testing/
+    *.spec.ts
 ```
 
 O Product Owner é uma fachada de uma única tentativa. Sua factory valida dependências e assets antes de aceitar requests. A tentativa usa somente as APIs públicas de Knowledge Loader, Agent Runner, Response Validator e Artifact Generator; após o gate da Business Validation, o Generator recebe o `ValidationResult` aceito e a `ArtifactSpecification`. O Runner continua sendo o único ponto que integra Prompt Builder e AI Provider para executar o modelo.
@@ -429,6 +442,8 @@ O Product Owner é uma fachada de uma única tentativa. Sua factory valida depen
 O workspace também reutiliza tipos e schemas declarativos de prompt e os utilitários públicos de canonical JSON e hashing do Prompt Builder para validar assets e proveniência, sem instanciar ou chamar o Builder. A Business Validation limita o relatório a 100 issues e informa `issuesTruncated`; a saída aceita contém exatamente três artifacts. Business Validation, schemas e assets específicos permanecem locais ao agente; não são movidos para `shared`.
 
 O Developer segue a mesma composição de tentativa, mas recebe uma `ProductOwnerSpecification` válida pelo entrypoint público `@brq/product-owner-agent` e produz uma `TechnicalSpecification`. Essa dependência é somente contratual: o pacote não cria nem executa a fachada anterior. Sua Business Validation acrescenta grafos, ciclos, readiness herdada e cobertura integral dos Acceptance Criteria; a Artifact Specification gera `architecture.md`, `implementation-plan.md` e `technical-decisions.json`. Não há geração de código ou testes, filesystem, comandos, retry, estado, persistência, QA ou Orchestrator dentro do workspace.
+
+O QA recebe `ProductOwnerSpecification` e `TechnicalSpecification` pelos dois entrypoints públicos e usa somente a validação pura do Developer para verificar a compatibilidade do par. Produz uma `QASpecification`, exige cobertura de `AC`, `BR`, `DEC` e `DOD` e gera `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. Não chama as fachadas anteriores, não executa testes e não conhece workflow ou persistência.
 
 ---
 
@@ -457,12 +472,20 @@ developer/
         output-contract.json
         artifact-specification.json
 
-qa/ (futuro)
+qa/
+    1.0.0/
+        manifest.json
+        template.json
+        global-rules.json
+        security-rules.json
+        qa-rules.json
+        output-contract.json
+        artifact-specification.json
 ```
 
 O Prompt Builder monta o Prompt Final.
 
-Os bundles 1.0.0 de Product Owner e Developer são declarativos, importados estaticamente e validados antes do uso. Cada manifest referencia filenames, IDs e versões, enquanto o loader calcula os hashes. Os JSON Schemas iniciais evitam `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. O Builder recebe estruturas prontas e continua sem acessar esta pasta. Registry, descoberta dinâmica e seleção automática de versão permanecem futuros.
+Os bundles 1.0.0 de Product Owner, Developer e QA são declarativos, importados estaticamente e validados antes do uso. Cada manifest referencia filenames, IDs e versões, enquanto o loader calcula os hashes. Os JSON Schemas iniciais evitam `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. O Builder recebe estruturas prontas e continua sem acessar esta pasta. Registry, descoberta dinâmica e seleção automática de versão permanecem futuros.
 
 ---
 
@@ -528,6 +551,7 @@ Workspaces implementados:
 - `core/artifact-generator`;
 - `agents/product-owner`;
 - `agents/developer`.
+- `agents/qa`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -591,6 +615,7 @@ Pode acessar:
 - APIs públicas de `core/knowledge-loader`, `core/agent-runner`, `core/response-validator` e `core/artifact-generator` quando exigidas pela fachada;
 - tipos e schemas declarativos e utilitários públicos de canonicalização e hashing do `core/prompt-builder`, sem chamar o Builder diretamente.
 - no Developer, somente tipos e schemas públicos da `ProductOwnerSpecification` pelo entrypoint `@brq/product-owner-agent`.
+- no QA, os contratos públicos de Product Owner e Developer e a validação pura de compatibilidade da `TechnicalSpecification`, sem executar qualquer fachada.
 
 Nunca chama outra fachada, usa deep imports de outro agente, acessa adapters concretos de provider, Prisma, repositories, apps ou internals de `core`. Workflow, retry, persistência e transições de estado permanecem fora das fachadas.
 

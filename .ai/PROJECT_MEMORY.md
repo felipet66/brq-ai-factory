@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 11 não deve começar sem essa aprovação.
+Sprint 11 — QA Agent implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 12 não deve começar sem essa aprovação.
 
 ## Fundação técnica
 
@@ -18,6 +18,7 @@ Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05
 - Artifact Generator genérico para produzir drafts determinísticos a partir de saídas validadas e specifications declarativas;
 - Product Owner Agent como fachada concreta de uma única tentativa sobre os componentes genéricos já existentes;
 - Developer Agent como segunda fachada concreta, responsável somente por proposta técnica declarativa e rastreável;
+- QA Agent como terceira fachada concreta, responsável somente por especificação de qualidade declarativa e rastreável;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -83,7 +84,7 @@ Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05
 - IDs documentais explícitos, estáveis e independentes de filenames;
 - índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
 - seleção determinística e versionada para contextos canônicos;
-- manifesto e política `1.7.0`, incluindo o fluxo do Developer e o ADR-020;
+- manifesto e política `1.8.0`, incluindo os fluxos de Product Owner, Developer e QA e os ADRs até o ADR-021;
 - contexto `DEVELOPER` com seis documentos obrigatórios que cabem no orçamento padrão de 64 KiB e documentos adicionais opcionais em ordem determinística;
 - orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
 - composição estruturada com delimitadores, ID, categoria e hash por documento;
@@ -181,6 +182,20 @@ Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05
 - os assets versionados ficam em `prompts/developer/1.0.0` e geram exatamente `architecture.md`, `implementation-plan.md` e `technical-decisions.json` em memória;
 - o agente atua como arquiteto e não gera código ou testes, não executa comandos, não grava arquivos, não persiste, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator.
 
+## QA Agent Layer
+
+- `agents/qa` é a terceira fachada concreta e representa uma única tentativa;
+- o request recebe contexto de execução, uma `ProductOwnerSpecification`, uma `TechnicalSpecification`, modelo e limites opcionais;
+- a validação de origem confirma deterministicamente a compatibilidade da especificação técnica com a especificação funcional antes de carregar conhecimento ou chamar o provider;
+- a tentativa encadeia `Source Validation → Knowledge Loader → Agent Runner → Response Validator → QA Business Validation → Artifact Generator`;
+- o prompt recebe exatamente três contextos prontos: conhecimento de QA, specification funcional e specification técnica;
+- a saída funcional é uma `QASpecification` estrita com estratégia, matriz de rastreabilidade, cenários positivos e negativos, edge cases, riscos, coberturas funcional e técnica, critérios de aprovação, bloqueios, prioridades, recomendações futuras e readiness;
+- a Business Validation rejeita duplicidades e referências inválidas, recalcula totais e readiness e exige cobertura integral de Acceptance Criteria, regras de negócio, decisões técnicas e Definition of Done;
+- os hashes canônicos das duas specifications de origem são preservados separadamente nos metadados do resultado;
+- os assets versionados ficam em `prompts/qa/1.0.0`, possuem `bundleHash` fixado e geram exatamente `test-plan.md`, `traceability-matrix.json` e `qa-specification.md` em memória;
+- os logs usam allowlist de IDs, versões, hashes, contagens, duração, estágio e códigos técnicos, sem specifications, prompts, respostas ou artifacts;
+- o agente não executa testes, não gera código ou testes, não grava arquivos, não persiste, não altera estados, não retenta e não conhece Orchestrator ou Execution Engine.
+
 ## Decisões
 
 - ADR-011 registra layout, npm workspaces, Agent Runner genérico, fronteiras de dependência e SQLite local;
@@ -193,6 +208,7 @@ Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05
 - ADR-018 registra a fronteira do Artifact Generator, a specification declarativa, o modelo resolvido interno, a separação dos hashes e a ausência de filesystem, persistência e versionamento;
 - ADR-019 registra a fronteira do Product Owner Agent, a composição dos componentes genéricos, a Business Validation específica e a ausência de workflow, retry e persistência;
 - ADR-020 registra o handoff contratual para o Developer Agent, sua Business Validation, os três drafts técnicos e a ausência de geração de código, testes e workflow;
+- ADR-021 registra o handoff contratual para o QA Agent, a validação determinística das duas origens, a cobertura funcional e técnica, os três drafts de qualidade e a ausência de execução, geração de código, workflow e persistência;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -329,14 +345,34 @@ Sprint 10 — Developer Agent implementada e validada tecnicamente em 2026-08-05
 - nenhuma chamada externa, teste live, persistência, retry funcional ou transição de estado executada;
 - nenhum item da Sprint 11 foi iniciado e nenhum commit foi criado.
 
+## Validações da Sprint 11
+
+- format e format check: aprovados;
+- lint: aprovado;
+- typecheck: aprovado;
+- assets do QA Agent validados com `bundleHash` `c674db967cd7af9c8e2471fc1b546edbc5ea3133e0c846171e943bc48fdff693`;
+- 56 testes específicos de `agents/qa` e 1 nova integração de orçamento do Knowledge Loader aprovados;
+- 638 testes aprovados, sendo 637 da suíte raiz e 1 smoke da aplicação;
+- cobertura de `agents/qa`: 91,52% statements, 81,50% branches, 97,24% functions e 91,80% lines;
+- cobertura global da suíte raiz: 93,36% statements, 84,67% branches, 98,43% functions e 93,61% lines;
+- Prisma validate: aprovado;
+- build: aprovado;
+- `git diff --check`: aprovado;
+- nenhum ADR histórico entre ADR-001 e ADR-020 foi alterado; somente o ADR-021 foi criado;
+- nenhuma chamada externa, teste live, persistência, retry funcional, transição de estado, execução de testes ou geração de código foi executada;
+- nenhum item da Sprint 12 foi iniciado e nenhum commit foi criado.
+
 ## Fora do escopo confirmado
 
-- testes E2E;
-- QA Agent;
-- geração ou execução de código e testes pelo Developer Agent;
+- testes E2E e Playwright;
+- geração ou execução de código e testes por agentes;
+- execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional e workflow entre agentes;
 - Orchestrator e Execution Engine;
+- API e frontend funcional;
+- persistência funcional das execuções dos agentes;
+- revisão humana integrada ao fluxo;
 - autenticação e autorização;
 - métricas avançadas;
 - deploy e configuração de Vercel.

@@ -107,6 +107,8 @@ Principais contratos:
 - Response Validator
 - Artifact Generator
 - Product Owner Agent
+- Developer Agent
+- QA Agent
 - repository
 
 Todos os contratos devem utilizar schemas versionados.
@@ -122,6 +124,8 @@ expect(result.success).toBe(true);
 ---
 
 # Testes End-to-End
+
+Esta seção descreve a plataforma futura. Playwright e execução E2E não fazem parte da Sprint 11 e não são gerados nem executados pelo QA Agent.
 
 Ferramenta:
 

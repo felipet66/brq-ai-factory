@@ -199,9 +199,42 @@ A fachada atua como arquiteto e encerra a tentativa em memória. Não gera códi
 
 # QA
 
-Mesmo fluxo do Product Owner.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Consumer
+    participant QA as QA Agent
+    participant Knowledge as Knowledge Loader
+    participant Runner as Agent Runner
+    participant Validator as Response Validator
+    participant Business as QA Business Validation
+    participant Artifact as Artifact Generator
 
-A única diferença é o Prompt.
+    Consumer->>QA: execute(ProductOwnerSpecification, TechnicalSpecification)
+    QA->>QA: validar request e compatibilidade das fontes
+    QA->>Knowledge: load(QA)
+    Knowledge-->>QA: KnowledgeContext
+    QA->>Runner: run(AgentRunRequest com 3 contextos)
+    Runner-->>QA: AgentRunResult de uma chamada
+    QA->>Validator: validate(resultado + contrato)
+    Validator-->>QA: ValidationResult
+
+    alt resposta aceita
+        QA->>Business: validar QASpecification + duas fontes
+        Business-->>QA: readiness + cobertura AC/BR/DEC/DOD
+        alt Business Validation aceita
+            QA->>Artifact: generate(validação + specification)
+            Artifact-->>QA: 3 ArtifactDrafts
+            QA-->>Consumer: GENERATED
+        else Business Validation rejeitada
+            QA-->>Consumer: VALIDATION_REJECTED
+        end
+    else resposta rejeitada
+        QA-->>Consumer: VALIDATION_REJECTED
+    end
+```
+
+A fachada encerra a tentativa em memória. Não executa testes, não gera código ou Playwright, não persiste artifacts, não retenta e não chama outros agentes ou Orchestrator.
 
 ---
 

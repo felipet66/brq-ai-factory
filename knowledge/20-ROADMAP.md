@@ -10,6 +10,8 @@ Cada fase deve entregar valor de forma independente.
 
 As fases podem ser reavaliadas conforme novos aprendizados.
 
+Estado incremental: Foundation, camadas core e as fachadas Product Owner, Developer e QA estão concluídas até a Sprint 11. Orchestrator, Execution Engine, API, frontend funcional e persistência funcional permanecem em Sprints futuras.
+
 ---
 
 # Visão Geral

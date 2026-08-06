@@ -364,6 +364,8 @@ Logs nunca devem conter:
 - código proprietário
 - dados pessoais desnecessários
 
+No QA Agent, knowledge, Product Owner Specification e Technical Specification são três contextos `INPUT/UNTRUSTED`. O request não pode substituir template, regras, contratos ou filenames. A saída precisa passar pelo Response Validator e pela QA Business Validation antes de gerar drafts.
+
 ---
 
 # Uploads

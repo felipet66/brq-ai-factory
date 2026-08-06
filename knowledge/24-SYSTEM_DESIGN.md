@@ -494,7 +494,47 @@ Cada invocação é uma única tentativa. A fachada não gera código ou testes,
 
 [Fluxo visual do Developer Agent](34-DEVELOPER_AGENT_FLOW.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md) e [visão geral do pipeline](33-PIPELINE_OVERVIEW.md).
 
-O QA poderá seguir a mesma composição geral, com contrato, Business Validation e artifacts próprios quando sua Sprint for aprovada.
+---
+
+# Fluxo Interno do QA
+
+```text
+Factory: validar dependências e assets
+
+↓
+
+QAAgentRequest com ProductOwnerSpecification + TechnicalSpecification
+
+↓
+
+Source Validation do par
+
+↓
+
+Knowledge Loader — contexto QA
+
+↓
+
+3 contextos INPUT/UNTRUSTED
+
+↓
+
+Agent Runner → Prompt Builder injetado → AI Provider abstrato
+
+↓
+
+Response Validator → QA Business Validation → Artifact Generator
+
+↓
+
+QAAgentResult
+```
+
+O QA produz uma `QASpecification`, não testes executados. A Business Validation exige cobertura de `AC`, `BR`, `DEC` e `DOD`, recalcula totais e readiness e só então autoriza os drafts `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`.
+
+A fachada não recebe código, não executa testes, não gera Playwright, não persiste, não retenta e não chama Product Owner, Developer ou Orchestrator.
+
+[Fluxo visual do QA Agent](35-QA_AGENT_FLOW.md) e [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md).
 
 ---
 

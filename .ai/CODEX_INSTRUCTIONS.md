@@ -116,6 +116,8 @@ Na seguinte ordem:
 33-PIPELINE_OVERVIEW.md
 
 34-DEVELOPER_AGENT_FLOW.md
+
+35-QA_AGENT_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -387,9 +389,11 @@ Cada agente possui responsabilidade única.
 
 Os agentes nunca se comunicam diretamente.
 
-No fluxo completo futuro, todo handoff passa pelo Orchestrator. As fachadas atuais de Product Owner e Developer representam somente uma tentativa isolada e não chamam Orchestrator, persistência ou outro agente. O Developer pode importar exclusivamente o tipo/schema público da `ProductOwnerSpecification` como contrato de entrada, conforme o ADR-020; isso não autoriza comunicação nem dependência operacional entre agentes.
+No fluxo completo futuro, todo handoff passa pelo Orchestrator. As fachadas atuais de Product Owner, Developer e QA representam somente uma tentativa isolada e não chamam Orchestrator, persistência ou outro agente. Developer e QA podem importar contratos públicos de agentes anteriores conforme ADR-020 e ADR-021; isso não autoriza comunicação ou dependência operacional entre fachadas.
 
 O Developer Agent da Sprint 10 atua como arquiteto: transforma uma `ProductOwnerSpecification` válida em uma `TechnicalSpecification` e drafts declarativos. Ele não gera código ou testes, não executa comandos e não altera estados.
+
+O QA Agent da Sprint 11 transforma `ProductOwnerSpecification` e `TechnicalSpecification` compatíveis em uma `QASpecification`. Ele cobre `AC`, `BR`, `DEC` e `DOD`, mas não recebe código, executa testes, gera Playwright ou afirma aprovação operacional.
 
 ---
 

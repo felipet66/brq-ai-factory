@@ -60,13 +60,16 @@ Na Sprint 10, essa etapa produz somente uma `TechnicalSpecification` declarativa
 
 Entrada
 
-Código
+- `ProductOwnerSpecification` válida
+- `TechnicalSpecification` válida e compatível
 
 Saída
 
 - test-plan.md
-- playwright.spec.ts
-- quality-report.md
+- traceability-matrix.json
+- qa-specification.md
+
+Na Sprint 11, essa etapa produz somente uma `QASpecification` declarativa e os três drafts em memória. Não recebe código, não executa testes, não gera Playwright e não emite aprovação operacional.
 
 ---
 
@@ -76,9 +79,9 @@ O usuário recebe:
 
 - História
 - Critérios
-- Código
-- Testes
-- Relatório
+- Especificação técnica
+- Especificação de qualidade
+- Drafts rastreáveis
 
 ---
 
@@ -86,8 +89,8 @@ O usuário recebe:
 
 Nenhum agente conversa diretamente com outro.
 
-No fluxo completo futuro, o Orchestrator entregará o contrato validado de uma etapa à seguinte. As fachadas atuais não chamam outros agentes; o Developer recebe a `ProductOwnerSpecification` diretamente de seu caller sem executar o Product Owner.
+No fluxo completo futuro, o Orchestrator entregará o contrato validado de uma etapa à seguinte. As fachadas atuais não chamam outros agentes; Developer e QA recebem contratos diretamente de seus callers.
 
-Persistência de artifacts pertence ao fluxo futuro. Product Owner e Developer retornam somente drafts em memória.
+Persistência de artifacts pertence ao fluxo futuro. Product Owner, Developer e QA retornam somente drafts em memória.
 
 Toda execução deve gerar logs.

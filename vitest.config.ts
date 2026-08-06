@@ -8,6 +8,7 @@ export default defineConfig({
     include: [
       'agents/developer/**/*.spec.ts',
       'agents/product-owner/**/*.spec.ts',
+      'agents/qa/**/*.spec.ts',
       'core/agent-runner/**/*.spec.ts',
       'core/ai-provider/**/*.spec.ts',
       'core/artifact-generator/**/*.spec.ts',
@@ -23,6 +24,7 @@ export default defineConfig({
       include: [
         'agents/developer/**/*.ts',
         'agents/product-owner/**/*.ts',
+        'agents/qa/**/*.ts',
         'core/agent-runner/**/*.ts',
         'core/ai-provider/**/*.ts',
         'core/artifact-generator/**/*.ts',
@@ -36,6 +38,7 @@ export default defineConfig({
         '**/*.spec.ts',
         'agents/developer/testing/**',
         'agents/product-owner/testing/**',
+        'agents/qa/testing/**',
         'shared/types/**',
         'generated/**',
       ],

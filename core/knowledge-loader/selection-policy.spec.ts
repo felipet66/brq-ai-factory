@@ -15,13 +15,13 @@ import {
 } from './selection-policy';
 
 const ADR_IDS = Array.from(
-  { length: 20 },
+  { length: 21 },
   (_, index) => `adr:${String(index + 1).padStart(3, '0')}`,
 );
 
 describe('Knowledge selection policy', () => {
   it('defines every canonical context under a versioned policy', () => {
-    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.7.0');
+    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.8.0');
     expect(Object.keys(KNOWLEDGE_SELECTION_POLICY.contexts)).toEqual([
       'GLOBAL',
       'PRODUCT_OWNER',
@@ -77,6 +77,7 @@ describe('Knowledge selection policy', () => {
       'knowledge:product-owner-agent-flow',
       'knowledge:pipeline-overview',
       'knowledge:developer-agent-flow',
+      'knowledge:qa-agent-flow',
       ...ADR_IDS,
     ]);
   });
@@ -106,6 +107,26 @@ describe('Knowledge selection policy', () => {
     }
   });
 
+  it('loads every required QA document within the default byte budget', async () => {
+    const knowledgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../knowledge');
+    const source = new FilesystemKnowledgeSource({
+      sourceId: 'qa-budget-check',
+      rootPath: knowledgeRoot,
+      allowedLocators: KNOWLEDGE_MANIFEST.documents.map(({ locator }) => locator),
+    });
+    const loader = await createKnowledgeLoader({
+      source,
+      logger: createLogger({ sink: () => undefined }),
+    });
+    const context = await loader.load({ context: 'QA' });
+    const qaRule = getKnowledgeSelectionRule('QA');
+    const includedIds = new Set(context.includedDocuments.map(({ id }) => id));
+
+    expect(context.budget.usedBytes).toBeLessThanOrEqual(DEFAULT_CONTEXT_MAX_BYTES);
+    expect(qaRule.required).toHaveLength(6);
+    for (const documentId of qaRule.required) expect(includedIds.has(documentId)).toBe(true);
+  });
+
   it('implements the approved QA and SECURITY matrices', () => {
     expect(getKnowledgeSelectionRule('QA')).toEqual({
       required: [
@@ -126,6 +147,7 @@ describe('Knowledge selection policy', () => {
         'adr:004',
         'adr:005',
         'adr:010',
+        'adr:021',
       ],
     });
     expect(getKnowledgeSelectionRule('SECURITY')).toEqual({
@@ -146,6 +168,7 @@ describe('Knowledge selection policy', () => {
         'adr:018',
         'adr:019',
         'adr:020',
+        'adr:021',
       ],
     });
   });

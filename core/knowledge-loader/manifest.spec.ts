@@ -4,20 +4,20 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 35 canonical documents and ADRs 001 through 020', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.7.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(55);
+  it('loads the 36 canonical documents and ADRs 001 through 021', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.8.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(57);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      35,
+      36,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      20,
+      21,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:020',
-      locator: 'ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md',
+      id: 'adr:021',
+      locator: 'ADR/ADR-021-QA-AGENT-BOUNDARY.md',
       category: 'ADR',
-      order: 1020,
+      order: 1021,
     });
     expect(
       KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
@@ -75,14 +75,14 @@ describe('Knowledge manifest', () => {
       category: 'ARCHITECTURE',
       order: 33,
     });
-    expect(
-      KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:developer-agent-flow'),
-    ).toEqual({
-      id: 'knowledge:developer-agent-flow',
-      locator: '34-DEVELOPER_AGENT_FLOW.md',
-      category: 'ARCHITECTURE',
-      order: 34,
-    });
+    expect(KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:qa-agent-flow')).toEqual(
+      {
+        id: 'knowledge:qa-agent-flow',
+        locator: '35-QA_AGENT_FLOW.md',
+        category: 'ARCHITECTURE',
+        order: 35,
+      },
+    );
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST.documents)).toBe(true);
   });

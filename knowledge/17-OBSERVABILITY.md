@@ -408,6 +408,8 @@ Nunca registrar diretamente:
 
 Campos sensíveis devem ser mascarados.
 
+Nas fachadas de agentes, logs usam allowlist. Para o QA são permitidos IDs técnicos, versões, hashes das duas fontes, readiness, métricas e contagens de cenários/cobertura. O conteúdo das especificações, cenários, knowledge, prompt, resposta, artifacts e valores de issues nunca deve ser registrado.
+
 ```text
 sk-****************
 ```

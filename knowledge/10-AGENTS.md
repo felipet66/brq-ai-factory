@@ -90,7 +90,7 @@ agents/
 
 O runner de execução é genérico e permanece em `core/agent-runner`, conforme o ADR-011.
 
-Product Owner e Developer são agentes concretos. Seus assets declarativos e versionados ficam, respectivamente, em `prompts/product-owner/1.0.0` e `prompts/developer/1.0.0`; cada fachada recebe dependências injetadas e não chama `PromptBuilder.build` nem AI Provider diretamente. Os workspaces usam somente contratos e utilitários permitidos pelos entrypoints públicos. QA permanece futuro.
+Product Owner, Developer e QA são agentes concretos. Seus assets declarativos e versionados ficam em `prompts/product-owner/1.0.0`, `prompts/developer/1.0.0` e `prompts/qa/1.0.0`; cada fachada recebe dependências injetadas e não chama `PromptBuilder.build` nem AI Provider diretamente. Os workspaces usam somente contratos e utilitários permitidos pelos entrypoints públicos.
 
 ---
 
@@ -347,32 +347,34 @@ O Developer Agent não deve:
 
 # Responsabilidades do QA Agent
 
-O QA Agent avalia a implementação e cria artefatos de qualidade.
+O QA Agent transforma os contratos funcionais e técnicos em uma especificação declarativa de qualidade.
 
 Entradas:
 
-- User Story
-- critérios de aceite
-- implementação
-- código
-- restrições técnicas
+- `ProductOwnerSpecification`
+- `TechnicalSpecification`
+- knowledge selecionado para QA
 
 Saídas:
 
-- plano de testes
-- cenários positivos
-- cenários negativos
-- testes automatizados
-- relatório de qualidade
-- defeitos encontrados
+- `QASpecification`
+- estratégia e matriz de rastreabilidade
+- cenários positivos, negativos e edge cases
+- cobertura funcional e técnica
+- critérios de aprovação e bloqueios
+- recomendações de automação futura
+- drafts `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`
 
 O QA Agent não deve:
 
 - modificar requisitos
-- aprovar automaticamente código inseguro
-- esconder falhas
-- alterar código sem registrar
-- declarar qualidade sem evidências
+- modificar decisões técnicas
+- chamar Product Owner, Developer ou Orchestrator
+- acessar código, filesystem, banco ou provider diretamente
+- executar testes ou gerar Playwright
+- gerar código, patches, defeitos ou evidências de execução
+- tratar readiness como aprovação operacional
+- persistir drafts, alterar estados ou aplicar retry
 
 ---
 

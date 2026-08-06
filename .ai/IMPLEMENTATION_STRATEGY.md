@@ -468,15 +468,30 @@ Uma `ProductOwnerSpecification` válida produz uma proposta técnica rastreável
 
 Objetivo
 
-Implementar o terceiro agente.
+Implementar o terceiro agente como fachada independente de tentativa única.
 
 Entregas
 
-agents/qa
+- workspace `@brq/qa-agent`;
+- request com `ProductOwnerSpecification` e `TechnicalSpecification`;
+- validação cruzada das fontes;
+- `QASpecification` com estratégia, rastreabilidade, cenários, cobertura, riscos, aprovação, bloqueios, prioridades, automação futura e readiness;
+- bundle `prompts/qa/1.0.0`;
+- QA Business Validation com cobertura integral de `AC`, `BR`, `DEC` e `DOD`;
+- drafts `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`;
+- ADR-021 e fluxo visual 35;
+- política QA dentro de 64 KiB.
+
+Restrições
+
+- uma chamada ao provider pelo Agent Runner;
+- sem comunicação operacional entre agentes;
+- sem código, Playwright ou execução de testes;
+- sem persistência, retry, workflow, Orchestrator ou Execution Engine.
 
 Critério
 
-O agente produz plano de testes e relatório de qualidade.
+As duas specifications compatíveis produzem uma proposta de qualidade rastreável e, após os dois gates de validação, exatamente três drafts em memória.
 
 ---
 

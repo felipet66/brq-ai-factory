@@ -36,13 +36,15 @@ Esses drafts documentam a proposta técnica. Não representam código-fonte, tes
 
 # QA
 
-Arquivos previstos para a Sprint do agente; esta lista não é um manifesto do Artifact Generator:
+Drafts canônicos da Sprint 11, na ordem declarada pela Artifact Specification:
 
 test-plan.md
 
-playwright.spec.ts
+traceability-matrix.json
 
-quality-report.md
+qa-specification.md
+
+Esses drafts descrevem estratégia e cobertura planejadas. Não representam código de testes, Playwright, execução, defeitos observados ou aprovação operacional.
 
 ---
 

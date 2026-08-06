@@ -146,7 +146,9 @@ Exemplos
 - architecture.md
 - implementation-plan.md
 - technical-decisions.json
-- playwright.spec.ts
+- test-plan.md
+- traceability-matrix.json
+- qa-specification.md
 
 Atributos
 
