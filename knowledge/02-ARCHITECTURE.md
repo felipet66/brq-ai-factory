@@ -94,6 +94,13 @@ cria `executionId` determinístico, controla `CREATED → RUNNING → SUCCESS | 
 propaga cancelamento e consolida `ExecutionResult` por contratos públicos. O estado é efêmero:
 não existe repository, retry, retomada, concorrência, API ou frontend nesta camada.
 
+### HTTP Adapter Layer
+
+Desde a Sprint 14, Next.js Route Handlers em `apps/web/src/app/api` chamam somente a API pública do
+Execution Engine. O composition root lazy pertence ao host em `apps/web/src/server/runtime.ts`.
+Essa camada valida transporte e contratos, mas não contém regras de negócio, estado ou
+persistência.
+
 ---
 
 ### Knowledge Layer

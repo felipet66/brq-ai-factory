@@ -97,17 +97,18 @@ Nunca deve conter regras de negócio.
 
 ## API
 
-Responsável por expor funcionalidades.
-
-Não contém lógica complexa.
+Adapter HTTP implementado em Next.js 16 Route Handlers. Não contém regra de negócio.
 
 Responsabilidades:
 
-- validar entrada
-- autenticação
-- autorização
-- chamar Execution Engine
-- retornar resposta
+- aplicar controles de transporte e validar entrada com Zod;
+- criar correlação HTTP por `requestId`;
+- chamar somente a API pública do Execution Engine;
+- mapear respostas e erros técnicos;
+- aplicar logs sanitizados e headers mínimos de segurança.
+
+Autenticação, autorização, persistência, execução assíncrona e frontend funcional permanecem fora
+da Sprint 14. O composition root fica no host `apps/web/src/server/runtime.ts`, não no domínio.
 
 ---
 
@@ -846,9 +847,11 @@ A arquitetura será considerada adequada quando:
 - qualquer falha puder ser rastreada por logs e artefatos;
 - o sistema puder evoluir do MVP para uma plataforma enterprise preservando os mesmos princípios arquiteturais.
 
-## Incremento da Sprint 13
+## Incremento da Sprint 14
 
 O Execution Engine implementado é uma fronteira local e efêmera sobre o Orchestrator público. Ele
 cria o ID por hash, realiza uma tentativa, controla cinco estados sem retomada e produz
-`ExecutionResult`. Desenhos deste documento que incluem API, banco, retry, revisão humana ou
-persistência do estado continuam futuros e não descrevem a implementação da Sprint 13.
+`ExecutionResult`. O adapter HTTP agora expõe esse contrato por três Route Handlers, com
+composition root lazy no host, validação limitada de payload, respostas uniformes e logs
+sanitizados. Desenhos deste documento que incluem banco, retry, revisão humana, autenticação,
+frontend ou persistência do estado continuam futuros.

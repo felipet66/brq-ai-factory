@@ -451,3 +451,11 @@ O Engine revalida `ExecutionRequest` e `WorkflowResult`, verifica IDs e request 
 registra payloads. Sua produção depende somente da API pública do Orchestrator e de utilitários
 transversais; agentes, componentes inferiores, filesystem, rede, Prisma e repositories são
 proibidos.
+
+## Fronteira HTTP
+
+O adapter exige JSON UTF-8 não comprimido, limita o body a 512 KiB durante a leitura, usa schemas
+estritos e não retorna causas internas. Respostas são `no-store`, negam framing e sniffing e usam
+políticas restritivas de conteúdo, referência, permissões e recursos. Não existe CORS permissivo.
+Autenticação, autorização e rate limit ainda não foram implementados e devem anteceder exposição
+pública.

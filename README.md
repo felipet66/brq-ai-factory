@@ -40,7 +40,8 @@ brq-ai-factory/
 │   │   ├── ADR-020-DEVELOPER-AGENT-BOUNDARY.md
 │   │   ├── ADR-021-QA-AGENT-BOUNDARY.md
 │   │   ├── ADR-022-ORCHESTRATOR-BOUNDARY.md
-│   │   └── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
+│   │   ├── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
+│   │   └── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -79,7 +80,8 @@ brq-ai-factory/
 │   ├── 34-DEVELOPER_AGENT_FLOW.md
 │   ├── 35-QA_AGENT_FLOW.md
 │   ├── 36-ORCHESTRATOR_FLOW.md
-│   └── 37-EXECUTION_ENGINE_FLOW.md
+│   ├── 37-EXECUTION_ENGINE_FLOW.md
+│   └── 38-HTTP_API_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -115,6 +117,9 @@ npm run prisma:migrate:deploy
 npm run prisma:validate
 npm run dev
 ```
+
+`BRQ_KNOWLEDGE_ROOT` é opcional e, quando informado, deve ser um caminho absoluto. O host web
+resolve `knowledge/` a partir do workspace por padrão.
 
 O MVP utiliza SQLite local. Os comandos de migration inicializam o arquivo configurado em `DATABASE_URL` quando necessário. Nenhuma configuração de deploy faz parte do MVP atual.
 
@@ -237,6 +242,23 @@ O Engine não conhece agentes ou componentes inferiores, não persiste, não ret
 registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
 
 [Fluxo visual do Execution Engine](knowledge/37-EXECUTION_ENGINE_FLOW.md) · [ADR-023](knowledge/ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md)
+
+## HTTP API
+
+A Sprint 14 expõe o Execution Engine exclusivamente por Next.js 16 Route Handlers. Os endpoints
+implementados são `GET /api/health`, `POST /api/executions` e `GET /api/executions/[id]`. A criação
+é síncrona e efêmera; a consulta por ID valida o contrato e retorna 501 até existir persistência.
+
+O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId`,
+propaga o mesmo `AbortSignal` e transporta `ExecutionResult` sem alterar hashes, métricas, lineage
+ou provenance. Logs e erros usam allowlists sanitizadas e todas as respostas recebem headers
+mínimos de segurança.
+
+O composition root fica no host em `apps/web/src/server/runtime.ts`. Ele monta factories públicas
+de forma lazy e fornece somente o `ExecutionEngine`; nenhum workspace de runtime foi criado no
+domínio. A API não conhece agentes ou componentes internos do workflow.
+
+[Fluxo visual da HTTP API](knowledge/38-HTTP_API_FLOW.md) · [ADR-024](knowledge/ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md)
 
 ## Validações
 

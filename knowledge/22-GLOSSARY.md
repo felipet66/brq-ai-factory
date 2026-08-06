@@ -167,3 +167,13 @@ Sprint 13 chama o Orchestrator no máximo uma vez e não persiste, retenta ou co
 
 Contrato terminal que consolida resultado do workflow, metadata versionada, timestamps
 observacionais, métricas, hashes, lineage, provenance e falha sanitizada.
+
+## HTTP API Adapter
+
+Camada de transporte em Next.js Route Handlers que valida HTTP, chama somente o Execution Engine
+público e devolve respostas versionadas, sem regra de negócio ou persistência.
+
+## Composition Root
+
+Bootstrap do host em `apps/web/src/server/runtime.ts` que monta factories públicas e fornece uma
+instância lazy do Execution Engine. Não é módulo de domínio nem registry de execuções.

@@ -1,9 +1,8 @@
 # Sequence Diagrams
 
-O fluxo multiagente implementado na Sprint 12, incluindo Human → Orchestrator → Product Owner →
-Developer → QA → WorkflowResult, está documentado em
-[36-ORCHESTRATOR_FLOW.md](36-ORCHESTRATOR_FLOW.md). Diagramas com Execution Engine, persistência,
-review ou retry permanecem futuros.
+O fluxo multiagente está em [36-ORCHESTRATOR_FLOW.md](36-ORCHESTRATOR_FLOW.md), o ciclo do Engine
+em [37-EXECUTION_ENGINE_FLOW.md](37-EXECUTION_ENGINE_FLOW.md) e o adapter HTTP em
+[38-HTTP_API_FLOW.md](38-HTTP_API_FLOW.md). Persistência, review e retry permanecem futuros.
 
 ## Objetivo
 
@@ -435,3 +434,24 @@ O fluxo atual do Execution Engine, incluindo identidade determinística, estados
 pública, falhas e cancelamento, está documentado em
 [37-EXECUTION_ENGINE_FLOW.md](37-EXECUTION_ENGINE_FLOW.md). Os diagramas persistentes e de retry
 acima permanecem visão futura.
+
+## Sequência implementada na Sprint 14
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant API as Next.js Route Handler
+    participant Engine as Execution Engine
+    participant Orchestrator
+
+    Client->>API: POST /api/executions
+    API->>API: transport guards + Zod + requestId
+    API->>Engine: execute(public ExecutionRequest, same signal)
+    Engine->>Orchestrator: execute(public WorkflowRequest)
+    Orchestrator-->>Engine: WorkflowResult
+    Engine-->>API: ExecutionResult
+    API-->>Client: standardized HTTP response
+```
+
+A sequência completa, incluindo health, lookup 501, status e trust boundaries, está em
+[38-HTTP_API_FLOW.md](38-HTTP_API_FLOW.md).

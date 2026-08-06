@@ -8,12 +8,26 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@brq/agent-runner": "0.1.0",
+    "@brq/ai-provider": "0.1.0",
+    "@brq/artifact-generator": "0.1.0",
+    "@brq/developer-agent": "0.1.0",
+    "@brq/execution-engine": "0.1.0",
+    "@brq/knowledge-loader": "0.1.0",
+    "@brq/orchestrator": "0.1.0",
+    "@brq/product-owner-agent": "0.1.0",
+    "@brq/prompt-builder": "0.1.0",
+    "@brq/qa-agent": "0.1.0",
+    "@brq/response-validator": "0.1.0",
+    "@brq/shared": "0.1.0",
     "next": "^16.3.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -22,6 +36,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@vitest/coverage-v8": "^4.1.10",
     "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.25",

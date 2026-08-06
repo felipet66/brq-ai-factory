@@ -459,3 +459,10 @@ A observabilidade será considerada adequada quando for possível:
 `execution.cancelled` usam contexto allowlisted. `startedAt`, `finishedAt`, timeline, duração e
 métricas são observacionais e não alteram hashes. `engineVersion` e `contractVersion` permitem
 correlacionar a semântica usada em cada resultado.
+
+## Eventos HTTP
+
+`http.request.started`, `http.request.completed` e `http.request.failed` registram apenas
+`requestId`, endpoint estático, método, status, duração, `executionId` conhecido e código de erro
+sanitizado. A API não registra URL completa, query, headers, body, prompts, specifications,
+artifacts, respostas do modelo ou `ExecutionResult`.

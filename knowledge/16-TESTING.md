@@ -368,3 +368,11 @@ Uma funcionalidade só pode ser considerada concluída quando:
 A Sprint 13 testa geração determinística do ID, contratos, máquina de estados, uma única chamada
 ao Orchestrator, correlação, falhas funcionais e técnicas, cancelamento, imutabilidade, métricas,
 lineage, provenance, hashes sem tempo, logs sanitizados, exports e fronteiras de dependência.
+
+## HTTP API Adapter
+
+A Sprint 14 testa contratos de health, execução e lookup, validação Zod estrita, query e métodos,
+media type, encoding, UTF-8, limite declarado e real de 512 KiB, requestId, propagação de
+`AbortSignal`, mapeamento de erros, headers de segurança, logs sem conteúdo, preservação do
+`ExecutionResult`, composition root e fronteira de dependências. Não há Playwright, E2E ou chamada
+externa.

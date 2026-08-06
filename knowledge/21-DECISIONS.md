@@ -37,6 +37,7 @@ Este documento funciona apenas como índice.
 | ADR-021 | QA Agent Boundary and Dual-Specification Handoff             | Accepted |
 | ADR-022 | Orchestrator Boundary and Deterministic Sequential Workflow  | Accepted |
 | ADR-023 | Execution Engine Boundary and Ephemeral Execution Lifecycle  | Accepted |
+| ADR-024 | HTTP API Adapter Boundary and Application Composition Root   | Accepted |
 
 ---
 

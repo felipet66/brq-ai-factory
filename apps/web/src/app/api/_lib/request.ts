@@ -1,0 +1,115 @@
+import { API_ERROR_CODES, MAX_EXECUTION_PAYLOAD_BYTES } from './constants';
+import { HttpApiError } from './errors';
+
+export function createRequestId(): string {
+  return `request-${crypto.randomUUID()}`;
+}
+
+function requireJsonContentType(request: Request): void {
+  const header = request.headers.get('content-type');
+  const mediaType = header?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mediaType !== 'application/json') {
+    throw new HttpApiError('Content-Type application/json é obrigatório.', {
+      code: API_ERROR_CODES.UNSUPPORTED_MEDIA_TYPE,
+      status: 415,
+    });
+  }
+}
+
+function requireIdentityEncoding(request: Request): void {
+  const encoding = request.headers.get('content-encoding')?.trim().toLowerCase();
+  if (encoding !== undefined && encoding !== '' && encoding !== 'identity') {
+    throw new HttpApiError('Content-Encoding não é suportado.', {
+      code: API_ERROR_CODES.UNSUPPORTED_CONTENT_ENCODING,
+      status: 415,
+    });
+  }
+}
+
+function assertContentLength(request: Request, maxBytes: number): void {
+  const value = request.headers.get('content-length');
+  if (value === null) return;
+  if (!/^\d+$/.test(value)) {
+    throw new HttpApiError('Content-Length inválido.', {
+      code: API_ERROR_CODES.INVALID_REQUEST,
+      status: 400,
+      path: 'headers.content-length',
+    });
+  }
+  if (Number(value) > maxBytes) {
+    throw new HttpApiError('O payload excede o limite permitido.', {
+      code: API_ERROR_CODES.PAYLOAD_TOO_LARGE,
+      status: 413,
+    });
+  }
+}
+
+async function readBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
+  if (request.body === null) return new Uint8Array();
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    size += chunk.value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new HttpApiError('O payload excede o limite permitido.', {
+        code: API_ERROR_CODES.PAYLOAD_TOO_LARGE,
+        status: 413,
+      });
+    }
+    chunks.push(chunk.value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+export async function readExecutionJson(
+  request: Request,
+  maxBytes = MAX_EXECUTION_PAYLOAD_BYTES,
+): Promise<unknown> {
+  requireJsonContentType(request);
+  requireIdentityEncoding(request);
+  assertContentLength(request, maxBytes);
+
+  const bytes = await readBytes(request, maxBytes);
+  let content: string;
+  try {
+    content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new HttpApiError('O payload deve utilizar UTF-8 válido.', {
+      code: API_ERROR_CODES.UNSUPPORTED_MEDIA_TYPE,
+      status: 415,
+      cause: error,
+    });
+  }
+
+  try {
+    return JSON.parse(content) as unknown;
+  } catch (error) {
+    throw new HttpApiError('O corpo JSON é inválido.', {
+      code: API_ERROR_CODES.INVALID_JSON,
+      status: 400,
+      cause: error,
+    });
+  }
+}
+
+export function rejectQueryParameters(request: Request): void {
+  if (new URL(request.url).searchParams.size > 0) {
+    throw new HttpApiError('Parâmetros de query não são aceitos.', {
+      code: API_ERROR_CODES.INVALID_REQUEST,
+      status: 400,
+      path: 'query',
+    });
+  }
+}

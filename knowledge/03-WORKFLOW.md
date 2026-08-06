@@ -95,6 +95,10 @@ Desde a Sprint 13, o Execution Engine cria a identidade e inicia esse workflow e
 pela API pública do Orchestrator. O ciclo completo permanece em memória, sem persistir estado,
 criar novas tentativas ou executar revisão humana.
 
+Desde a Sprint 14, `POST /api/executions` entrega o request validado ao Execution Engine e devolve
+o resultado terminal de forma síncrona. O adapter HTTP não decide progressão, não acessa agentes e
+não mantém registro consultável da execução.
+
 Persistência de artifacts pertence ao fluxo futuro. Product Owner, Developer e QA retornam somente drafts em memória.
 
 Toda execução deve gerar logs.

@@ -1,5 +1,5 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -210,6 +210,12 @@
       "order": 37
     },
     {
+      "id": "knowledge:http-api-flow",
+      "locator": "38-HTTP_API_FLOW.md",
+      "category": "API",
+      "order": 38
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -346,6 +352,12 @@
       "locator": "ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md",
       "category": "ADR",
       "order": 1023
+    },
+    {
+      "id": "adr:024",
+      "locator": "ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1024
     }
   ]
 }

@@ -407,6 +407,12 @@ Na Sprint 13, `core/execution-engine` é o único caller de produção do Orches
 métricas são observacionais; lineage e provenance permanecem separados. O Engine não conhece
 agentes, não persiste, não retenta e não implementa nenhum item da Sprint 14.
 
+Na Sprint 14, `apps/web/src/app/api` implementa apenas o adapter HTTP para a API pública do
+Execution Engine. O composition root lazy fica no host em `apps/web/src/server/runtime.ts`; não
+existe workspace de runtime no domínio. A API não conhece agentes nem internals do Orchestrator,
+não persiste, não autentica, não executa de forma assíncrona e não implementa nenhum item da
+Sprint 15.
+
 ---
 
 # Segurança

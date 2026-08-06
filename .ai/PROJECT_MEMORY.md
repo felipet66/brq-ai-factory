@@ -2,8 +2,8 @@
 
 ## Estado atual
 
-Sprint 13 — Execution Engine implementada e validada tecnicamente em 2026-08-05, sem commit e
-aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação explícita.
+Sprint 14 — HTTP API Adapter implementada e validada tecnicamente em 2026-08-06, sem commit e
+aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -22,6 +22,7 @@ aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação ex
 - QA Agent como terceira fachada concreta, responsável somente por especificação de qualidade declarativa e rastreável;
 - Orchestrator como coordenador central do workflow fixo Product Owner → Developer → QA, sem Execution Engine, retry ou persistência;
 - Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
+- HTTP API como adapter Next.js sobre o Execution Engine, com composition root lazy no host;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -87,7 +88,7 @@ aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação ex
 - IDs documentais explícitos, estáveis e independentes de filenames;
 - índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
 - seleção determinística e versionada para contextos canônicos;
-- manifesto e política `1.8.0`, incluindo os fluxos de Product Owner, Developer e QA e os ADRs até o ADR-021;
+- manifesto e política `1.11.0`, incluindo o fluxo HTTP e os ADRs até o ADR-024;
 - contexto `DEVELOPER` com seis documentos obrigatórios que cabem no orçamento padrão de 64 KiB e documentos adicionais opcionais em ordem determinística;
 - orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
 - composição estruturada com delimitadores, ID, categoria e hash por documento;
@@ -213,6 +214,8 @@ aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação ex
 - ADR-020 registra o handoff contratual para o Developer Agent, sua Business Validation, os três drafts técnicos e a ausência de geração de código, testes e workflow;
 - ADR-021 registra o handoff contratual para o QA Agent, a validação determinística das duas origens, a cobertura funcional e técnica, os três drafts de qualidade e a ausência de execução, geração de código, workflow e persistência;
 - ADR-022 registra a fronteira do Orchestrator, o workflow sequencial, timeline observacional, lineage e provenance separados, hashes determinísticos e ausência de retry, persistência e Execution Engine;
+- ADR-023 registra a fronteira do Execution Engine, identidade determinística, ciclo efêmero, metadados versionados e integração exclusiva com o Orchestrator público;
+- ADR-024 registra a API como adapter HTTP, os três endpoints, o composition root no host, os controles de transporte e a ausência de persistência e regras de negócio;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -427,6 +430,40 @@ aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação ex
 - nenhum ADR histórico entre ADR-001 e ADR-022 foi alterado; somente ADR-023 foi criado;
 - nenhum item da Sprint 14 foi iniciado e nenhum commit foi criado.
 
+## Implementação da Sprint 14
+
+- Next.js 16 Route Handlers em `apps/web/src/app/api/` para health, criação e lookup contratual;
+- `GET /api/health` independente do runtime, de IA e de banco;
+- `POST /api/executions` síncrono e dependente somente da API pública do Execution Engine;
+- `GET /api/executions/[id]` com validação de ID e resposta 501 sem store oculto;
+- contratos HTTP Zod estritos, `requestId` server-side e respostas padronizadas;
+- limite de 512 KiB aplicado ao header e ao stream, JSON UTF-8 e encoding identity;
+- propagação do mesmo `AbortSignal` e transporte integral de hashes, métricas, lineage e provenance;
+- headers mínimos de segurança, métodos inválidos uniformes e logs allowlisted;
+- composition root lazy exclusivamente em `apps/web/src/server/runtime.ts`;
+- nenhum workspace `core/ai-factory-runtime` criado;
+- manifesto e política de Knowledge atualizados para `1.11.0`, com fluxo 38 e ADR-024;
+- nenhuma regra funcional ou componente anterior reescrito.
+
+## Validações da Sprint 14
+
+- format e format check: aprovados;
+- lint: aprovado sem warnings;
+- typecheck raiz e aplicação: aprovado;
+- 27 testes específicos da API/runtime e 2 testes anteriores da aplicação aprovados;
+- 731 testes aprovados no total, sendo 702 da suíte raiz e 29 da aplicação;
+- cobertura global da suíte raiz: 93,56% statements, 85,52% branches, 98,37% functions e 93,98% lines;
+- cobertura HTTP/runtime da aplicação: 97,63% statements, 90,65% branches, 90,90% functions e 98,76% lines;
+- Prisma validate: aprovado;
+- build de produção Next.js com Webpack: aprovado, com exatamente as rotas `/api/health`,
+  `/api/executions` e `/api/executions/[id]`;
+- `git diff --check`: aprovado;
+- nenhum ADR histórico entre ADR-001 e ADR-023 foi alterado; somente ADR-024 foi criado;
+- nenhuma dependência externa nova foi adicionada;
+- nenhuma chamada externa, persistência, autenticação, autorização, execução assíncrona, retry,
+  frontend funcional ou Playwright foi implementado;
+- nenhum item da Sprint 15 foi iniciado e nenhum commit foi criado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
@@ -434,8 +471,7 @@ aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação ex
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, workflows dinâmicos e concorrência;
-- Execution Engine;
-- API e frontend funcional;
+- frontend funcional;
 - persistência funcional das execuções dos agentes;
 - revisão humana integrada ao fluxo;
 - autenticação e autorização;

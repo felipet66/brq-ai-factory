@@ -560,18 +560,29 @@ produz resultado terminal rastreável sem conhecer agentes ou componentes inferi
 
 Objetivo
 
-Criar a API oficial.
+Expor o Execution Engine por um adapter HTTP sem regra de negócio.
 
 Endpoints
 
-- Projects
-- Executions
-- Agents
-- Prompts
+- `GET /api/health`;
+- `POST /api/executions`;
+- `GET /api/executions/[id]`, com 501 até existir persistência.
+
+Decisões da implementação
+
+- Next.js 16 Route Handlers em `apps/web/src/app/api/`;
+- dependência funcional exclusiva da API pública do Execution Engine;
+- composition root lazy em `apps/web/src/server/runtime.ts`, sem workspace de runtime no domínio;
+- contratos HTTP Zod estritos e respostas `{ success, data, metadata, errors }`;
+- `requestId` criado pelo adapter e `executionId` criado somente pelo Engine;
+- payload JSON limitado a 512 KiB e headers mínimos de segurança;
+- logs allowlisted, sem conteúdo do usuário ou resultados;
+- sem autenticação, persistência, execução assíncrona, retry, frontend ou item da Sprint 15.
 
 Critério
 
-Frontend consegue consumir a plataforma.
+Um cliente HTTP consegue verificar saúde e executar o pipeline completo exclusivamente pelo
+Execution Engine, com respostas versionadas e sanitizadas.
 
 ---
 

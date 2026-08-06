@@ -2,7 +2,8 @@
 
 As questões abaixo devem ser resolvidas antes das Sprints relacionadas:
 
-- confirmar o versionamento dos endpoints antes da Sprint 14;
+- resolvido pelo ADR-024: os endpoints permanecem sem prefixo e o contrato HTTP usa `apiVersion`
+  `1.0.0`; mudança incompatível exige nova decisão;
 - definir a estratégia de execução assíncrona antes de qualquer deploy;
 - definir a política de retenção de logs e artefatos antes da observabilidade completa.
 - definir um identificador de linhagem antes de versionar Artifacts entre Executions.

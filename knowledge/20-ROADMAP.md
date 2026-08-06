@@ -11,8 +11,8 @@ Cada fase deve entregar valor de forma independente.
 As fases podem ser reavaliadas conforme novos aprendizados.
 
 Estado incremental: Foundation, camadas core, fachadas Product Owner, Developer e QA,
-Orchestrator sequencial e Execution Engine efêmero estão concluídos até a Sprint 13. API,
-frontend funcional e persistência funcional permanecem em Sprints futuras.
+Orchestrator sequencial, Execution Engine efêmero e adapter HTTP estão concluídos até a Sprint 14.
+Frontend funcional e persistência funcional permanecem em Sprints futuras.
 
 ---
 
@@ -55,6 +55,7 @@ Entregas:
 - Response Validator
 - Orchestrator
 - Execution Engine
+- HTTP API adapter
 - Product Owner Agent
 - Developer Agent
 - QA Agent

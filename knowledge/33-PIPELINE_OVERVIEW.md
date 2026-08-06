@@ -2,15 +2,19 @@
 
 ## Objetivo
 
-Este documento apresenta o pipeline implementado até a Sprint 12. Product Owner, Developer e QA continuam fachadas isoladas de tentativa única; o Orchestrator coordena a sequência exclusivamente pelos entrypoints públicos.
+Este documento apresenta o pipeline implementado até a Sprint 14. Product Owner, Developer e QA
+continuam fachadas isoladas de tentativa única; o Orchestrator coordena a sequência, o Execution
+Engine controla o ciclo efêmero e a API apenas adapta HTTP.
 
-Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md), [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md) e [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md).
+Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md), [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md), [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md), [ADR-023](ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md) e [ADR-024](ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md).
 
 ## Visão macro
 
 ```mermaid
 flowchart LR
-    DEMAND["Demanda"] --> ORCH["Orchestrator — Sprint 12"]
+    HTTP["POST /api/executions — Sprint 14"] --> ENGINE["Execution Engine — Sprint 13"]
+    DEMAND["Demanda"] --> HTTP
+    ENGINE --> ORCH["Orchestrator — Sprint 12"]
     ORCH --> PO["Product Owner Agent — Sprint 9"]
     PO --> POS["ProductOwnerSpecification + 3 drafts"]
     POS --> ORCH
@@ -21,7 +25,10 @@ flowchart LR
     QA --> QS["QASpecification + 3 drafts"]
     QS --> ORCH
     ORCH --> RESULT["WorkflowResult"]
-    ORCH -.-> FUTURE["Execution Engine, retry, review e persistência — futuros"]
+    RESULT --> ENGINE
+    ENGINE --> EXECUTION["ExecutionResult"]
+    EXECUTION --> HTTP
+    ORCH -.-> FUTURE["retry, review e persistência — futuros"]
 ```
 
 Nenhuma seta representa comunicação direta entre fachadas. O Orchestrator recebe os resultados e
@@ -193,14 +200,13 @@ O Orchestrator atual cria requests, decide apenas continuidade sequencial, propa
 liga criptograficamente os handoffs. Revisão, nova tentativa, enriquecimento e persistência de
 drafts permanecem futuros. Nenhuma dessas responsabilidades está nas fachadas.
 
-## O que não existe na Sprint 12
+## O que não existe na Sprint 14
 
-- Execution Engine;
 - criação ou transição de estados persistidos;
 - retry funcional;
 - revisão humana auditável;
 - persistência ou versionamento de artifacts;
-- API ou frontend funcional;
+- frontend funcional;
 - execução ou geração de código e testes;
 - Playwright;
 - seleção dinâmica ou registry global de prompts.
@@ -217,8 +223,11 @@ Demanda -> Product Owner Specification
 WorkflowResult com timeline, lineage, provenance, métricas e hashes
                       ↓
 ExecutionResult com ciclo local e metadata versionada
+                      ↓
+HTTP Response versionada e sanitizada
 ```
 
 Os três resultados continuam contratos e drafts de tentativas isoladas. `WorkflowResult` os
 coordena em memória. O Execution Engine da Sprint 13 envolve esse resultado em um ciclo efêmero,
-mas ainda não representa uma `Execution` persistida.
+e o adapter da Sprint 14 o transporta sem alteração, mas ainda não representa uma `Execution`
+persistida.

@@ -92,6 +92,10 @@ apps/
 web/
 ```
 
+Na Sprint 14, `apps/web/src/app/api/` contém exclusivamente o adapter HTTP e
+`apps/web/src/server/runtime.ts` contém o composition root lazy do host. A composição concreta não
+é um workspace de domínio e não mantém estado de execução.
+
 No futuro:
 
 ```
