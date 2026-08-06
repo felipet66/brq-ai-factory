@@ -2,7 +2,8 @@
 
 O fluxo multiagente está em [36-ORCHESTRATOR_FLOW.md](36-ORCHESTRATOR_FLOW.md), o ciclo do Engine
 em [37-EXECUTION_ENGINE_FLOW.md](37-EXECUTION_ENGINE_FLOW.md) e o adapter HTTP em
-[38-HTTP_API_FLOW.md](38-HTTP_API_FLOW.md). Persistência, review e retry permanecem futuros.
+[38-HTTP_API_FLOW.md](38-HTTP_API_FLOW.md). O Frontend MVP está em
+[39-FRONTEND_FLOW.md](39-FRONTEND_FLOW.md). Persistência, review e retry permanecem futuros.
 
 ## Objetivo
 
@@ -455,3 +456,30 @@ sequenceDiagram
 
 A sequência completa, incluindo health, lookup 501, status e trust boundaries, está em
 [38-HTTP_API_FLOW.md](38-HTTP_API_FLOW.md).
+
+## Sequência implementada na Sprint 15
+
+```mermaid
+sequenceDiagram
+    actor User as Usuário
+    participant Frontend
+    participant Client as execution-client
+    participant API as POST /api/executions
+    participant Engine as Execution Engine
+    participant Workflow
+
+    User->>Frontend: Project Name + Objective
+    Frontend->>Client: executeWorkflow(input)
+    Client->>API: request HTTP 1.0.0
+    API->>Engine: execute(public ExecutionRequest)
+    Engine->>Workflow: executar PO → Developer → QA
+    Workflow-->>Engine: WorkflowResult
+    Engine-->>API: ExecutionResult
+    API-->>Client: envelope HTTP
+    Client->>Client: projetar ExecutionSummary
+    Client-->>Frontend: somente summary
+    Frontend-->>User: resultado resumido
+```
+
+O resultado bruto não atravessa o client HTTP. A sequência completa e os estados locais estão em
+[39-FRONTEND_FLOW.md](39-FRONTEND_FLOW.md).

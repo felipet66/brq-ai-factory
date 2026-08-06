@@ -17,7 +17,13 @@ export default defineConfig({
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     coverage: {
       provider: 'v8',
-      include: ['src/app/api/**/*.ts', 'src/server/runtime.ts'],
+      include: [
+        'src/app/api/**/*.ts',
+        'src/app/page.tsx',
+        'src/api/**/*.ts',
+        'src/components/execution/**/*.tsx',
+        'src/server/runtime.ts',
+      ],
       exclude: ['src/**/*.spec.ts', 'src/app/api/**/route.ts'],
       reporter: ['text', 'json-summary'],
       thresholds: {

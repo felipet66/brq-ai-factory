@@ -459,3 +459,19 @@ estritos e não retorna causas internas. Respostas são `no-store`, negam framin
 políticas restritivas de conteúdo, referência, permissões e recursos. Não existe CORS permissivo.
 Autenticação, autorização e rate limit ainda não foram implementados e devem anteceder exposição
 pública.
+
+## Fronteira do Frontend MVP
+
+O Frontend chama somente a API HTTP e nunca importa ou acessa provider, Engine, Orchestrator,
+agentes, runtime ou internals de Route Handlers. Um client interno reduz imediatamente o
+`ExecutionResult` bruto para `ExecutionSummary`; o payload completo não entra em estado, props,
+logs, console ou storage do browser.
+
+Todo conteúdo remoto é renderizado como texto React. HTML recebido não é interpretado e
+`dangerouslySetInnerHTML` é proibido. A interface não exibe prompts, specifications, artifacts,
+knowledge, respostas da IA, contexto do usuário ou logs.
+
+A presença de IDs e configurações técnicas no browser é uma limitação temporária da API `1.0.0`,
+não uma fronteira de confiança definitiva. Evolução futura deve mover esses valores para
+configuração backend versionada. Enquanto autenticação, autorização e rate limit não existirem, o
+Frontend MVP permanece restrito a ambiente local ou explicitamente permitido e dados sintéticos.

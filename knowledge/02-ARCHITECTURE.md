@@ -64,8 +64,21 @@ Tecnologias:
 
 - Next.js
 - React
-- Tailwind
+- Tailwind (configuração preexistente, sem expansão na Sprint 15)
 - TypeScript
+- CSS da aplicação
+
+Desde a Sprint 15, a Presentation Layer contém uma única página funcional. `page.tsx` permanece
+Server Component e compõe uma subárvore client mínima com estado local. Todo HTTP passa por um
+client interno; componentes não chamam `fetch` diretamente.
+
+O `ExecutionResult` bruto fica restrito ao client e é projetado em `ExecutionSummary`, único
+contrato propagado por props ou estado React. A camada não conhece Execution Engine, Orchestrator,
+agentes, runtime ou internals da API e não implementa regra de negócio.
+
+Como a API `1.0.0` exige IDs e configurações técnicas dos agentes, o browser ainda fornece um perfil
+versionado e IDs gerados por submissão. Essa é uma limitação temporária; a responsabilidade
+definitiva deve migrar para configuração confiável no backend em evolução futura do contrato HTTP.
 
 ---
 

@@ -41,7 +41,8 @@ brq-ai-factory/
 │   │   ├── ADR-021-QA-AGENT-BOUNDARY.md
 │   │   ├── ADR-022-ORCHESTRATOR-BOUNDARY.md
 │   │   ├── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
-│   │   └── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
+│   │   ├── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
+│   │   └── ADR-025-FRONTEND-MVP.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -81,7 +82,8 @@ brq-ai-factory/
 │   ├── 35-QA_AGENT_FLOW.md
 │   ├── 36-ORCHESTRATOR_FLOW.md
 │   ├── 37-EXECUTION_ENGINE_FLOW.md
-│   └── 38-HTTP_API_FLOW.md
+│   ├── 38-HTTP_API_FLOW.md
+│   └── 39-FRONTEND_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -259,6 +261,23 @@ de forma lazy e fornece somente o `ExecutionEngine`; nenhum workspace de runtime
 domínio. A API não conhece agentes ou componentes internos do workflow.
 
 [Fluxo visual da HTTP API](knowledge/38-HTTP_API_FLOW.md) · [ADR-024](knowledge/ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md)
+
+## Frontend MVP
+
+A Sprint 15 adiciona uma única página para iniciar o workflow por `POST /api/executions`. O
+formulário recebe Project Name e Objective e apresenta somente executionId, status, duração,
+readiness, hashes e resumos de lineage e provenance.
+
+Um client HTTP interno é o único ponto que chama `fetch`. O `ExecutionResult` bruto fica restrito a
+ele e é reduzido para `ExecutionSummary`, único contrato aceito pela árvore React. O Frontend não
+importa Engine, Orchestrator, agentes, runtime ou internals da API e não renderiza prompts,
+specifications, artifacts, knowledge, respostas da IA ou logs.
+
+A API `1.0.0` ainda exige IDs e configurações técnicas dos agentes no request. O client fornece um
+perfil técnico versionado e gera IDs por submissão como limitação temporária; essa responsabilidade
+deverá migrar para configuração confiável no backend em uma futura evolução versionada do contrato.
+
+[Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
 
 ## Validações
 

@@ -122,6 +122,10 @@ Na seguinte ordem:
 36-ORCHESTRATOR_FLOW.md
 
 37-EXECUTION_ENGINE_FLOW.md
+
+38-HTTP_API_FLOW.md
+
+39-FRONTEND_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -412,6 +416,14 @@ Execution Engine. O composition root lazy fica no host em `apps/web/src/server/r
 existe workspace de runtime no domínio. A API não conhece agentes nem internals do Orchestrator,
 não persiste, não autentica, não executa de forma assíncrona e não implementa nenhum item da
 Sprint 15.
+
+Na Sprint 15, o Frontend MVP em `apps/web/src/app` consome exclusivamente `POST /api/executions`
+por um client HTTP interno. O `ExecutionResult` bruto fica restrito a esse client e é projetado no
+único contrato aceito pela árvore React, `ExecutionSummary`. Componentes não importam `@brq/*`,
+runtime ou internals da API, não chamam `fetch` diretamente e não renderizam HTML remoto. IDs e
+metadados técnicos fornecidos pelo browser são limitação temporária da API `1.0.0`; uma evolução
+futura do contrato deve mover essa responsabilidade para configuração confiável no backend. A
+Sprint não implementa nenhum item da Sprint 16.
 
 ---
 

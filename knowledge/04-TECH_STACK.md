@@ -12,11 +12,15 @@ TypeScript
 
 UI
 
-TailwindCSS
+TailwindCSS preexistente e CSS da aplicação; nenhuma biblioteca de UI foi adicionada na Sprint 15
 
 Gerenciamento de Estado
 
-Zustand
+Zustand permanece na visão tecnológica, mas o Frontend MVP usa somente estado local do React
+
+Integração
+
+Web Fetch API encapsulada em um client HTTP interno
 
 Runtime
 

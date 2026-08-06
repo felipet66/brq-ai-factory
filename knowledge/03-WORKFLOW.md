@@ -99,6 +99,11 @@ Desde a Sprint 14, `POST /api/executions` entrega o request validado ao Executio
 o resultado terminal de forma síncrona. O adapter HTTP não decide progressão, não acessa agentes e
 não mantém registro consultável da execução.
 
+Desde a Sprint 15, a página inicial envia Project Name e Objective exclusivamente por esse endpoint.
+O client HTTP complementa o request exigido pela API `1.0.0` e reduz o `ExecutionResult` bruto para
+`ExecutionSummary` antes de devolver dados ao React. IDs técnicos no browser são uma limitação
+temporária; sua responsabilidade definitiva deve migrar ao backend em evolução futura do contrato.
+
 Persistência de artifacts pertence ao fluxo futuro. Product Owner, Developer e QA retornam somente drafts em memória.
 
 Toda execução deve gerar logs.

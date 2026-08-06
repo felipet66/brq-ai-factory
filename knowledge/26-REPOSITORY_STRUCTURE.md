@@ -96,6 +96,25 @@ Na Sprint 14, `apps/web/src/app/api/` contém exclusivamente o adapter HTTP e
 `apps/web/src/server/runtime.ts` contém o composition root lazy do host. A composição concreta não
 é um workspace de domínio e não mantém estado de execução.
 
+Na Sprint 15, a interface permanece no mesmo host:
+
+```text
+apps/web/src/
+├── app/
+│   ├── page.tsx
+│   └── globals.css
+├── components/
+│   └── componentes do Frontend MVP
+├── api/
+│   └── execution-client.ts
+└── server/
+    └── runtime.ts
+```
+
+`page.tsx` é Server Component. Componentes browser-side podem depender apenas do client HTTP e de
+DTOs locais; não importam `@brq/*`, `server/` ou internals de `app/api/`. `ExecutionSummary` é o
+único resultado propagado pela árvore React.
+
 No futuro:
 
 ```

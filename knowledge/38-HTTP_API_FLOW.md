@@ -175,8 +175,12 @@ O `requestId` criado por chamada integra o `ExecutionRequest` entregue ao Engine
 entrada completa, toda sequência e todos os hashes continuam determinísticos. Timestamps e duração
 HTTP permanecem somente observacionais.
 
-## Fora do escopo
+## Fora do escopo da Sprint 14
 
 Persistência, lookup real, autenticação, autorização, filas, execução assíncrona, retry, scheduler,
 workers, concorrência, cache, rate limit, websocket, SSE, upload, download, OpenAPI, SDK, CLI,
 frontend funcional, Playwright, monitoramento distribuído e qualquer item da Sprint 15.
+
+Essa lista registra o limite histórico do incremento da API. Desde a Sprint 15, o Frontend MVP
+consome este adapter sem alterar seus contratos ou responsabilidades; consulte
+[39-FRONTEND_FLOW.md](39-FRONTEND_FLOW.md).

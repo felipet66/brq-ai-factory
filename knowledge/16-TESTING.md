@@ -376,3 +376,18 @@ media type, encoding, UTF-8, limite declarado e real de 512 KiB, requestId, prop
 `AbortSignal`, mapeamento de erros, headers de segurança, logs sem conteúdo, preservação do
 `ExecutionResult`, composition root e fronteira de dependências. Não há Playwright, E2E ou chamada
 externa.
+
+## Frontend MVP
+
+A Sprint 15 usa Vitest, jsdom e Testing Library para cobrir formulário, validação, loading,
+submissão única, sucesso, resultado funcional `FAILED`, erros HTTP/rede/contrato, client HTTP e
+componentes apresentacionais. Testes de fronteira garantem que:
+
+- somente o client interno chama `fetch`;
+- browser code não importa `@brq/*`, runtime ou internals da API;
+- `ExecutionResult` bruto não é propagado para componentes;
+- `dangerouslySetInnerHTML` não é utilizado;
+- apenas campos de `ExecutionSummary` são renderizados.
+
+A cobertura da aplicação inclui os novos componentes e o client sem reduzir os thresholds
+existentes. Playwright, browser real, E2E e chamada real a provider permanecem fora da Sprint 15.

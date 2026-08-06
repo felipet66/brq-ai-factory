@@ -2,8 +2,8 @@
 
 ## Estado atual
 
-Sprint 14 — HTTP API Adapter implementada e validada tecnicamente em 2026-08-06, sem commit e
-aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação explícita.
+Sprint 15 — Frontend MVP implementado e validado tecnicamente em 2026-08-06, sem commit e
+aguardando aprovação humana. Nenhum item da Sprint 16 foi iniciado.
 
 ## Fundação técnica
 
@@ -23,6 +23,7 @@ aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação ex
 - Orchestrator como coordenador central do workflow fixo Product Owner → Developer → QA, sem Execution Engine, retry ou persistência;
 - Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
 - HTTP API como adapter Next.js sobre o Execution Engine, com composition root lazy no host;
+- Frontend MVP como Presentation Adapter HTTP-only sobre a API pública;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -88,7 +89,7 @@ aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação ex
 - IDs documentais explícitos, estáveis e independentes de filenames;
 - índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
 - seleção determinística e versionada para contextos canônicos;
-- manifesto e política `1.11.0`, incluindo o fluxo HTTP e os ADRs até o ADR-024;
+- manifesto e política `1.12.0`, incluindo o fluxo do Frontend e os ADRs até o ADR-025;
 - contexto `DEVELOPER` com seis documentos obrigatórios que cabem no orçamento padrão de 64 KiB e documentos adicionais opcionais em ordem determinística;
 - orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
 - composição estruturada com delimitadores, ID, categoria e hash por documento;
@@ -216,6 +217,9 @@ aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação ex
 - ADR-022 registra a fronteira do Orchestrator, o workflow sequencial, timeline observacional, lineage e provenance separados, hashes determinísticos e ausência de retry, persistência e Execution Engine;
 - ADR-023 registra a fronteira do Execution Engine, identidade determinística, ciclo efêmero, metadados versionados e integração exclusiva com o Orchestrator público;
 - ADR-024 registra a API como adapter HTTP, os três endpoints, o composition root no host, os controles de transporte e a ausência de persistência e regras de negócio;
+- ADR-025 registra o Frontend como Presentation Adapter HTTP-only, a projeção exclusiva para
+  `ExecutionSummary`, os quatro estados locais e a limitação temporária da configuração técnica no
+  browser;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -464,6 +468,43 @@ aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação ex
   frontend funcional ou Playwright foi implementado;
 - nenhum item da Sprint 15 foi iniciado e nenhum commit foi criado.
 
+## Implementação da Sprint 15
+
+- página inicial única com Project Name, Objective e execução explícita do workflow;
+- consumo exclusivo de `POST /api/executions` por um client HTTP interno;
+- Project Name projetado em `demand.title` e Objective em `demand.description`;
+- `ExecutionResult` bruto restrito ao client e redução imediata para `ExecutionSummary`;
+- React recebe somente executionId, status, duração, readiness, hashes e resumos de lineage e
+  provenance;
+- `idle`, `loading`, `success` e `error` controlados por estado local, sem store global;
+- resultado funcional `FAILED` por HTTP 200 tratado como resultado resolvido;
+- IDs e metadados dos agentes no browser são limitação temporária da API `1.0.0`; uma evolução
+  futura do contrato deve mover essa responsabilidade para configuração confiável no backend;
+- CSS existente, sem novas bibliotecas de UI, estado ou data fetching;
+- nenhum HTML remoto, `dangerouslySetInnerHTML`, log ou storage de payloads;
+- manifesto e política do Knowledge Loader `1.12.0`, fluxo 39 e ADR-025;
+- nenhuma alteração em ADRs 001–024 e nenhum item da Sprint 16 iniciado.
+
+## Validações da Sprint 15
+
+- format e format check: aprovados;
+- lint: aprovado sem warnings;
+- typecheck raiz e aplicação: aprovado;
+- 32 novos testes da aplicação adicionados;
+- 763 testes aprovados no total, sendo 702 da suíte raiz e 61 da aplicação;
+- cobertura global da suíte raiz: 93,54% statements, 85,35% branches, 98,37% functions e 93,95%
+  lines;
+- cobertura da aplicação: 96,94% statements, 88,94% branches, 93,33% functions e 98,57% lines;
+- Prisma generate e Prisma validate: aprovados;
+- build de produção Next.js com Webpack: aprovado, preservando a página estática e exatamente as
+  rotas `/api/health`, `/api/executions` e `/api/executions/[id]`;
+- `git diff --check`: aprovado;
+- nenhum ADR histórico entre ADR-001 e ADR-024 foi alterado; somente ADR-025 foi criado;
+- nenhuma dependência externa nova foi adicionada;
+- nenhuma chamada externa, persistência, autenticação, autorização, polling, websocket, retry,
+  Playwright ou item da Sprint 16 foi implementado;
+- nenhum commit foi criado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
@@ -471,7 +512,7 @@ aguardando aprovação humana. A Sprint 15 não deve começar sem aprovação ex
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, workflows dinâmicos e concorrência;
-- frontend funcional;
+- páginas adicionais, dashboard, histórico, artifacts completos e logs no frontend;
 - persistência funcional das execuções dos agentes;
 - revisão humana integrada ao fluxo;
 - autenticação e autorização;

@@ -50,9 +50,10 @@ Resultado
 
 ## Objetivos do MVP
 
-Os objetivos abaixo descrevem o produto completo. A implementação é incremental: até a Sprint 14,
-Orchestrator, Execution Engine efêmero e adapter HTTP estão disponíveis sobre as três fachadas.
-Geração e execução de código ou testes, frontend e persistência funcional continuam futuros.
+Os objetivos abaixo descrevem o produto completo. A implementação é incremental: até a Sprint 15,
+Orchestrator, Execution Engine efêmero, adapter HTTP e Frontend MVP estão disponíveis sobre as três
+fachadas. Geração e execução de código ou testes, páginas adicionais e persistência funcional
+continuam futuras.
 
 - Criar uma demanda
 - Gerar User Story
@@ -124,9 +125,10 @@ UX
 
 Multi Model
 
-## Estado incremental da Sprint 14
+## Estado incremental da Sprint 15
 
 O Execution Engine é a fronteira efêmera acima do Orchestrator. Ele cria a identidade
 determinística da execução, controla um único ciclo local e consolida `ExecutionResult`. O adapter
-HTTP expõe health, criação síncrona e o contrato futuro de lookup. Frontend funcional,
-persistência da execução, retry e qualquer item da Sprint 15 permanecem futuros.
+HTTP expõe health, criação síncrona e o contrato futuro de lookup. O Frontend MVP usa somente esse
+adapter, inicia o workflow por dois campos e exibe um `ExecutionSummary` minimizado. Persistência da
+execução, dashboard, retry e qualquer item da Sprint 16 permanecem futuros.

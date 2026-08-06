@@ -590,20 +590,35 @@ Execution Engine, com respostas versionadas e sanitizadas.
 
 Objetivo
 
-Criar interface web.
+Provar a arquitetura completa por uma interface web mínima que utilize exclusivamente a API HTTP.
 
-Páginas
+Escopo
 
-- Dashboard
-- Projetos
-- Nova Execução
-- Execução
-- Artefatos
-- Logs
+- uma única página inicial em `apps/web/src/app/page.tsx`;
+- formulário com Project Name e Objective;
+- estados locais `idle`, `loading`, `success` e `error`;
+- exibição de executionId, status, duração, readiness, hashes, lineage e provenance resumidos;
+- client HTTP interno como único ponto autorizado a chamar `POST /api/executions`;
+- `ExecutionSummary` como único contrato propagado para componentes React;
+- CSS existente, sem biblioteca de UI, store global ou data fetching.
+
+Decisões da implementação
+
+- `page.tsx` permanece Server Component e compõe uma subárvore client mínima;
+- Project Name mapeia para `demand.title` e Objective para `demand.description`;
+- o `ExecutionResult` bruto fica restrito ao client HTTP e nunca entra em estado ou props React;
+- configuração técnica versionada e IDs técnicos gerados por submissão são enviados pelo browser
+  porque a API `1.0.0` os exige;
+- essa configuração no browser é temporária e deve migrar ao backend em evolução futura do
+  contrato;
+- HTTP 200 com status funcional `FAILED` é resultado resolvido, não erro de transporte;
+- sem persistência, páginas adicionais, polling, websocket, autenticação, Playwright ou item da
+  Sprint 16.
 
 Critério
 
-Usuário consegue utilizar todo o fluxo.
+Usuário inicia o workflow completo por HTTP e recebe somente o resumo permitido, sem acesso direto
+ao núcleo nem exposição de prompts, specifications, artifacts, knowledge, respostas da IA ou logs.
 
 ---
 

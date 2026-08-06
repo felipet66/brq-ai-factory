@@ -4,20 +4,20 @@ import { KnowledgeLoaderError, KNOWLEDGE_ERROR_CODES } from './errors';
 import { KNOWLEDGE_MANIFEST, parseKnowledgeManifest } from './manifest';
 
 describe('Knowledge manifest', () => {
-  it('loads the 39 canonical documents and ADRs 001 through 024', () => {
-    expect(KNOWLEDGE_MANIFEST.version).toBe('1.11.0');
-    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(63);
+  it('loads the 40 canonical documents and ADRs 001 through 025', () => {
+    expect(KNOWLEDGE_MANIFEST.version).toBe('1.12.0');
+    expect(KNOWLEDGE_MANIFEST.documents).toHaveLength(65);
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category !== 'ADR')).toHaveLength(
-      39,
+      40,
     );
     expect(KNOWLEDGE_MANIFEST.documents.filter(({ category }) => category === 'ADR')).toHaveLength(
-      24,
+      25,
     );
     expect(KNOWLEDGE_MANIFEST.documents.at(-1)).toEqual({
-      id: 'adr:024',
-      locator: 'ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md',
+      id: 'adr:025',
+      locator: 'ADR/ADR-025-FRONTEND-MVP.md',
       category: 'ADR',
-      order: 1024,
+      order: 1025,
     });
     expect(
       KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:prompt-builder-flow'),
@@ -105,6 +105,14 @@ describe('Knowledge manifest', () => {
         locator: '38-HTTP_API_FLOW.md',
         category: 'API',
         order: 38,
+      },
+    );
+    expect(KNOWLEDGE_MANIFEST.documents.find(({ id }) => id === 'knowledge:frontend-flow')).toEqual(
+      {
+        id: 'knowledge:frontend-flow',
+        locator: '39-FRONTEND_FLOW.md',
+        category: 'ARCHITECTURE',
+        order: 39,
       },
     );
     expect(Object.isFrozen(KNOWLEDGE_MANIFEST)).toBe(true);

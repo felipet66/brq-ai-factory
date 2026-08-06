@@ -29,6 +29,9 @@ Usuário
 Frontend
     │
     ▼
+HTTP API
+    │
+    ▼
 Execution Engine
     │
     ▼
@@ -92,6 +95,15 @@ Funções:
 - acompanhar progresso
 
 Nunca deve conter regras de negócio.
+
+Na Sprint 15, essa capacidade é deliberadamente menor que a visão completa: existe apenas a página
+inicial, um formulário de Project Name e Objective e um resumo da execução. O Frontend chama
+exclusivamente `POST /api/executions` por um client interno. `ExecutionResult` bruto fica restrito
+ao client e somente `ExecutionSummary` chega aos componentes React.
+
+Criar projetos persistentes, acompanhar progresso em tempo real, navegar por artifacts e visualizar
+logs continuam capacidades futuras. A configuração técnica ainda enviada pelo browser é limitação
+temporária da API `1.0.0` e deve migrar ao backend em evolução versionada do contrato.
 
 ---
 
@@ -855,3 +867,15 @@ cria o ID por hash, realiza uma tentativa, controla cinco estados sem retomada e
 composition root lazy no host, validação limitada de payload, respostas uniformes e logs
 sanitizados. Desenhos deste documento que incluem banco, retry, revisão humana, autenticação,
 frontend ou persistência do estado continuam futuros.
+
+## Incremento da Sprint 15
+
+O Frontend MVP adiciona a borda Usuário → Frontend → HTTP API sem alterar o núcleo. A página
+permanece Server Component e compõe a menor subárvore client necessária. Um único client HTTP
+converte Project Name e Objective no request `1.0.0`, executa o POST síncrono e reduz imediatamente
+o `ExecutionResult` para `ExecutionSummary`.
+
+React recebe somente executionId, status, duração, readiness, hashes e resumos de lineage e
+provenance. Não recebe prompts, specifications, artifacts, contextos, knowledge, respostas da IA,
+logs ou o resultado bruto. Dashboard, páginas adicionais, persistência, autenticação, polling,
+websocket, Playwright e qualquer item da Sprint 16 continuam futuros.

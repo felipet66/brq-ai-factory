@@ -2,18 +2,19 @@
 
 ## Objetivo
 
-Este documento apresenta o pipeline implementado até a Sprint 14. Product Owner, Developer e QA
+Este documento apresenta o pipeline implementado até a Sprint 15. Product Owner, Developer e QA
 continuam fachadas isoladas de tentativa única; o Orchestrator coordena a sequência, o Execution
-Engine controla o ciclo efêmero e a API apenas adapta HTTP.
+Engine controla o ciclo efêmero, a API apenas adapta HTTP e o Frontend projeta um resumo seguro.
 
-Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md), [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md), [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md), [ADR-023](ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md) e [ADR-024](ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md).
+Decisões normativas: [ADR-019](ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md), [ADR-020](ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md), [ADR-021](ADR/ADR-021-QA-AGENT-BOUNDARY.md), [ADR-022](ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md), [ADR-023](ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md), [ADR-024](ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md) e [ADR-025](ADR/ADR-025-FRONTEND-MVP.md).
 
 ## Visão macro
 
 ```mermaid
 flowchart LR
+    USER["Usuário — Project Name + Objective"] --> FRONTEND["Frontend MVP — Sprint 15"]
+    FRONTEND --> HTTP
     HTTP["POST /api/executions — Sprint 14"] --> ENGINE["Execution Engine — Sprint 13"]
-    DEMAND["Demanda"] --> HTTP
     ENGINE --> ORCH["Orchestrator — Sprint 12"]
     ORCH --> PO["Product Owner Agent — Sprint 9"]
     PO --> POS["ProductOwnerSpecification + 3 drafts"]
@@ -28,6 +29,8 @@ flowchart LR
     RESULT --> ENGINE
     ENGINE --> EXECUTION["ExecutionResult"]
     EXECUTION --> HTTP
+    HTTP --> CLIENT["HTTP client → ExecutionSummary"]
+    CLIENT --> FRONTEND
     ORCH -.-> FUTURE["retry, review e persistência — futuros"]
 ```
 
@@ -200,13 +203,13 @@ O Orchestrator atual cria requests, decide apenas continuidade sequencial, propa
 liga criptograficamente os handoffs. Revisão, nova tentativa, enriquecimento e persistência de
 drafts permanecem futuros. Nenhuma dessas responsabilidades está nas fachadas.
 
-## O que não existe na Sprint 14
+## O que não existe na Sprint 15
 
 - criação ou transição de estados persistidos;
 - retry funcional;
 - revisão humana auditável;
 - persistência ou versionamento de artifacts;
-- frontend funcional;
+- páginas adicionais, dashboard, histórico, logs e artifacts completos no frontend;
 - execução ou geração de código e testes;
 - Playwright;
 - seleção dinâmica ou registry global de prompts.
@@ -225,9 +228,11 @@ WorkflowResult com timeline, lineage, provenance, métricas e hashes
 ExecutionResult com ciclo local e metadata versionada
                       ↓
 HTTP Response versionada e sanitizada
+                      ↓
+ExecutionSummary com dados permitidos para React
 ```
 
 Os três resultados continuam contratos e drafts de tentativas isoladas. `WorkflowResult` os
 coordena em memória. O Execution Engine da Sprint 13 envolve esse resultado em um ciclo efêmero,
-e o adapter da Sprint 14 o transporta sem alteração, mas ainda não representa uma `Execution`
-persistida.
+o adapter da Sprint 14 o transporta sem alteração e o Frontend da Sprint 15 reduz o payload no
+client HTTP antes de propagá-lo ao React. O fluxo ainda não representa uma `Execution` persistida.
