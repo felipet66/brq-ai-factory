@@ -452,3 +452,10 @@ A observabilidade será considerada adequada quando for possível:
 - consultar tempo e consumo
 - reproduzir a sequência da execução
 - analisar tendências sem acessar dados sensíveis
+
+## Eventos do Execution Engine
+
+`execution.created`, `execution.started`, `execution.completed`, `execution.failed` e
+`execution.cancelled` usam contexto allowlisted. `startedAt`, `finishedAt`, timeline, duração e
+métricas são observacionais e não alteram hashes. `engineVersion` e `contractVersion` permitem
+correlacionar a semântica usada em cada resultado.

@@ -529,18 +529,30 @@ Os três agentes executam no máximo uma vez e em sequência; rejeições, erros
 
 Objetivo
 
-Criar o motor da plataforma.
+Controlar deterministicamente o ciclo de vida efêmero de uma execução e iniciar o Orchestrator
+por sua API pública.
+
+Entregas
+
+- workspace `@brq/execution-engine` em `core/execution-engine`, conforme ADR-011;
+- `ExecutionRequest` sem `executionId` fornecido pelo caller;
+- ID determinístico criado pelo Engine;
+- `ExecutionResult` com timestamps observacionais, métricas, hashes, lineage e provenance;
+- `engineVersion` e `contractVersion` explícitos;
+- ADR-023 e fluxo visual 37.
 
 Responsabilidades
 
-- iniciar execução
-- cancelar execução
-- acompanhar execução
-- finalizar
+- estados locais `CREATED → RUNNING → SUCCESS | FAILED | CANCELLED`;
+- uma tentativa e no máximo uma chamada ao Orchestrator;
+- propagação do mesmo `AbortSignal`;
+- validação da correlação pública do workflow;
+- sem persistência, retry, concorrência, revisão humana, API ou frontend.
 
 Critério
 
-Uma execução percorre todo o pipeline.
+Uma entrada válida recebe identidade determinística, percorre o Orchestrator uma única vez e
+produz resultado terminal rastreável sem conhecer agentes ou componentes inferiores.
 
 ---
 

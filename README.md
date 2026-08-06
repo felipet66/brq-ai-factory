@@ -39,7 +39,8 @@ brq-ai-factory/
 │   │   ├── ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md
 │   │   ├── ADR-020-DEVELOPER-AGENT-BOUNDARY.md
 │   │   ├── ADR-021-QA-AGENT-BOUNDARY.md
-│   │   └── ADR-022-ORCHESTRATOR-BOUNDARY.md
+│   │   ├── ADR-022-ORCHESTRATOR-BOUNDARY.md
+│   │   └── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -77,10 +78,12 @@ brq-ai-factory/
 │   ├── 33-PIPELINE_OVERVIEW.md
 │   ├── 34-DEVELOPER_AGENT_FLOW.md
 │   ├── 35-QA_AGENT_FLOW.md
-│   └── 36-ORCHESTRATOR_FLOW.md
+│   ├── 36-ORCHESTRATOR_FLOW.md
+│   └── 37-EXECUTION_ENGINE_FLOW.md
 │
 ├── core/
-│   └── orchestrator/
+│   ├── orchestrator/
+│   └── execution-engine/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -217,6 +220,23 @@ O módulo não chama OpenAI, não monta prompts, não valida respostas do modelo
 não persiste, não executa retry e não conhece Execution Engine, API ou frontend.
 
 [Fluxo visual do Orchestrator](knowledge/36-ORCHESTRATOR_FLOW.md) · [ADR-022](knowledge/ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md)
+
+## Execution Engine
+
+O workspace `@brq/execution-engine`, em `core/execution-engine`, é a única fronteira de produção
+autorizada a iniciar o Orchestrator. Ele recebe `ExecutionRequest` sem ID, cria um `executionId`
+determinístico e versionado, controla o ciclo local `CREATED → RUNNING → SUCCESS | FAILED |
+CANCELLED` e consolida o `WorkflowResult` público em um `ExecutionResult` imutável.
+
+Cada execução possui `attempt: 1` e no máximo uma chamada ao Orchestrator. `startedAt`,
+`finishedAt`, timeline, durações e métricas são observacionais e ficam fora dos hashes. Lineage e
+provenance permanecem separados; `engineVersion` e `contractVersion` identificam explicitamente
+a versão da fronteira.
+
+O Engine não conhece agentes ou componentes inferiores, não persiste, não retenta, não mantém
+registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
+
+[Fluxo visual do Execution Engine](knowledge/37-EXECUTION_ENGINE_FLOW.md) · [ADR-023](knowledge/ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md)
 
 ## Validações
 

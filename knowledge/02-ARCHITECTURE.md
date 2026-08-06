@@ -87,6 +87,13 @@ Na implementação da Sprint 12, o estado é efêmero e o fluxo é fixo Product 
 QA. Não há persistência, retry, revisão humana ou Execution Engine. As responsabilidades futuras
 de persistência e novas tentativas permanecem previstas, mas não são executadas por esta versão.
 
+### Execution Engine Layer
+
+Desde a Sprint 13, `core/execution-engine` é o único caller de produção do Orchestrator. O Engine
+cria `executionId` determinístico, controla `CREATED → RUNNING → SUCCESS | FAILED | CANCELLED`,
+propaga cancelamento e consolida `ExecutionResult` por contratos públicos. O estado é efêmero:
+não existe repository, retry, retomada, concorrência, API ou frontend nesta camada.
+
 ---
 
 ### Knowledge Layer

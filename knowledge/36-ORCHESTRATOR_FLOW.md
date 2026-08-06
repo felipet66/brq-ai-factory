@@ -138,5 +138,7 @@ sanitizado. Demanda, prompts, specifications, artifacts e respostas são proibid
 
 ## Fora do escopo
 
-Execution Engine, persistência, retry, filas, scheduler, concorrência, revisão humana, API,
-frontend, websocket, execução de testes, geração de código e qualquer item da Sprint 13.
+Persistência, retry, filas, scheduler, concorrência, revisão humana, API, frontend, websocket,
+execução de testes e geração de código continuam fora do Orchestrator. Desde a Sprint 13, o
+Execution Engine é seu único caller de produção, mas a dependência é unidirecional e não altera
+esta fronteira.

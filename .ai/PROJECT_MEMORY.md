@@ -2,7 +2,8 @@
 
 ## Estado atual
 
-Sprint 12 — Orchestrator implementada e validada tecnicamente em 2026-08-05, aguardando aprovação humana. A Sprint 13 não deve começar sem essa aprovação.
+Sprint 13 — Execution Engine implementada e validada tecnicamente em 2026-08-05, sem commit e
+aguardando aprovação humana. A Sprint 14 não deve começar sem aprovação explícita.
 
 ## Fundação técnica
 
@@ -20,6 +21,7 @@ Sprint 12 — Orchestrator implementada e validada tecnicamente em 2026-08-05, a
 - Developer Agent como segunda fachada concreta, responsável somente por proposta técnica declarativa e rastreável;
 - QA Agent como terceira fachada concreta, responsável somente por especificação de qualidade declarativa e rastreável;
 - Orchestrator como coordenador central do workflow fixo Product Owner → Developer → QA, sem Execution Engine, retry ou persistência;
+- Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -393,6 +395,37 @@ Sprint 12 — Orchestrator implementada e validada tecnicamente em 2026-08-05, a
 - nenhum ADR histórico entre ADR-001 e ADR-021 foi alterado; somente o ADR-022 foi criado;
 - nenhuma chamada externa, teste live, persistência funcional, retry, revisão humana, execução de testes de QA ou geração de código foi executada;
 - nenhum item da Sprint 13 foi iniciado e nenhum commit foi criado.
+
+## Implementação da Sprint 13
+
+- workspace `@brq/execution-engine` criado em `core/execution-engine`, preservando o ADR-011;
+- dependência funcional exclusiva do entrypoint público `@brq/orchestrator`;
+- `ExecutionRequest` não aceita `executionId` do caller;
+- `executionId` criado deterministicamente a partir do request hash e `contractVersion`;
+- máquina local `CREATED → RUNNING → SUCCESS | FAILED | CANCELLED`, sem retomada;
+- uma tentativa e no máximo uma chamada ao Orchestrator;
+- mesmo `AbortSignal` propagado e cancelamento prévio sem invocação do workflow;
+- `ExecutionResult` com `startedAt`, `finishedAt`, timeline, metadata, métricas, hashes, lineage e provenance separados;
+- `engineVersion` e `contractVersion` explícitos;
+- timestamps, timeline, durações e métricas excluídos dos hashes;
+- erros e logs sanitizados por allowlist;
+- manifesto e política de Knowledge atualizados para `1.10.0`, com fluxo 37 e ADR-023;
+- nenhum código funcional de componentes anteriores foi alterado.
+
+## Validações da Sprint 13
+
+- format e format check: aprovados;
+- lint: aprovado sem warnings;
+- typecheck raiz e aplicação: aprovado;
+- 30 testes específicos de `core/execution-engine` aprovados;
+- 703 testes aprovados, sendo 702 da suíte raiz e 1 smoke da aplicação;
+- cobertura de `core/execution-engine`: 98,42% statements, 94,94% branches, 96,55% functions e 100% lines;
+- cobertura global da suíte raiz: 93,54% statements, 85,39% branches, 98,37% functions e 93,95% lines;
+- Prisma validate: aprovado;
+- build de produção Next.js com Webpack: aprovado;
+- `git diff --check`: aprovado;
+- nenhum ADR histórico entre ADR-001 e ADR-022 foi alterado; somente ADR-023 foi criado;
+- nenhum item da Sprint 14 foi iniciado e nenhum commit foi criado.
 
 ## Fora do escopo confirmado
 

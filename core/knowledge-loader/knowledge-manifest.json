@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.10.0",
   "documents": [
     { "id": "knowledge:vision", "locator": "00-VISION.md", "category": "VISION", "order": 0 },
     {
@@ -204,6 +204,12 @@
       "order": 36
     },
     {
+      "id": "knowledge:execution-engine-flow",
+      "locator": "37-EXECUTION_ENGINE_FLOW.md",
+      "category": "ARCHITECTURE",
+      "order": 37
+    },
+    {
       "id": "adr:001",
       "locator": "ADR/ADR-001-Orchestrator.md",
       "category": "ADR",
@@ -334,6 +340,12 @@
       "locator": "ADR/ADR-022-ORCHESTRATOR-BOUNDARY.md",
       "category": "ADR",
       "order": 1022
+    },
+    {
+      "id": "adr:023",
+      "locator": "ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md",
+      "category": "ADR",
+      "order": 1023
     }
   ]
 }

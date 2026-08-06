@@ -91,7 +91,9 @@ Nenhum agente conversa diretamente com outro.
 
 Desde a Sprint 12, o Orchestrator entrega o contrato público validado de uma etapa à seguinte no workflow fixo Product Owner → Developer → QA. As fachadas continuam sem chamar outros agentes; o Orchestrator injeta as specifications públicas nos requests posteriores e preserva resultados anteriores em qualquer interrupção.
 
-O workflow atual não persiste estado, não cria novas tentativas e não executa revisão humana. Essas integrações continuam futuras.
+Desde a Sprint 13, o Execution Engine cria a identidade e inicia esse workflow exatamente uma vez
+pela API pública do Orchestrator. O ciclo completo permanece em memória, sem persistir estado,
+criar novas tentativas ou executar revisão humana.
 
 Persistência de artifacts pertence ao fluxo futuro. Product Owner, Developer e QA retornam somente drafts em memória.
 

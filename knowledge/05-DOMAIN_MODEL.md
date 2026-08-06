@@ -288,3 +288,10 @@ No workflow da Sprint 12, todo handoff entre as três tentativas é mediado pelo
 timeline, métricas e hashes. `lineage` representa vínculos entre specifications; `provenance`
 representa a origem técnica de cada resultado. Timeline e métricas temporais são observacionais e
 não integram os hashes determinísticos.
+
+## ExecutionResult
+
+`ExecutionResult` envolve um `WorkflowResult` público válido ou nulo, status terminal, metadata
+versionada, `startedAt`, `finishedAt`, timeline, métricas e hashes. Lineage e provenance são
+promovidos em campos separados. O contrato da Sprint 13 é efêmero e não representa a entidade
+persistida `Execution` do Shared Layer.

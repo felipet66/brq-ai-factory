@@ -362,3 +362,9 @@ Uma funcionalidade só pode ser considerada concluída quando:
 - os cenários negativos foram considerados
 - os contratos foram validados
 - os fluxos críticos permanecem funcionando
+
+## Execution Engine
+
+A Sprint 13 testa geração determinística do ID, contratos, máquina de estados, uma única chamada
+ao Orchestrator, correlação, falhas funcionais e técnicas, cancelamento, imutabilidade, métricas,
+lineage, provenance, hashes sem tempo, logs sanitizados, exports e fronteiras de dependência.

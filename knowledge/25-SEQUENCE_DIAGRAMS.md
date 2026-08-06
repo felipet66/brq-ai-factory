@@ -428,3 +428,10 @@ FAILED --> RUNNING: retomada explícita
 ```
 
 Retries automáticos de agentes não usam `FAILED --> RUNNING` nesta máquina. Cada retry cria uma nova `AgentExecution` em `CREATED`, dentro da mesma `Execution`.
+
+## Sequência implementada na Sprint 13
+
+O fluxo atual do Execution Engine, incluindo identidade determinística, estados, integração
+pública, falhas e cancelamento, está documentado em
+[37-EXECUTION_ENGINE_FLOW.md](37-EXECUTION_ENGINE_FLOW.md). Os diagramas persistentes e de retry
+acima permanecem visão futura.

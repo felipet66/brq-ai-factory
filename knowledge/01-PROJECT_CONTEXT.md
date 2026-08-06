@@ -121,3 +121,10 @@ UX
 ↓
 
 Multi Model
+
+## Estado incremental da Sprint 13
+
+O Execution Engine é a fronteira efêmera acima do Orchestrator. Ele cria a identidade
+determinística da execução, controla um único ciclo local e consolida `ExecutionResult`. API,
+frontend funcional, persistência da execução, retry e qualquer item da Sprint 14 permanecem
+futuros.

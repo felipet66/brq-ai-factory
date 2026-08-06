@@ -444,3 +444,10 @@ Antes de uma entrega:
 - [ ] Erros não revelam detalhes internos.
 - [ ] Código gerado não é executado automaticamente.
 - [ ] Documentação de segurança está atualizada.
+
+## Fronteira do Execution Engine
+
+O Engine revalida `ExecutionRequest` e `WorkflowResult`, verifica IDs e request hash e nunca
+registra payloads. Sua produção depende somente da API pública do Orchestrator e de utilitários
+transversais; agentes, componentes inferiores, filesystem, rede, Prisma e repositories são
+proibidos.

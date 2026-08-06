@@ -95,11 +95,19 @@ Além do envelope do logger, somente `workflowId`, `executionId`, etapa, agente,
 métricas e erro sanitizado são permitidos. Prompts, specifications, artifacts, resposta do modelo e
 conteúdo do usuário são proibidos.
 
+## Integração com o Execution Engine
+
+Desde a Sprint 13, o único caller de produção é `@brq/execution-engine`. O Engine cria o
+`executionId` e o fornece no `WorkflowRequest`; o Orchestrator continua sem gerar IDs, alterar
+estado de execução ou conhecer o Engine. A dependência permanece unidirecional
+`Execution Engine → Orchestrator`.
+
 ## Evolução futura preservada
 
 ADRs e documentos de domínio preveem persistência, revisão humana, retomada e retries
 centralizados. Essas responsabilidades não foram transferidas para agentes e continuam futuras;
-serão integradas somente em Sprints próprias com Execution Engine e Persistence.
+serão integradas somente em Sprints próprias de Persistence e workflow avançado. O Execution
+Engine da Sprint 13 também permanece sem essas capacidades.
 
 ## Regras
 

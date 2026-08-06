@@ -134,7 +134,9 @@ ai-provider/
 
 ## Execution Engine
 
-Responsável por iniciar e controlar execuções.
+Implementado em `core/execution-engine/` como workspace `@brq/execution-engine`. Responsável por
+criar a identidade determinística, iniciar o Orchestrator público uma vez e controlar o ciclo
+local sem persistência ou retry.
 
 ---
 

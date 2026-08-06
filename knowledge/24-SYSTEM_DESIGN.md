@@ -845,3 +845,10 @@ A arquitetura será considerada adequada quando:
 - toda execução puder ser reproduzida;
 - qualquer falha puder ser rastreada por logs e artefatos;
 - o sistema puder evoluir do MVP para uma plataforma enterprise preservando os mesmos princípios arquiteturais.
+
+## Incremento da Sprint 13
+
+O Execution Engine implementado é uma fronteira local e efêmera sobre o Orchestrator público. Ele
+cria o ID por hash, realiza uma tentativa, controla cinco estados sem retomada e produz
+`ExecutionResult`. Desenhos deste documento que incluem API, banco, retry, revisão humana ou
+persistência do estado continuam futuros e não descrevem a implementação da Sprint 13.

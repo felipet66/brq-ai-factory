@@ -120,6 +120,8 @@ Na seguinte ordem:
 35-QA_AGENT_FLOW.md
 
 36-ORCHESTRATOR_FLOW.md
+
+37-EXECUTION_ENGINE_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -398,6 +400,12 @@ O Developer Agent da Sprint 10 atua como arquiteto: transforma uma `ProductOwner
 O QA Agent da Sprint 11 transforma `ProductOwnerSpecification` e `TechnicalSpecification` compatíveis em uma `QASpecification`. Ele cobre `AC`, `BR`, `DEC` e `DOD`, mas não recebe código, executa testes, gera Playwright ou afirma aprovação operacional.
 
 Na Sprint 12, `core/orchestrator` implementa somente o workflow fixo Product Owner → Developer → QA. Ele depende das APIs públicas das três fachadas, fixa `attempt: 1`, propaga o mesmo `AbortSignal` e consolida `WorkflowResult`. Timeline, lineage e provenance são contratos separados; timestamps e métricas não entram nos hashes. Retry, persistência, revisão humana e Execution Engine continuam fora do escopo.
+
+Na Sprint 13, `core/execution-engine` é o único caller de produção do Orchestrator. Ele cria o
+`executionId` por hash canônico versionado, controla uma única tentativa local, propaga o mesmo
+`AbortSignal` e consolida `ExecutionResult`. `startedAt`, `finishedAt`, timeline, durações e
+métricas são observacionais; lineage e provenance permanecem separados. O Engine não conhece
+agentes, não persiste, não retenta e não implementa nenhum item da Sprint 14.
 
 ---
 

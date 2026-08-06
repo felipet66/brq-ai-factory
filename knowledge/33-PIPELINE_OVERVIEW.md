@@ -215,7 +215,10 @@ Demanda -> Product Owner Specification
        QA Specification declarativa
                       ↓
 WorkflowResult com timeline, lineage, provenance, métricas e hashes
+                      ↓
+ExecutionResult com ciclo local e metadata versionada
 ```
 
 Os três resultados continuam contratos e drafts de tentativas isoladas. `WorkflowResult` os
-coordena em memória, mas ainda não representa uma `Execution` persistida.
+coordena em memória. O Execution Engine da Sprint 13 envolve esse resultado em um ciclo efêmero,
+mas ainda não representa uma `Execution` persistida.

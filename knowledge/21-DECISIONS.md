@@ -36,6 +36,7 @@ Este documento funciona apenas como índice.
 | ADR-020 | Developer Agent Boundary and Technical Specification Handoff | Accepted |
 | ADR-021 | QA Agent Boundary and Dual-Specification Handoff             | Accepted |
 | ADR-022 | Orchestrator Boundary and Deterministic Sequential Workflow  | Accepted |
+| ADR-023 | Execution Engine Boundary and Ephemeral Execution Lifecycle  | Accepted |
 
 ---
 

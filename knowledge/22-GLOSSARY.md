@@ -155,3 +155,15 @@ Técnica de recuperação de contexto antes da geração de respostas.
 ## Memory Layer
 
 Camada responsável por armazenar contexto persistente utilizado pelos agentes.
+
+---
+
+## Execution Engine
+
+Fronteira que cria a identidade determinística e controla o ciclo efêmero de uma execução. Na
+Sprint 13 chama o Orchestrator no máximo uma vez e não persiste, retenta ou conhece agentes.
+
+## ExecutionResult
+
+Contrato terminal que consolida resultado do workflow, metadata versionada, timestamps
+observacionais, métricas, hashes, lineage, provenance e falha sanitizada.
