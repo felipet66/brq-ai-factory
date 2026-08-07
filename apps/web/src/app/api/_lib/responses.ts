@@ -3,10 +3,16 @@ import {
   EXECUTION_ENGINE_VERSION,
   type ExecutionResult,
 } from '@brq/execution-engine';
+import type { ExecutionObservabilitySnapshot } from '@brq/observability';
 
 import { HTTP_API_VERSION, type ApiErrorCode } from './constants';
 import type { ApiError } from './contracts';
-import { errorResponseSchema, executionResponseSchema, healthResponseSchema } from './schemas';
+import {
+  errorResponseSchema,
+  executionResponseSchema,
+  executionTimelineResponseSchema,
+  healthResponseSchema,
+} from './schemas';
 
 export function responseHeaders(requestId: string, allow?: readonly string[]): Headers {
   const headers = new Headers({
@@ -61,6 +67,23 @@ export function executionResponse(result: ExecutionResult, requestId: string): R
       requestId,
       apiVersion: HTTP_API_VERSION,
       executionId: result.executionId,
+    },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId });
+}
+
+export function executionTimelineResponse(
+  snapshot: ExecutionObservabilitySnapshot,
+  requestId: string,
+): Response {
+  const body = executionTimelineResponseSchema.parse({
+    success: true,
+    data: snapshot,
+    metadata: {
+      requestId,
+      apiVersion: HTTP_API_VERSION,
+      executionId: snapshot.executionId,
     },
     errors: [],
   });

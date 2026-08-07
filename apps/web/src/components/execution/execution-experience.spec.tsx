@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeWorkflow } from '@/api/execution-client';
@@ -35,6 +35,7 @@ function executionSummary(): ExecutionSummary {
         },
       ],
     },
+    observability: null,
   };
 }
 
@@ -84,12 +85,60 @@ describe('ExecutionExperience', () => {
         projectName: 'Customer Portal',
         objective: 'Let customers track their orders.',
       },
-      { signal: expect.any(AbortSignal) },
+      { signal: expect.any(AbortSignal), onObservability: expect.any(Function) },
     );
 
     pending.resolve(executionSummary());
     expect(await screen.findByRole('heading', { name: 'Execution result' })).toBeInTheDocument();
     expect(screen.getByText('SUCCESS')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Workflow complete. Status SUCCESS.');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('renders live backend timeline updates without replacing the loading state', async () => {
+    const pending = deferred<ExecutionSummary>();
+    let publish:
+      ((observability: Exclude<ExecutionSummary['observability'], null>) => void) | undefined;
+    executeWorkflowMock.mockImplementationOnce((_input, options) => {
+      publish = options?.onObservability;
+      return pending.promise;
+    });
+    render(<ExecutionExperience />);
+
+    fillAndSubmit();
+    expect(
+      screen.getByText('Waiting for execution metadata. The workflow continues normally.'),
+    ).toBeInTheDocument();
+
+    act(() => {
+      publish?.({
+        revision: 3,
+        status: 'RUNNING',
+        stages: [
+          { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 2 },
+          {
+            stageId: 'PRODUCT_OWNER',
+            stageName: 'Product Owner',
+            status: 'RUNNING',
+            durationMs: null,
+          },
+          { stageId: 'DEVELOPER', stageName: 'Developer', status: 'PENDING', durationMs: null },
+          { stageId: 'QA', stageName: 'QA', status: 'PENDING', durationMs: null },
+        ],
+        stageMetrics: [],
+        summary: null,
+      });
+    });
+
+    expect(await screen.findByText('In progress')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Executing workflow. Product Owner is in progress.',
+    );
+    expect(screen.queryByText(/Waiting for execution metadata/)).not.toBeInTheDocument();
+
+    pending.resolve(executionSummary());
+    await screen.findByRole('heading', { name: 'Execution result' });
+    expect(screen.getByRole('status')).toHaveTextContent('Workflow complete. Status SUCCESS.');
   });
 
   it('renders a safe error state when the client rejects', async () => {
@@ -100,6 +149,36 @@ describe('ExecutionExperience', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The API is unavailable.');
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeEnabled();
+  });
+
+  it('preserves terminal timeline metadata when the workflow transport fails', async () => {
+    executeWorkflowMock.mockImplementationOnce(async (_input, options) => {
+      options?.onObservability?.({
+        revision: 5,
+        status: 'FAILED',
+        stages: [
+          { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 2 },
+          {
+            stageId: 'PRODUCT_OWNER',
+            stageName: 'Product Owner',
+            status: 'FAILED',
+            durationMs: 4,
+          },
+          { stageId: 'DEVELOPER', stageName: 'Developer', status: 'SKIPPED', durationMs: null },
+          { stageId: 'QA', stageName: 'QA', status: 'SKIPPED', durationMs: null },
+        ],
+        stageMetrics: [],
+        summary: null,
+      });
+      throw clientError('The workflow failed.');
+    });
+    render(<ExecutionExperience />);
+
+    fillAndSubmit();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The workflow failed.');
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.getAllByText('Skipped')).toHaveLength(2);
   });
 
   it('does not expose messages from unexpected errors', async () => {

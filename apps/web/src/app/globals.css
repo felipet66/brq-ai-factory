@@ -280,19 +280,104 @@ textarea:focus-visible {
 }
 
 .execution-state--loading {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.execution-timeline {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface-soft);
+}
+
+.execution-timeline__heading,
+.execution-timeline__stages li,
+.execution-timeline__stages li > div {
   display: flex;
-  gap: 1rem;
   align-items: center;
 }
 
-.loading-indicator {
+.execution-timeline__heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.execution-timeline__heading h3 {
+  font-size: 1rem;
+}
+
+.execution-timeline__heading > span,
+.execution-timeline__stages li > div > span,
+.execution-timeline__stages small,
+.execution-timeline__note {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.execution-timeline__stages {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.execution-timeline__stages li {
+  min-width: 0;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: rgb(2 10 20 / 28%);
+}
+
+.execution-timeline__stages li > div {
+  min-width: 0;
+  flex: 1;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.execution-timeline__stages small {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-status-dot {
+  width: 0.7rem;
+  height: 0.7rem;
   flex: 0 0 auto;
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 2px solid rgb(101 215 189 / 28%);
-  border-top-color: var(--accent);
+  border: 2px solid var(--muted);
   border-radius: 50%;
-  animation: loading-spin 800ms linear infinite;
+}
+
+.execution-timeline__stages li[data-status='RUNNING'] .timeline-status-dot {
+  border-color: #ffd166;
+  background: #ffd166;
+  box-shadow: 0 0 0 0 rgb(255 209 102 / 38%);
+  animation: timeline-pulse 1.6s ease-out infinite;
+}
+
+.execution-timeline__stages li[data-status='SUCCESS'] .timeline-status-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.execution-timeline__stages li[data-status='FAILED'] .timeline-status-dot,
+.execution-timeline__stages li[data-status='CANCELLED'] .timeline-status-dot {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.execution-timeline__stages li[data-status='SKIPPED'] {
+  opacity: 0.68;
+}
+
+.execution-timeline__note {
+  margin: 0;
 }
 
 .execution-state--error {
@@ -300,6 +385,11 @@ textarea:focus-visible {
   border: 1px solid rgb(255 158 171 / 28%);
   border-radius: 1rem;
   background: var(--danger-surface);
+}
+
+.execution-error-output {
+  display: grid;
+  gap: 1rem;
 }
 
 .execution-state--error .state-label,
@@ -446,9 +536,10 @@ textarea:focus-visible {
   font-size: 0.78rem;
 }
 
-@keyframes loading-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes timeline-pulse {
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.45rem rgb(255 209 102 / 0%);
   }
 }
 

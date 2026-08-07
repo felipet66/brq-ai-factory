@@ -94,7 +94,7 @@ web/
 
 Na Sprint 14, `apps/web/src/app/api/` contém exclusivamente o adapter HTTP e
 `apps/web/src/server/runtime.ts` contém o composition root lazy do host. A composição concreta não
-é um workspace de domínio e não mantém estado de execução.
+é um workspace de domínio e não mantém estado funcional de execução.
 
 Na Sprint 15, a interface permanece no mesmo host:
 
@@ -114,6 +114,11 @@ apps/web/src/
 `page.tsx` é Server Component. Componentes browser-side podem depender apenas do client HTTP e de
 DTOs locais; não importam `@brq/*`, `server/` ou internals de `app/api/`. `ExecutionSummary` é o
 único resultado propagado pela árvore React.
+
+Na Sprint 16, o host também conecta o decorator observacional, o histórico limitado em memória e o
+reader público usado por `GET /api/executions/[id]/timeline`. O Frontend consulta esse endpoint por
+polling limitado e recebe somente timeline, métricas e resumo minimizados; nenhuma regra de
+workflow ou conteúdo sensível foi movido para `apps/web`.
 
 No futuro:
 
@@ -138,6 +143,8 @@ core/
 
 execution-engine/
 
+observability/
+
 orchestrator/
 
 knowledge-loader/
@@ -160,6 +167,16 @@ ai-provider/
 Implementado em `core/execution-engine/` como workspace `@brq/execution-engine`. Responsável por
 criar a identidade determinística, iniciar o Orchestrator público uma vez e controlar o ciclo
 local sem persistência ou retry.
+
+---
+
+## Observability
+
+Implementado em `core/observability/` como workspace `@brq/observability`. Observa exclusivamente a
+API pública do Execution Engine por decorator e projeta eventos imutáveis, timeline ordenada,
+métricas por agente e `ExecutionSummary` em um store limitado e local ao processo. O custo estimado
+permanece `null` sem rate card aprovado. O módulo não inicia workflow, não contém lógica de agentes
+e não persiste dados.
 
 ---
 
@@ -574,10 +591,12 @@ Workspaces implementados:
 - `core/agent-runner`;
 - `core/response-validator`;
 - `core/artifact-generator`;
+- `core/observability`;
 - `agents/product-owner`;
-- `agents/developer`.
-- `agents/qa`.
-- `core/orchestrator`.
+- `agents/developer`;
+- `agents/qa`;
+- `core/orchestrator`;
+- `core/execution-engine`.
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -587,6 +606,10 @@ Cada módulo é registrado como workspace somente quando for implementado pela S
 
 ```text
 apps
+  ↓
+core/observability (decorator observacional e reader público)
+  ↓
+core/execution-engine
   ↓
 core/orchestrator
   ↓
@@ -634,6 +657,11 @@ O Agent Runner pode acessar somente as APIs públicas de `core/prompt-builder`, 
 O Response Validator pode acessar somente a API pública de `core/agent-runner`, componentes transversais de `shared` e seu engine local de JSON Schema. Não pode importar internals do Runner, Prompt Builder, AI Provider, adapters, `agents/`, Orchestrator, Artifact Generator, Knowledge Loader, Prisma ou `apps/`.
 
 O Artifact Generator pode acessar somente a API pública de `core/response-validator` e componentes transversais de `shared`. Não pode importar internals do Validator, Agent Runner, Prompt Builder, AI Provider, Knowledge Loader, `agents/`, Orchestrator, repositories, Prisma, `apps/` ou adapters de filesystem.
+
+O workspace de Observability pode acessar somente as APIs públicas de `core/execution-engine`,
+componentes transversais de `shared` e Zod. Não pode importar Orchestrator, agentes, componentes
+inferiores do pipeline, Prisma, repositories ou código de `apps/`. O store em memória é limitado,
+observacional e não constitui persistência.
 
 ---
 

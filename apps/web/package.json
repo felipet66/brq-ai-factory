@@ -18,6 +18,7 @@
     "@brq/developer-agent": "0.1.0",
     "@brq/execution-engine": "0.1.0",
     "@brq/knowledge-loader": "0.1.0",
+    "@brq/observability": "0.1.0",
     "@brq/orchestrator": "0.1.0",
     "@brq/product-owner-agent": "0.1.0",
     "@brq/prompt-builder": "0.1.0",

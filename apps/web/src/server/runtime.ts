@@ -12,6 +12,13 @@ import {
   type KnowledgeSource,
 } from '@brq/knowledge-loader';
 import { FilesystemKnowledgeSource } from '@brq/knowledge-loader/filesystem';
+import {
+  createInMemoryExecutionHistory,
+  createObservabilityLogger,
+  createObservedExecutionEngine,
+  type ExecutionHistoryReader,
+  type ExecutionHistoryRecorder,
+} from '@brq/observability';
 import { createOrchestrator } from '@brq/orchestrator';
 import { createProductOwnerAgent, loadProductOwnerPromptAssets } from '@brq/product-owner-agent';
 import { createPromptBuilder } from '@brq/prompt-builder';
@@ -26,6 +33,7 @@ export interface ApplicationRuntimeOptions {
   readonly environment?: NodeJS.ProcessEnv;
   readonly knowledgeRoot?: string;
   readonly knowledgeSource?: KnowledgeSource;
+  readonly executionHistory?: ExecutionHistoryRecorder;
   readonly logger?: Logger;
   readonly now?: () => number;
 }
@@ -52,8 +60,10 @@ function defaultKnowledgeRoot(environment: NodeJS.ProcessEnv): string {
 export async function createApplicationRuntime(
   options: ApplicationRuntimeOptions = {},
 ): Promise<ExecutionEngine> {
-  const logger = options.logger ?? createLogger();
   const now = options.now ?? Date.now;
+  const baseLogger = options.logger ?? createLogger();
+  const executionHistory = options.executionHistory ?? createInMemoryExecutionHistory({ now });
+  const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
   const environment = options.environment ?? process.env;
   const knowledgeRoot = validateKnowledgeRoot(
     options.knowledgeRoot ?? defaultKnowledgeRoot(environment),
@@ -111,12 +121,30 @@ export async function createApplicationRuntime(
     logger,
     now,
   });
-  return createExecutionEngine({ orchestrator, logger, now });
+  const engine = createExecutionEngine({ orchestrator, logger, now });
+  return createObservedExecutionEngine({ engine, history: executionHistory });
 }
 
-let runtime: Promise<ExecutionEngine> | undefined;
+interface ApplicationRuntimeState {
+  runtime: Promise<ExecutionEngine> | undefined;
+  readonly executionHistory: ExecutionHistoryRecorder;
+}
+
+const runtimeGlobal = globalThis as typeof globalThis & {
+  __brqAiFactoryRuntimeState?: ApplicationRuntimeState;
+};
+const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
+  runtime: undefined,
+  executionHistory: createInMemoryExecutionHistory(),
+});
 
 export function getExecutionEngine(): Promise<ExecutionEngine> {
-  runtime ??= createApplicationRuntime();
-  return runtime;
+  runtimeState.runtime ??= createApplicationRuntime({
+    executionHistory: runtimeState.executionHistory,
+  });
+  return runtimeState.runtime;
+}
+
+export function getExecutionHistory(): ExecutionHistoryReader {
+  return runtimeState.executionHistory;
 }

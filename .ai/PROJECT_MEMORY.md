@@ -2,10 +2,10 @@
 
 ## Estado atual
 
-Sprint 15 — Frontend MVP aprovada e commitada. A correção da integração do runtime com o orçamento
-do Prompt Builder, dos assets relacionais do Developer Agent `1.0.1`, do Product Owner Agent `1.0.1`
-e da paridade estrutural do Developer Agent `1.0.2` foram concluídos sem commit e aguardam aprovação
-humana. Nenhum item da Sprint 16 foi iniciado.
+Sprint 16 — Execution History & Observability implementada, validada localmente e aguardando
+aprovação humana. A Sprint ainda não está aprovada e não possui commit. O bug conhecido de
+Structured Outputs do Developer Agent permanece como hotfix separado e não foi alterado. Nenhum
+item da Sprint 17 foi iniciado.
 
 ## Fundação técnica
 
@@ -26,6 +26,8 @@ humana. Nenhum item da Sprint 16 foi iniciado.
 - Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
 - HTTP API como adapter Next.js sobre o Execution Engine, com composition root lazy no host;
 - Frontend MVP como Presentation Adapter HTTP-only sobre a API pública;
+- Observability como decorator best-effort da API pública do Execution Engine, com histórico
+  bounded e efêmero em memória;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -91,7 +93,9 @@ humana. Nenhum item da Sprint 16 foi iniciado.
 - IDs documentais explícitos, estáveis e independentes de filenames;
 - índice imutável por instância com hashes SHA-256 e sem cache de conteúdo;
 - seleção determinística e versionada para contextos canônicos;
-- manifesto e política `1.12.0`, incluindo o fluxo do Frontend e os ADRs até o ADR-025;
+- manifesto e política permanecem em `1.12.0`, com os documentos de runtime até o fluxo 39 e o
+  ADR-025; o fluxo 40 e o ADR-026 não são injetados nos contextos dos agentes nesta Sprint para
+  preservar integralmente seus bytes, hashes e prompts;
 - contexto `DEVELOPER` com seis documentos obrigatórios que cabem no orçamento padrão de 64 KiB e documentos adicionais opcionais em ordem determinística;
 - orçamento de documentos e bytes configurável por instância, sem truncamento silencioso;
 - composição estruturada com delimitadores, ID, categoria e hash por documento;
@@ -228,6 +232,9 @@ humana. Nenhum item da Sprint 16 foi iniciado.
 - ADR-025 registra o Frontend como Presentation Adapter HTTP-only, a projeção exclusiva para
   `ExecutionSummary`, os quatro estados locais e a limitação temporária da configuração técnica no
   browser;
+- ADR-026 registra a fronteira de Execution History & Observability, o decorator do Engine, a bridge
+  allowlisted de logs, o store bounded em memória, o endpoint de timeline e a exclusão integral de
+  conteúdo sensível;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -627,6 +634,47 @@ humana. Nenhum item da Sprint 16 foi iniciado.
   Node.js 24.19.0; nenhuma chamada real à OpenAI foi executada e nenhum item da Sprint 16 foi
   iniciado.
 
+## Implementação da Sprint 16
+
+- workspace `@brq/observability` criado em `core/observability`, dependente somente de
+  `@brq/execution-engine`, `@brq/shared` e Zod;
+- decorator do `ExecutionEngine` delega exatamente uma vez e preserva resultado, erro,
+  cancelamento, hashes, lineage e provenance do Engine original;
+- bridge de logger encaminha os logs existentes e captura apenas eventos e campos técnicos
+  allowlisted; falhas da observabilidade são contidas e nunca alteram o workflow;
+- eventos internos imutáveis cobrem `execution.started`, `execution.finished`, `execution.failed`,
+  `stage.started`, `stage.finished` e `stage.failed`;
+- timeline minimizada cobre o contexto inicial de Knowledge do Product Owner e as etapas Product
+  Owner, Developer e QA, preservando sucesso, falha, cancelamento e etapas ignoradas;
+- métricas por agente consolidam duração, prompt bytes, completion bytes, tokens, latência do
+  provider, duração de validação e duração de geração de artifacts;
+- `Execution Summary` preserva status, readiness final, duração, tokens, etapas executadas e
+  ignoradas e os hashes públicos finais sem recalculá-los;
+- `totalCostEstimate` permanece `null`, pois a Sprint não possui rate card aprovado e versionado;
+- store em memória possui capacidade bounded centralizada, eviction determinística e snapshots
+  profundamente imutáveis; não retém `ExecutionResult`, prompts, entrada, knowledge,
+  specifications, respostas ou artifacts;
+- registros ativos nunca são expulsos por capacidade; o host compartilha o singleton apenas dentro
+  do mesmo processo Node.js;
+- `GET /api/executions/[id]/timeline` consulta histórico terminal por `executionId` canônico e aceita
+  `workflowId` somente como correlação ativa durante o POST síncrono;
+- Frontend usa polling React puro pelo client HTTP interno, com uma consulta em andamento,
+  `AbortSignal`, deadline degradável de cinco segundos e encerramento no resultado terminal ou
+  unmount;
+- restart, HMR e troca de instância não oferecem continuidade garantida; o histórico não representa
+  persistência;
+- ADR-026 e `knowledge/40-OBSERVABILITY_FLOW.md` documentam a fronteira e os cinco fluxos Mermaid;
+- 878 testes foram aprovados no total, sendo 793 da suíte raiz e 85 da aplicação;
+- cobertura da suíte raiz: 93,70% statements, 85,28% branches, 98,65% functions e 94,21% lines;
+- cobertura da aplicação: 95,00% statements, 87,08% branches, 95,65% functions e 97,63% lines;
+- cobertura de `core/observability`: 94,88% statements, 86,23% branches, 98,55% functions e
+  96,83% lines;
+- format, format check, lint, typecheck, testes, coverage, Prisma validate e build foram aprovados
+  com Node.js 24.19.0; `git diff --check` deve permanecer limpo no handoff;
+- implementação validada localmente e aguardando apenas aprovação humana;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 17
+  foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
@@ -634,9 +682,9 @@ humana. Nenhum item da Sprint 16 foi iniciado.
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, workflows dinâmicos e concorrência;
-- páginas adicionais, dashboard, histórico, artifacts completos e logs no frontend;
+- páginas adicionais, dashboard completo, artifacts completos e logs no frontend;
 - persistência funcional das execuções dos agentes;
 - revisão humana integrada ao fluxo;
 - autenticação e autorização;
-- métricas avançadas;
+- persistência durável e observabilidade distribuída;
 - deploy e configuração de Vercel.

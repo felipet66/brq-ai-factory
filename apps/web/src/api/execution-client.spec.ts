@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { executionObservabilitySnapshotSchema } from '@brq/observability';
 
 import { ExecutionClientError, executeWorkflow } from './execution-client';
 
@@ -64,6 +65,86 @@ function executionData(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function observabilityData(overrides: Record<string, unknown> = {}) {
+  const stages = [
+    ['KNOWLEDGE', 'Knowledge'],
+    ['PRODUCT_OWNER', 'Product Owner'],
+    ['DEVELOPER', 'Developer'],
+    ['QA', 'QA'],
+  ].map(([stageId, stageName]) => ({
+    stageId,
+    stageName,
+    status: 'SUCCESS',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    finishedAt: '2026-01-01T00:00:00.010Z',
+    durationMs: 10,
+    requestId: REQUEST_ID,
+    executionId: EXECUTION_ID,
+  }));
+  const stageMetrics = ['PRODUCT_OWNER', 'DEVELOPER', 'QA'].map((stageId) => ({
+    stageId,
+    durationMs: 10,
+    promptBytes: 100,
+    completionBytes: 50,
+    inputTokens: 20,
+    outputTokens: 10,
+    totalTokens: 30,
+    providerLatencyMs: 8,
+    validationDurationMs: 1,
+    artifactGenerationDurationMs: 1,
+  }));
+
+  return {
+    observabilityVersion: '1.0.0',
+    revision: 9,
+    executionId: EXECUTION_ID,
+    workflowId: `workflow-${FIXED_UUID}`,
+    requestId: REQUEST_ID,
+    status: 'SUCCESS',
+    updatedAt: '2026-01-01T00:00:00.010Z',
+    events: [
+      {
+        sequence: 1,
+        type: 'execution.started',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'RUNNING',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        finishedAt: null,
+        durationMs: null,
+        requestId: REQUEST_ID,
+        executionId: EXECUTION_ID,
+        errorCode: null,
+      },
+    ],
+    stages,
+    stageMetrics,
+    summary: {
+      executionId: EXECUTION_ID,
+      workflowStatus: 'SUCCESS',
+      readinessFinal: 'REQUIRES_CLARIFICATION',
+      totalDurationMs: 321,
+      totalTokens: 90,
+      totalCostEstimate: {
+        amount: 0.0012,
+        currency: 'USD',
+        rateCardVersion: '1.0.0',
+      },
+      executedStages: ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'],
+      skippedStages: [],
+      hashes: {
+        executionRequestHash: '1'.repeat(64),
+        workflowRequestHash: '2'.repeat(64),
+        workflowHash: '3'.repeat(64),
+        lineageHash: '4'.repeat(64),
+        provenanceHash: '5'.repeat(64),
+        executionHash: '6'.repeat(64),
+      },
+    },
+    ...overrides,
+  };
+}
+
 function successEnvelope(data = executionData()) {
   return {
     success: true,
@@ -77,6 +158,27 @@ function successEnvelope(data = executionData()) {
   };
 }
 
+function timelineEnvelope(data = observabilityData()) {
+  return {
+    success: true,
+    data,
+    metadata: {
+      requestId: REQUEST_ID,
+      apiVersion: '1.0.0',
+      executionId: EXECUTION_ID,
+    },
+    errors: [],
+  };
+}
+
+function successfulFetch(data = executionData(), timeline = observabilityData()) {
+  return vi.fn<FetchImplementation>(async (input) =>
+    String(input) === '/api/executions'
+      ? jsonResponse(successEnvelope(data))
+      : jsonResponse(timelineEnvelope(timeline)),
+  );
+}
+
 function clientOptions(fetchImplementation: FetchImplementation) {
   return {
     fetchImplementation,
@@ -84,19 +186,27 @@ function clientOptions(fetchImplementation: FetchImplementation) {
   };
 }
 
+function deferred<Value>() {
+  let resolve!: (value: Value) => void;
+  const promise = new Promise<Value>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('execution HTTP client', () => {
   it('normalizes form input and calls only the same-origin executions endpoint', async () => {
-    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
-      jsonResponse(successEnvelope()),
-    );
+    const fetchImplementation = successfulFetch();
 
     await executeWorkflow(
       { projectName: '  Portal de pedidos  ', objective: '  Consultar pedidos.  ' },
       clientOptions(fetchImplementation),
     );
 
-    expect(fetchImplementation).toHaveBeenCalledOnce();
-    const [url, init] = fetchImplementation.mock.calls[0]!;
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchImplementation.mock.calls.find(
+      ([input]) => input === '/api/executions',
+    )!;
     expect(url).toBe('/api/executions');
     expect(init).toMatchObject({
       method: 'POST',
@@ -127,12 +237,14 @@ describe('execution HTTP client', () => {
         },
       },
     });
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      `/api/executions/${EXECUTION_ID}/timeline`,
+      expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+    );
   });
 
   it('projects the raw ExecutionResult into the only presentation contract', async () => {
-    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
-      jsonResponse(successEnvelope()),
-    );
+    const fetchImplementation = successfulFetch();
 
     const summary = await executeWorkflow(
       { projectName: 'Portal', objective: 'Consultar pedidos.' },
@@ -175,9 +287,225 @@ describe('execution HTTP client', () => {
           },
         ],
       },
+      observability: {
+        revision: 9,
+        status: 'SUCCESS',
+        stages: [
+          { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 10 },
+          {
+            stageId: 'PRODUCT_OWNER',
+            stageName: 'Product Owner',
+            status: 'SUCCESS',
+            durationMs: 10,
+          },
+          { stageId: 'DEVELOPER', stageName: 'Developer', status: 'SUCCESS', durationMs: 10 },
+          { stageId: 'QA', stageName: 'QA', status: 'SUCCESS', durationMs: 10 },
+        ],
+        stageMetrics: [
+          {
+            stageId: 'PRODUCT_OWNER',
+            durationMs: 10,
+            promptBytes: 100,
+            completionBytes: 50,
+            inputTokens: 20,
+            outputTokens: 10,
+            totalTokens: 30,
+            providerLatencyMs: 8,
+            validationDurationMs: 1,
+            artifactGenerationDurationMs: 1,
+          },
+          {
+            stageId: 'DEVELOPER',
+            durationMs: 10,
+            promptBytes: 100,
+            completionBytes: 50,
+            inputTokens: 20,
+            outputTokens: 10,
+            totalTokens: 30,
+            providerLatencyMs: 8,
+            validationDurationMs: 1,
+            artifactGenerationDurationMs: 1,
+          },
+          {
+            stageId: 'QA',
+            durationMs: 10,
+            promptBytes: 100,
+            completionBytes: 50,
+            inputTokens: 20,
+            outputTokens: 10,
+            totalTokens: 30,
+            providerLatencyMs: 8,
+            validationDurationMs: 1,
+            artifactGenerationDurationMs: 1,
+          },
+        ],
+        summary: {
+          totalTokens: 90,
+          totalCostEstimate: {
+            amount: 0.0012,
+            currency: 'USD',
+            rateCardVersion: '1.0.0',
+          },
+          executedStages: ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'],
+          skippedStages: [],
+        },
+      },
     });
     expect(JSON.stringify(summary)).not.toContain('specifications');
     expect(JSON.stringify(summary)).not.toContain('secretInternalField');
+    expect(JSON.stringify(summary)).not.toContain('requestId');
+    expect(JSON.stringify(summary)).not.toContain('events');
+  });
+
+  it('polls live metadata by workflowId, tolerates a transient 404 and reconciles by executionId', async () => {
+    const post = deferred<Response>();
+    const observations: Exclude<
+      Awaited<ReturnType<typeof executeWorkflow>>['observability'],
+      null
+    >[] = [];
+    let workflowReads = 0;
+    const runningStages = observabilityData().stages.map((stage) => ({
+      ...stage,
+      status: stage.stageId === 'PRODUCT_OWNER' ? 'RUNNING' : 'PENDING',
+      finishedAt: null,
+      durationMs: null,
+    }));
+    const running = observabilityData({
+      revision: 2,
+      status: 'RUNNING',
+      stages: runningStages,
+      summary: null,
+    });
+    const fetchImplementation = vi.fn<FetchImplementation>(async (input) => {
+      const url = String(input);
+      if (url === '/api/executions') return post.promise;
+      if (url.includes(`workflow-${FIXED_UUID}`)) {
+        workflowReads += 1;
+        if (workflowReads === 1) return jsonResponse({ unavailable: true }, 404);
+        return jsonResponse(timelineEnvelope(workflowReads === 2 ? running : observabilityData()));
+      }
+      return jsonResponse(timelineEnvelope());
+    });
+
+    const execution = executeWorkflow(
+      { projectName: 'Portal', objective: 'Consultar pedidos.' },
+      {
+        ...clientOptions(fetchImplementation),
+        onObservability: (observability) => observations.push(observability),
+        pollIntervalMs: 0,
+      },
+    );
+
+    await vi.waitFor(() =>
+      expect(observations.some((observation) => observation.revision === 2)).toBe(true),
+    );
+    post.resolve(jsonResponse(successEnvelope()));
+
+    const summary = await execution;
+    expect(summary.observability).toMatchObject({ revision: 9, status: 'SUCCESS' });
+    expect(observations.at(-1)).toEqual(summary.observability);
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      `/api/executions/workflow-${FIXED_UUID}/timeline`,
+      expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+    );
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      `/api/executions/${EXECUTION_ID}/timeline`,
+      expect.objectContaining({ method: 'GET', cache: 'no-store' }),
+    );
+  });
+
+  it('keeps observability transport failures degradable', async () => {
+    const callback = vi.fn();
+    const fetchImplementation = vi.fn<FetchImplementation>(async (input) =>
+      String(input) === '/api/executions'
+        ? jsonResponse(successEnvelope())
+        : jsonResponse({ internal: 'must-not-reach-the-presentation' }, 503),
+    );
+
+    const summary = await executeWorkflow(
+      { projectName: 'Portal', objective: 'Consultar pedidos.' },
+      {
+        ...clientOptions(fetchImplementation),
+        onObservability: callback,
+        pollIntervalMs: 0,
+      },
+    );
+
+    expect(summary.status).toBe('SUCCESS');
+    expect(summary.observability).toBeNull();
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('does not let a hanging timeline request block a completed workflow', async () => {
+    const fetchImplementation = vi.fn<FetchImplementation>(async (input) => {
+      if (String(input) === '/api/executions') return jsonResponse(successEnvelope());
+      return new Promise<Response>(() => undefined);
+    });
+
+    await expect(
+      executeWorkflow(
+        { projectName: 'Portal', objective: 'Consultar pedidos.' },
+        {
+          ...clientOptions(fetchImplementation),
+          onObservability: () => undefined,
+          pollIntervalMs: 0,
+          timelineRequestTimeoutMs: 1,
+        },
+      ),
+    ).resolves.toMatchObject({ status: 'SUCCESS', observability: null });
+  });
+
+  it('aborts an in-flight timeline read with the caller request', async () => {
+    const controller = new AbortController();
+    let timelineSignal: AbortSignal | undefined;
+    const fetchImplementation = vi.fn<FetchImplementation>((input, init) => {
+      const signal = init?.signal;
+      if (String(input) !== '/api/executions') timelineSignal = signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('aborted transport', 'AbortError')),
+          { once: true },
+        );
+      });
+    });
+
+    const execution = executeWorkflow(
+      { projectName: 'Portal', objective: 'Consultar pedidos.' },
+      {
+        ...clientOptions(fetchImplementation),
+        signal: controller.signal,
+        onObservability: () => undefined,
+        pollIntervalMs: 0,
+      },
+    );
+    await vi.waitFor(() => expect(timelineSignal).toBeDefined());
+    controller.abort();
+
+    await expect(execution).rejects.toMatchObject({ code: 'REQUEST_ABORTED' });
+    expect(timelineSignal?.aborted).toBe(true);
+    expect(
+      fetchImplementation.mock.calls.filter(([input]) => String(input).includes('/timeline')),
+    ).toHaveLength(1);
+  });
+
+  it('keeps the browser fixture aligned with the public observability contract', () => {
+    expect(executionObservabilitySnapshotSchema.safeParse(observabilityData()).success).toBe(true);
+  });
+
+  it('isolates presentation callback failures from the execution result', async () => {
+    await expect(
+      executeWorkflow(
+        { projectName: 'Portal', objective: 'Consultar pedidos.' },
+        {
+          ...clientOptions(successfulFetch()),
+          onObservability: () => {
+            throw new Error('presentation observer failed');
+          },
+          pollIntervalMs: 0,
+        },
+      ),
+    ).resolves.toMatchObject({ status: 'SUCCESS', observability: { status: 'SUCCESS' } });
   });
 
   it('treats a functional FAILED result with nullable workflow data as a valid summary', async () => {
@@ -213,9 +541,7 @@ describe('execution HTTP client', () => {
 
   it('propagates the AbortSignal without adding retry behavior', async () => {
     const controller = new AbortController();
-    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
-      jsonResponse(successEnvelope()),
-    );
+    const fetchImplementation = successfulFetch();
 
     await executeWorkflow(
       { projectName: 'Portal', objective: 'Consultar pedidos.' },
@@ -226,7 +552,9 @@ describe('execution HTTP client', () => {
       '/api/executions',
       expect.objectContaining({ signal: controller.signal }),
     );
-    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(
+      fetchImplementation.mock.calls.filter(([input]) => input === '/api/executions'),
+    ).toHaveLength(1);
   });
 
   it.each([

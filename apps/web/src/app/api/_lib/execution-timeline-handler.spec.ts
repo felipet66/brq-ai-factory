@@ -1,0 +1,285 @@
+// @vitest-environment node
+
+import type {
+  ExecutionHistoryReader,
+  ExecutionObservabilitySnapshot,
+  ExecutionStageMetrics,
+} from '@brq/observability';
+import { describe, expect, it, vi } from 'vitest';
+
+import { EXECUTION_ID, FIXED_REQUEST_ID, capturedLogger } from '@/test/api-fixtures';
+
+import { createExecutionTimelineHandler } from './execution-timeline-handler';
+
+const WORKFLOW_ID = 'workflow-123e4567-e89b-12d3-a456-426614174000';
+const UNKNOWN_EXECUTION_ID = `execution-${'b'.repeat(32)}`;
+const AGENT_STAGE_IDS = ['PRODUCT_OWNER', 'DEVELOPER', 'QA'] as const;
+
+function emptyStageMetrics(stageId: ExecutionStageMetrics['stageId']): ExecutionStageMetrics {
+  return {
+    stageId,
+    durationMs: null,
+    promptBytes: null,
+    completionBytes: null,
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+    providerLatencyMs: null,
+    validationDurationMs: null,
+    artifactGenerationDurationMs: null,
+  };
+}
+
+const SNAPSHOT = {
+  observabilityVersion: '1.0.0',
+  revision: 3,
+  executionId: EXECUTION_ID,
+  workflowId: WORKFLOW_ID,
+  requestId: FIXED_REQUEST_ID,
+  status: 'RUNNING',
+  updatedAt: '2026-08-07T10:00:00.002Z',
+  events: [
+    {
+      sequence: 1,
+      type: 'execution.started',
+      stageId: 'EXECUTION',
+      stageName: 'Execution',
+      status: 'RUNNING',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+      errorCode: null,
+    },
+    {
+      sequence: 2,
+      type: 'stage.started',
+      stageId: 'KNOWLEDGE',
+      stageName: 'Knowledge',
+      status: 'RUNNING',
+      startedAt: '2026-08-07T10:00:00.001Z',
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+      errorCode: null,
+    },
+  ],
+  stages: [
+    {
+      stageId: 'KNOWLEDGE',
+      stageName: 'Knowledge',
+      status: 'RUNNING',
+      startedAt: '2026-08-07T10:00:00.001Z',
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+    },
+    {
+      stageId: 'PRODUCT_OWNER',
+      stageName: 'Product Owner',
+      status: 'PENDING',
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+    },
+    {
+      stageId: 'DEVELOPER',
+      stageName: 'Developer',
+      status: 'PENDING',
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+    },
+    {
+      stageId: 'QA',
+      stageName: 'QA',
+      status: 'PENDING',
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+    },
+  ],
+  stageMetrics: AGENT_STAGE_IDS.map(emptyStageMetrics),
+  summary: null,
+} as const satisfies ExecutionObservabilitySnapshot;
+
+function fakeHistory(): ExecutionHistoryReader & { readonly get: ReturnType<typeof vi.fn> } {
+  const get = vi.fn((id: string): ExecutionObservabilitySnapshot | null =>
+    id === EXECUTION_ID || id === WORKFLOW_ID ? SNAPSHOT : null,
+  );
+  return { get };
+}
+
+function context(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
+describe('execution timeline HTTP adapter', () => {
+  it('returns an existing snapshot in the standard secure envelope', async () => {
+    const history = fakeHistory();
+    const { logger, records } = capturedLogger();
+    const handler = createExecutionTimelineHandler({
+      getExecutionHistory: () => history,
+      logger,
+      now: () => 50,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline`),
+      context(EXECUTION_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      success: true,
+      data: SNAPSHOT,
+      metadata: {
+        requestId: FIXED_REQUEST_ID,
+        apiVersion: '1.0.0',
+        executionId: EXECUTION_ID,
+      },
+      errors: [],
+    });
+    expect(history.get).toHaveBeenCalledOnce();
+    expect(history.get).toHaveBeenCalledWith(EXECUTION_ID);
+    expect(response.headers.get('x-request-id')).toBe(FIXED_REQUEST_ID);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(records.map((record) => record.event)).toEqual([
+      'http.request.started',
+      'http.request.completed',
+    ]);
+    expect(records.at(-1)).toMatchObject({
+      endpoint: '/api/executions/[id]/timeline',
+      method: 'GET',
+      statusCode: 200,
+      executionId: EXECUTION_ID,
+    });
+    const logs = JSON.stringify(records);
+    expect(logs).not.toContain(WORKFLOW_ID);
+    expect(logs).not.toContain('Knowledge');
+    expect(logs).not.toContain('stageMetrics');
+  });
+
+  it('looks up an active timeline by its workflowId alias', async () => {
+    const history = fakeHistory();
+    const handler = createExecutionTimelineHandler({
+      getExecutionHistory: () => history,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${WORKFLOW_ID}/timeline`),
+      context(WORKFLOW_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.status).toBe('RUNNING');
+    expect(body.data.executionId).toBe(EXECUTION_ID);
+    expect(body.metadata.executionId).toBe(EXECUTION_ID);
+    expect(history.get).toHaveBeenCalledWith(WORKFLOW_ID);
+  });
+
+  it('returns 404 for an unknown valid identifier', async () => {
+    const history = fakeHistory();
+    const handler = createExecutionTimelineHandler({
+      getExecutionHistory: () => history,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${UNKNOWN_EXECUTION_ID}/timeline`),
+      context(UNKNOWN_EXECUTION_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body).toEqual({
+      success: false,
+      data: null,
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '1.0.0' },
+      errors: [
+        {
+          code: 'EXECUTION_TIMELINE_NOT_FOUND',
+          message: 'A timeline da execução não foi encontrada.',
+        },
+      ],
+    });
+    expect(history.get).toHaveBeenCalledWith(UNKNOWN_EXECUTION_ID);
+  });
+
+  it('rejects malformed identifiers and query parameters before lookup', async () => {
+    const history = fakeHistory();
+    const handler = createExecutionTimelineHandler({
+      getExecutionHistory: () => history,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const invalid = await handler(
+      new Request('http://localhost/api/executions/not-an-id/timeline'),
+      context('not-an-id'),
+    );
+    const query = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline?include=content`),
+      context(EXECUTION_ID),
+    );
+
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({
+      success: false,
+      data: null,
+      errors: [{ code: 'INVALID_REQUEST', path: 'id' }],
+    });
+    expect(query.status).toBe(400);
+    expect(await query.json()).toMatchObject({
+      success: false,
+      data: null,
+      errors: [{ code: 'INVALID_REQUEST' }],
+    });
+    expect(history.get).not.toHaveBeenCalled();
+  });
+
+  it('returns a standardized 405 without consulting history', async () => {
+    const history = fakeHistory();
+    const handler = createExecutionTimelineHandler({
+      getExecutionHistory: () => history,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline`, {
+        method: 'DELETE',
+      }),
+      context(EXECUTION_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET');
+    expect(body).toMatchObject({
+      success: false,
+      data: null,
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '1.0.0' },
+      errors: [{ code: 'METHOD_NOT_ALLOWED' }],
+    });
+    expect(history.get).not.toHaveBeenCalled();
+  });
+});

@@ -42,7 +42,8 @@ brq-ai-factory/
 │   │   ├── ADR-022-ORCHESTRATOR-BOUNDARY.md
 │   │   ├── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
 │   │   ├── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
-│   │   └── ADR-025-FRONTEND-MVP.md
+│   │   ├── ADR-025-FRONTEND-MVP.md
+│   │   └── ADR-026-OBSERVABILITY-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -83,11 +84,13 @@ brq-ai-factory/
 │   ├── 36-ORCHESTRATOR_FLOW.md
 │   ├── 37-EXECUTION_ENGINE_FLOW.md
 │   ├── 38-HTTP_API_FLOW.md
-│   └── 39-FRONTEND_FLOW.md
+│   ├── 39-FRONTEND_FLOW.md
+│   └── 40-OBSERVABILITY_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
-│   └── execution-engine/
+│   ├── execution-engine/
+│   └── observability/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -260,8 +263,10 @@ registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
 ## HTTP API
 
 A Sprint 14 expõe o Execution Engine exclusivamente por Next.js 16 Route Handlers. Os endpoints
-implementados são `GET /api/health`, `POST /api/executions` e `GET /api/executions/[id]`. A criação
-é síncrona e efêmera; a consulta por ID valida o contrato e retorna 501 até existir persistência.
+originais são `GET /api/health`, `POST /api/executions` e `GET /api/executions/[id]`. A criação é
+síncrona e efêmera; a consulta geral por ID valida o contrato e retorna 501 até existir
+persistência. A Sprint 16 acrescenta `GET /api/executions/[id]/timeline`, limitado ao histórico de
+observabilidade mantido em memória.
 
 O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId`,
 propaga o mesmo `AbortSignal` e transporta `ExecutionResult` sem alterar hashes, métricas, lineage
@@ -290,6 +295,31 @@ perfil técnico versionado e gera IDs por submissão como limitação temporári
 deverá migrar para configuração confiável no backend em uma futura evolução versionada do contrato.
 
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
+
+## Execution History & Observability
+
+A Sprint 16 implementa o workspace `@brq/observability` em `core/observability`. Ele decora somente
+a API pública do Execution Engine, normaliza logs técnicos sanitizados em eventos tipados e
+imutáveis e mantém snapshots minimizados em um store bounded, local ao processo e sem
+persistência.
+
+A timeline acompanha Knowledge, Product Owner, Developer e QA, além dos eventos de delimitação de
+execution e workflow. Métricas por agente preservam duração, bytes, tokens, latência do provider,
+validação e geração de artifacts. O `Execution Summary` consolida status, readiness, duração,
+tokens, etapas executadas ou ignoradas e os hashes finais sem recalculá-los. Como não existe rate
+card aprovado e versionado, `totalCostEstimate` permanece `null`.
+
+O Frontend consulta `GET /api/executions/[id]/timeline` com React puro. Durante o POST síncrono, o
+`workflowId` funciona apenas como correlação ativa; após o término, somente o `executionId`
+canônico consulta o histórico retido. Polling não retenta o workflow, aplica deadline degradável de
+cinco segundos por leitura e para em resultado terminal ou unmount.
+
+O host compartilha o store entre Route Handlers no mesmo processo, mas restart, HMR, eviction ou
+troca de instância não oferecem continuidade garantida. Falha de observabilidade é best-effort e
+nunca altera a execução funcional. A implementação foi validada localmente e aguarda a aprovação
+humana da Sprint 16.
+
+[Fluxo visual da Observabilidade](knowledge/40-OBSERVABILITY_FLOW.md) · [ADR-026](knowledge/ADR/ADR-026-OBSERVABILITY-BOUNDARY.md)
 
 ## Validações
 

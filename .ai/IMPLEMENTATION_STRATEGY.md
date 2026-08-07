@@ -626,18 +626,43 @@ ao núcleo nem exposição de prompts, specifications, artifacts, knowledge, res
 
 Objetivo
 
-Adicionar rastreabilidade.
+Adicionar histórico efêmero e observabilidade inspecionável sem persistência definitiva e sem
+alterar o workflow funcional.
 
 Entregas
 
-- logs estruturados
-- métricas
-- eventos
-- dashboard
+- workspace `@brq/observability` em `core/observability`;
+- decorator exclusivo da API pública do Execution Engine;
+- bridge allowlisted sobre os logs sanitizados existentes;
+- eventos imutáveis `execution.started`, `execution.finished`, `execution.failed`,
+  `stage.started`, `stage.finished` e `stage.failed`;
+- timeline de Knowledge, Product Owner, Developer e QA;
+- métricas por agente com duração, bytes, tokens, latência, validação e geração de artifacts;
+- `Execution Summary` minimizado com status, readiness, totais, etapas e hashes finais;
+- `totalCostEstimate` anulável enquanto não houver rate card aprovado e versionado;
+- store bounded em memória, compartilhado somente no processo e sem continuidade garantida em
+  restart, HMR ou eviction;
+- `GET /api/executions/[id]/timeline` para execution ID canônico e correlação ativa por workflow ID;
+- polling React puro durante o POST síncrono, sem retry de workflow;
+- ADR-026 e fluxo visual 40.
+
+Decisões da implementação
+
+- o workspace depende somente de `@brq/execution-engine`, `@brq/shared` e Zod;
+- o Execution Engine permanece como único caller de produção do Orchestrator;
+- logs e histórico nunca contêm prompts, entrada do usuário, knowledge, specifications, respostas
+  ou artifacts;
+- timestamps, métricas, custo, eventos e polling não participam dos hashes existentes;
+- falha de observabilidade é best-effort e não altera resultado, erro ou cancelamento da execução;
+- cada leitura de timeline possui deadline degradável e nunca bloqueia o resultado funcional;
+- não existe banco, repository, fila, worker, WebSocket, OpenTelemetry ou background job;
+- a implementação foi validada localmente e aguarda aprovação humana antes de ser considerada
+  concluída.
 
 Critério
 
-Toda execução pode ser auditada.
+Uma execução do processo local pode ser inspecionada por timeline e resumo minimizados, com métricas
+e hashes preservados, sem acessar conteúdo sensível ou modificar a execução funcional.
 
 ---
 

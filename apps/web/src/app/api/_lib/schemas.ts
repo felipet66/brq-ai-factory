@@ -1,4 +1,5 @@
 import { executionRequestSchema, executionResultSchema } from '@brq/execution-engine';
+import { executionObservabilitySnapshotSchema } from '@brq/observability';
 import { semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
 
@@ -29,6 +30,12 @@ export const executionHttpRequestSchema = z
   });
 
 export const executionIdPathSchema = z.string().regex(/^execution-[a-f0-9]{32}$/);
+export const executionTimelineIdPathSchema = z.union([
+  executionIdPathSchema,
+  z
+    .string()
+    .regex(/^workflow-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+]);
 
 export const apiErrorCodeSchema = z.enum(Object.values(API_ERROR_CODES));
 
@@ -79,6 +86,15 @@ export const executionResponseSchema = z
   .object({
     success: z.literal(true),
     data: executionResultSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const executionTimelineResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: executionObservabilitySnapshotSchema,
     metadata: apiResponseMetadataSchema,
     errors: z.tuple([]),
   })

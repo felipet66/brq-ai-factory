@@ -6,6 +6,10 @@ Documentar a camada HTTP implementada na Sprint 14 e a fronteira do adapter defi
 ADR-024. A API não é um serviço de domínio: ela transporta um `ExecutionRequest` até o
 Execution Engine e devolve seu `ExecutionResult`.
 
+A Sprint 16 estende essa fronteira somente com a leitura observacional descrita pelo ADR-026:
+`GET /api/executions/[id]/timeline` consulta um histórico limitado em memória e nunca inicia,
+retenta ou controla uma execução.
+
 ## Fluxo completo de criação
 
 ```mermaid
@@ -24,7 +28,7 @@ sequenceDiagram
     Route->>Guard: validate media type, encoding, bytes, JSON and Zod contract
     Guard-->>Route: ExecutionRequest HTTP without IDs
     Route->>Runtime: getExecutionEngine()
-    Runtime-->>Route: lazy immutable Engine instance
+    Runtime-->>Route: lazy immutable observed Engine instance
     Route->>Engine: execute(ExecutionRequest + requestId, same AbortSignal)
     Engine->>Orchestrator: execute(public WorkflowRequest)
     Orchestrator-->>Engine: WorkflowResult
@@ -53,6 +57,8 @@ flowchart LR
 ```
 
 Não existe `core/ai-factory-runtime`. A composição concreta pertence à aplicação Next.js.
+Na Sprint 16, o composition root também conecta `@brq/observability` por um decorator da API
+pública do Engine e fornece um reader público separado ao endpoint de timeline.
 
 ## Endpoints
 
@@ -86,8 +92,34 @@ flowchart TD
     FORMAT -->|"yes"| FUTURE["501 EXECUTION_LOOKUP_NOT_SUPPORTED"]
 ```
 
-Não existe store em memória, repository ou banco oculto. O 501 mantém explícita a ausência de
-consulta no MVP.
+Não existe store de `ExecutionResult`, repository ou banco oculto. O 501 mantém explícita a
+ausência de consulta funcional no MVP.
+
+Essa ausência permanece válida para lookup do `ExecutionResult` completo. O histórico
+observacional limitado introduzido na Sprint 16 não implementa `GET /api/executions/[id]`.
+
+### `GET /api/executions/[id]/timeline`
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Route as Timeline Route Handler
+    participant Reader as Public Observability Reader
+    participant Store as Bounded In-memory History
+
+    Client->>Route: GET /api/executions/{executionId}/timeline
+    Route->>Route: validar ID e iniciar log sanitizado
+    Route->>Reader: get(id)
+    Reader->>Store: consultar snapshot imutável
+    Store-->>Reader: timeline + metrics + summary, ou ausência
+    Reader-->>Route: projeção minimizada
+    Route-->>Client: 200, 400 ou 404 no envelope padrão
+```
+
+Durante o POST síncrono, o mesmo path aceita o `workflowId` validado como correlação temporária
+para polling. Depois do término, somente o `executionId` canônico consulta o registro retido.
+Snapshots contêm apenas metadados técnicos; `totalCostEstimate` permanece `null` enquanto não
+existir rate card aprovado.
 
 ## Validação do payload
 
@@ -149,6 +181,7 @@ são retornadas.
 | -----: | -------------------------------------------------------- |
 |    200 | health ou `ExecutionResult` resolvido                    |
 |    400 | JSON, query, path ou contrato inválido                   |
+|    404 | timeline ausente, removida ou correlação inativa         |
 |    405 | método não permitido, com `Allow`                        |
 |    408 | cancelamento propagado                                   |
 |    413 | payload acima de 512 KiB                                 |
@@ -168,12 +201,19 @@ requestId, endpoint estático, método, status, duração, executionId quando co
 erro. Body, URL completa, query, headers, prompts, specifications, artifacts, respostas do modelo
 e resultados nunca são registrados pela API.
 
+O endpoint de timeline aplica a mesma política e retorna somente eventos observacionais tipados,
+etapas ordenadas, métricas por agente e resumo público. O histórico é limitado, local ao processo,
+best-effort e sem continuidade garantida em restart ou HMR; não é persistência.
+
 ## Determinismo
 
 O adapter não recalcula nem altera hashes, lineage, provenance ou métricas do `ExecutionResult`.
 O `requestId` criado por chamada integra o `ExecutionRequest` entregue ao Engine; a partir dessa
 entrada completa, toda sequência e todos os hashes continuam determinísticos. Timestamps e duração
 HTTP permanecem somente observacionais.
+
+Timeline, métricas, timestamps, custo estimado, polling e eviction também são estritamente
+observacionais e não participam dos hashes do Engine ou do Orchestrator.
 
 ## Fora do escopo da Sprint 14
 
@@ -184,3 +224,7 @@ frontend funcional, Playwright, monitoramento distribuído e qualquer item da Sp
 Essa lista registra o limite histórico do incremento da API. Desde a Sprint 15, o Frontend MVP
 consome este adapter sem alterar seus contratos ou responsabilidades; consulte
 [39-FRONTEND_FLOW.md](39-FRONTEND_FLOW.md).
+
+A Sprint 16 implementa somente o endpoint observacional e o histórico limitado descritos acima.
+Persistência durável, lookup do resultado completo e observabilidade distribuída continuam fora do
+escopo, sem atribuição automática a uma Sprint futura.

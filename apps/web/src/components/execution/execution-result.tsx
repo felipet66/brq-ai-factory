@@ -1,5 +1,7 @@
 import type { ExecutionSummary } from '@/api/execution-contracts';
 
+import { ExecutionTimeline } from './execution-timeline';
+
 interface ExecutionResultProps {
   readonly result: ExecutionSummary;
 }
@@ -46,6 +48,8 @@ export function ExecutionResult({ result }: ExecutionResultProps) {
           <dd>{displayValue(result.readiness)}</dd>
         </div>
       </dl>
+
+      <ExecutionTimeline observability={result.observability} />
 
       <section className="result-section" aria-labelledby="hashes-heading">
         <h3 id="hashes-heading">Hashes</h3>

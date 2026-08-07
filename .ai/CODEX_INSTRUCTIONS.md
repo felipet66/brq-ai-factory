@@ -126,6 +126,8 @@ Na seguinte ordem:
 38-HTTP_API_FLOW.md
 
 39-FRONTEND_FLOW.md
+
+40-OBSERVABILITY_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -300,6 +302,10 @@ API
 
 ↓
 
+Observability Decorator
+
+↓
+
 Execution Engine
 
 ↓
@@ -384,6 +390,10 @@ core/execution-engine
 
 ↓
 
+core/observability
+
+↓
+
 apps/web
 ```
 
@@ -424,6 +434,21 @@ runtime ou internals da API, não chamam `fetch` diretamente e não renderizam H
 metadados técnicos fornecidos pelo browser são limitação temporária da API `1.0.0`; uma evolução
 futura do contrato deve mover essa responsabilidade para configuração confiável no backend. A
 Sprint não implementa nenhum item da Sprint 16.
+
+Na Sprint 16, `core/observability` implementa uma fronteira efêmera sobre a API pública do
+Execution Engine. Um decorator delega a execução exatamente uma vez, uma bridge normaliza somente
+logs técnicos allowlisted e um store bounded em memória mantém eventos, timeline, métricas por
+agente e `Execution Summary` minimizado. O workspace depende apenas de `@brq/execution-engine`,
+`@brq/shared` e Zod; não conhece Orchestrator, agentes ou componentes inferiores.
+
+O endpoint `GET /api/executions/[id]/timeline` aceita `executionId` canônico para histórico retido e
+`workflowId` apenas como correlação ativa durante o POST síncrono. O Frontend usa polling React
+puro com deadline degradável por leitura, sem WebSocket, fila ou retry de workflow. Timestamps,
+métricas, custo e polling permanecem fora dos hashes; `totalCostEstimate` é `null` sem rate card
+aprovado. O histórico não é persistência e não oferece continuidade garantida em restart, HMR,
+eviction ou troca de instância; sua falha nunca altera o workflow. A Sprint 16 foi implementada,
+validada localmente e aguarda aprovação humana; nenhum item da Sprint 17 pode ser iniciado
+automaticamente.
 
 ---
 

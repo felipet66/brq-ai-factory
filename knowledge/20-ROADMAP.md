@@ -11,8 +11,10 @@ Cada fase deve entregar valor de forma independente.
 As fases podem ser reavaliadas conforme novos aprendizados.
 
 Estado incremental: Foundation, camadas core, fachadas Product Owner, Developer e QA,
-Orchestrator sequencial, Execution Engine efêmero, adapter HTTP e Frontend MVP estão disponíveis
-até a Sprint 15. Persistência funcional, dashboard e demais páginas permanecem em Sprints futuras.
+Orchestrator sequencial, Execution Engine efêmero, adapter HTTP, Frontend MVP e Execution History &
+Observability em memória estão implementados até a Sprint 16. A Sprint 16 foi validada localmente
+e aguarda aprovação humana. Persistência funcional, dashboard completo e demais páginas
+permanecem em evoluções futuras, sem atribuição a uma Sprint específica neste documento.
 
 ---
 
@@ -60,6 +62,8 @@ Entregas:
 - Developer Agent
 - QA Agent
 - Frontend MVP com formulário e resumo da execução
+- histórico bounded em memória e timeline de execução
+- eventos tipados, métricas por agente e resumo observacional
 - Persistência
 - Logs
 - Exportação de Artefatos

@@ -44,6 +44,28 @@ function summary(overrides: Partial<ExecutionSummary> = {}): ExecutionSummary {
         },
       ],
     },
+    observability: {
+      revision: 9,
+      status: 'SUCCESS',
+      stages: [
+        { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 4 },
+        {
+          stageId: 'PRODUCT_OWNER',
+          stageName: 'Product Owner',
+          status: 'SUCCESS',
+          durationMs: 12,
+        },
+        { stageId: 'DEVELOPER', stageName: 'Developer', status: 'SUCCESS', durationMs: 14 },
+        { stageId: 'QA', stageName: 'QA', status: 'SUCCESS', durationMs: 10 },
+      ],
+      stageMetrics: [],
+      summary: {
+        totalTokens: 120,
+        totalCostEstimate: null,
+        executedStages: ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'],
+        skippedStages: [],
+      },
+    },
     ...overrides,
   };
 }
@@ -64,7 +86,9 @@ describe('ExecutionResult', () => {
     expect(within(lineage).getAllByText('3')).toHaveLength(2);
     expect(screen.getByText('PRODUCT_OWNER')).toBeInTheDocument();
     expect(screen.getByText('DEVELOPER')).toBeInTheDocument();
-    expect(screen.getByText('QA')).toBeInTheDocument();
+    expect(screen.getAllByText('QA').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Execution timeline' })).toBeInTheDocument();
+    expect(screen.getAllByText('Complete')).toHaveLength(4);
   });
 
   it('keeps functional failures in the result view and handles absent summaries', () => {
@@ -75,6 +99,7 @@ describe('ExecutionResult', () => {
           readiness: null,
           lineage: null,
           provenance: null,
+          observability: null,
           hashes: {
             ...summary().hashes,
             workflowHash: null,

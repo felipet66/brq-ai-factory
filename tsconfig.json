@@ -12,6 +12,7 @@
     "core/artifact-generator/**/*.ts",
     "core/execution-engine/**/*.ts",
     "core/knowledge-loader/**/*.ts",
+    "core/observability/**/*.ts",
     "core/orchestrator/**/*.ts",
     "core/prompt-builder/**/*.ts",
     "core/response-validator/**/*.ts",

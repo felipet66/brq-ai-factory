@@ -7,6 +7,7 @@ import type {
   errorResponseSchema,
   executionHttpRequestSchema,
   executionResponseSchema,
+  executionTimelineResponseSchema,
   healthResponseSchema,
 } from './schemas';
 
@@ -15,6 +16,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ExecutionResponse = z.infer<typeof executionResponseSchema>;
+export type ExecutionTimelineResponse = z.infer<typeof executionTimelineResponseSchema>;
 
 export type RequestIdFactory = () => string;
 

@@ -11,7 +11,7 @@ implementação normativa está no ADR-024 e utiliza somente Next.js 16 Route Ha
 HTTP Request
   → controles de transporte
   → schema Zod
-  → public Execution Engine API
+  → public Execution Engine API ou public Observability Reader
   → HTTP Response
 ```
 
@@ -19,19 +19,21 @@ A API não conhece Product Owner, Developer, QA, Orchestrator interno, Prompt Bu
 Loader, AI Provider, Agent Runner, Response Validator ou Artifact Generator. Também não acessa
 Prisma, repositories ou banco.
 
-O composition root é parte do host Next.js em `apps/web/src/server/runtime.ts`. Ele apenas monta
-o grafo com factories públicas e fornece o `ExecutionEngine` de forma lazy. Não existe workspace
-de runtime no domínio.
+O composition root é parte do host Next.js em `apps/web/src/server/runtime.ts`. Ele monta o grafo
+com factories públicas, fornece o `ExecutionEngine` decorado de forma lazy e mantém o reader do
+histórico efêmero. Não existe workspace de runtime no domínio.
 
 ## Endpoints implementados
 
-| Método | Endpoint               | Comportamento                                                |
-| ------ | ---------------------- | ------------------------------------------------------------ |
-| GET    | `/api/health`          | versões estáticas, sem inicializar Engine, IA ou banco       |
-| POST   | `/api/executions`      | execução síncrona pelo Engine e retorno de `ExecutionResult` |
-| GET    | `/api/executions/[id]` | valida ID e retorna 501 enquanto não existe persistência     |
+| Método | Endpoint                        | Comportamento                                                |
+| ------ | ------------------------------- | ------------------------------------------------------------ |
+| GET    | `/api/health`                   | versões estáticas, sem inicializar Engine, IA ou banco       |
+| POST   | `/api/executions`               | execução síncrona pelo Engine e retorno de `ExecutionResult` |
+| GET    | `/api/executions/[id]`          | valida ID e retorna 501 enquanto não existe persistência     |
+| GET    | `/api/executions/[id]/timeline` | snapshot minimizado do histórico em memória                  |
 
-Nenhum outro endpoint integra a Sprint 14.
+Os três primeiros endpoints registram o incremento histórico da Sprint 14. A Sprint 16 acrescenta
+somente a timeline; ela não torna o lookup geral persistente.
 
 ## Request de execução
 
@@ -63,6 +65,7 @@ mudança incompatível exigirá nova decisão arquitetural.
 
 - 200: health ou `ExecutionResult` resolvido, inclusive `FAILED` funcional;
 - 400: JSON, query, ID ou contrato inválido;
+- 404: timeline desconhecida, removida ou fora da correlação ativa;
 - 405: método não permitido;
 - 408: cancelamento propagado pelo Engine;
 - 413: payload acima de 512 KiB;
@@ -90,8 +93,18 @@ passa ao Engine. Logs HTTP contêm somente correlações, endpoint estático, m�
 código sanitizado. Conteúdo do usuário, URLs completas, headers, prompts, specifications, artifacts,
 respostas da IA e resultados nunca são registrados pela camada HTTP.
 
+Na Sprint 16, `@brq/observability` decora o Engine e mantém um store bounded local ao processo. O
+endpoint de timeline aceita `executionId` canônico para registros retidos e `workflowId` somente
+como correlação ativa durante o POST síncrono. Ele devolve eventos tipados, timeline, métricas por
+agente e summary minimizado, sempre com `Cache-Control: no-store`.
+
+O histórico não retém o `ExecutionResult` completo nem qualquer conteúdo funcional. Reinício, HMR,
+eviction ou troca de instância apagam ou tornam o registro indisponível. Falha da observabilidade
+não altera o resultado do Engine. Sem rate card aprovado, o custo estimado permanece `null`.
+
 ## Fora do escopo
 
 Projects, Agents, Prompts, logs e artifacts como endpoints; autenticação; autorização;
 persistência; banco; filas; execução assíncrona; websocket; SSE; cache; rate limit; upload;
-download; OpenAPI; SDK; CLI; frontend funcional e qualquer item da Sprint 15.
+download; OpenAPI; SDK e CLI. O endpoint de timeline da Sprint 16 é uma exceção estritamente
+observacional e em memória; não implementa lookup persistente nem qualquer item da Sprint 17.

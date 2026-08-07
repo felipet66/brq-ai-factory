@@ -356,9 +356,11 @@ Dados sensíveis devem ser removidos ou mascarados.
 
 ---
 
-# Dashboard
+# Dashboard futuro
 
-O dashboard deve exibir:
+Um dashboard completo permanece futuro. Na Sprint 16, o Frontend expõe somente uma timeline viva e
+um resumo minimizado da execução, sem páginas adicionais, logs, prompts, specifications ou
+artifacts. Um dashboard futuro poderá exibir:
 
 - status da execução
 - etapa atual
@@ -397,7 +399,9 @@ Sugestão inicial:
 - métricas agregadas: 12 meses
 - artefatos: conforme política do projeto
 
-No MVP local, os dados podem permanecer no SQLite.
+O histórico de observabilidade da Sprint 16 não usa SQLite. Ele permanece em um store bounded no
+processo e não oferece continuidade garantida em restart, HMR, eviction ou troca de instância. Uma política de retenção
+durável exige decisão futura.
 
 ---
 
@@ -425,14 +429,18 @@ sk-****************
 
 # Ferramentas
 
-No MVP:
+No MVP atual:
 
-- logger estruturado
-- persistência de eventos no banco
-- dashboard interno
+- logger estruturado;
+- eventos tipados e imutáveis;
+- store bounded em memória;
+- endpoint de timeline;
+- timeline React minimizada.
 
 Evolução futura:
 
+- persistência durável de eventos;
+- dashboard completo;
 - OpenTelemetry
 - Sentry
 - Grafana
@@ -466,3 +474,52 @@ correlacionar a semântica usada em cada resultado.
 `requestId`, endpoint estático, método, status, duração, `executionId` conhecido e código de erro
 sanitizado. A API não registra URL completa, query, headers, body, prompts, specifications,
 artifacts, respostas do modelo ou `ExecutionResult`.
+
+## Execution History & Observability da Sprint 16
+
+O workspace `@brq/observability` em `core/observability` depende somente de
+`@brq/execution-engine`, `@brq/shared` e Zod. Ele decora a API pública do Engine, delega cada
+execução exatamente uma vez e usa uma bridge allowlisted para normalizar logs técnicos já
+sanitizados. Não conhece Orchestrator, agentes, componentes inferiores, Prisma ou repositories.
+
+Os eventos internos são:
+
+```text
+execution.started
+execution.finished
+execution.failed
+stage.started
+stage.finished
+stage.failed
+```
+
+Eles são validados, profundamente imutáveis e não substituem a taxonomia histórica dos logs.
+Cancelamento usa evento terminal de falha com status observável `CANCELLED`, preservando os logs
+existentes de cancelamento.
+
+A timeline pública possui snapshots de `KNOWLEDGE`, `PRODUCT_OWNER`, `DEVELOPER` e `QA`.
+`KNOWLEDGE` representa somente o contexto inicial carregado pelo Product Owner; os contextos dos
+agentes posteriores permanecem dentro de suas durações. Eventos separados registram início da
+execution e término do workflow.
+
+Cada agente possui métricas de duração, prompt bytes, completion bytes, tokens, latência do
+provider, validação e geração de artifacts. As duas últimas durações são derivadas apenas de logs
+sanitizados e correlacionados. Trabalho não executado permanece `null`, nunca zero fabricado.
+
+O `Execution Summary` consolida execution ID, status do workflow, readiness final, duração, tokens,
+etapas executadas, etapas ignoradas e hashes finais transportados sem alteração.
+`totalCostEstimate` permanece `null` enquanto não existir rate card aprovado e versionado.
+
+O store possui capacidade centralizada, eviction determinística e snapshots imutáveis. Não retém
+request, `ExecutionResult`, prompts, knowledge, specifications, respostas ou artifacts. Sua falha é
+best-effort e nunca substitui o resultado ou erro do Engine.
+
+`GET /api/executions/[id]/timeline` consulta registros terminais pelo `executionId` canônico.
+Durante o POST síncrono, o Frontend pode usar `workflowId` apenas como correlação ativa e fazer
+polling React puro. Uma única consulta fica em andamento, cada leitura possui deadline degradável de
+cinco segundos, o mesmo ciclo usa `AbortSignal` e o polling termina no resultado terminal ou
+unmount sem retentar o workflow.
+
+Eventos, timestamps, durações, métricas, estimativa de custo, polling e estado do store ficam fora
+dos hashes determinísticos. Reinício, HMR, eviction e múltiplas instâncias limitam deliberadamente
+o histórico desta Sprint.

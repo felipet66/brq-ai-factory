@@ -23,4 +23,36 @@ export interface ExecutionSummary {
       readonly readiness: string | null;
     }[];
   } | null;
+  readonly observability: {
+    readonly revision: number;
+    readonly status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+    readonly stages: readonly {
+      readonly stageId: 'KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
+      readonly stageName: string;
+      readonly status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+      readonly durationMs: number | null;
+    }[];
+    readonly stageMetrics: readonly {
+      readonly stageId: 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
+      readonly durationMs: number | null;
+      readonly promptBytes: number | null;
+      readonly completionBytes: number | null;
+      readonly inputTokens: number | null;
+      readonly outputTokens: number | null;
+      readonly totalTokens: number | null;
+      readonly providerLatencyMs: number | null;
+      readonly validationDurationMs: number | null;
+      readonly artifactGenerationDurationMs: number | null;
+    }[];
+    readonly summary: {
+      readonly totalTokens: number;
+      readonly totalCostEstimate: {
+        readonly amount: number;
+        readonly currency: 'USD';
+        readonly rateCardVersion: string;
+      } | null;
+      readonly executedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
+      readonly skippedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
+    } | null;
+  } | null;
 }
