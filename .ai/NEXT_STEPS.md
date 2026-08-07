@@ -2,11 +2,12 @@
 
 ## Sprint atual
 
-Sprint 15 — Frontend MVP implementado e validado tecnicamente em 2026-08-06, sem commit e
-aguardando aprovação humana. Nenhum item da Sprint 16 foi iniciado.
+Sprint 15 — Frontend MVP aprovada e commitada. A correção da integração do runtime com o orçamento
+do Prompt Builder foi implementada sem commit e aguarda aprovação humana. Nenhum item da Sprint 16
+foi iniciado.
 
 ## Próximas ações
 
-1. Revisar o fechamento técnico, o ADR-025 e o fluxo 39 apresentados para a Sprint 15.
+1. Revisar a configuração explícita de 512 KiB no composition root e a regressão de orçamento.
 2. Confirmar os resultados de validação e cobertura registrados em `PROJECT_MEMORY.md`.
 3. Aguardar aprovação humana antes de qualquer commit ou início da Sprint 16.

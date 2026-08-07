@@ -19,6 +19,8 @@ import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
+export const AI_FACTORY_PROMPT_BUILDER_MAX_BYTES = 512 * 1024;
+
 export interface ApplicationRuntimeOptions {
   readonly aiProvider?: AIProvider;
   readonly environment?: NodeJS.ProcessEnv;
@@ -66,7 +68,11 @@ export async function createApplicationRuntime(
       allowedLocators: KNOWLEDGE_MANIFEST.documents.map((document) => document.locator),
     });
   const knowledgeLoader = await createKnowledgeLoader({ source, logger, now });
-  const promptBuilder = createPromptBuilder({ logger, now });
+  const promptBuilder = createPromptBuilder({
+    configuration: { maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES },
+    logger,
+    now,
+  });
   const agentRunner = createAgentRunner({ promptBuilder, aiProvider, logger, now });
   const responseValidator = createResponseValidator({ logger, now });
   const artifactGenerator = createArtifactGenerator({ logger, now });

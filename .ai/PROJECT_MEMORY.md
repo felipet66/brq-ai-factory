@@ -2,8 +2,9 @@
 
 ## Estado atual
 
-Sprint 15 — Frontend MVP implementado e validado tecnicamente em 2026-08-06, sem commit e
-aguardando aprovação humana. Nenhum item da Sprint 16 foi iniciado.
+Sprint 15 — Frontend MVP aprovada e commitada. A correção da integração do runtime com o orçamento
+do Prompt Builder foi implementada sem commit e aguarda aprovação humana. Nenhum item da Sprint 16
+foi iniciado.
 
 ## Fundação técnica
 
@@ -504,6 +505,37 @@ aguardando aprovação humana. Nenhum item da Sprint 16 foi iniciado.
 - nenhuma chamada externa, persistência, autenticação, autorização, polling, websocket, retry,
   Playwright ou item da Sprint 16 foi implementado;
 - nenhum commit foi criado.
+
+## Correção de integração do runtime da Sprint 15
+
+- causa raiz confirmada: o composition root criava o Prompt Builder sem configuração e herdava o
+  default de 128 KiB, insuficiente para o contexto real do Developer antes da chamada ao provider;
+- `AI_FACTORY_PROMPT_BUILDER_MAX_BYTES` centraliza 512 KiB exclusivamente no host
+  `apps/web/src/server/runtime.ts`;
+- o default do Prompt Builder permanece em 128 KiB. O host da AI Factory configura explicitamente
+  um orçamento maior para suportar o pipeline multiagente e os contratos funcionais reais;
+- o valor de 512 KiB é metade do teto de 1 MiB já permitido pelos contratos de Product Owner,
+  Developer e QA, sem alterar contratos, algoritmos, truncamento, hashing ou Knowledge Loader;
+- medição com knowledge, assets e projeções reais: Product Owner representativo em 98.738 B,
+  Developer denso em 246.098 B e QA denso em 405.631 B;
+- no Product Owner, a entrada válida no máximo contratual mede cerca de 166.613 B em ASCII,
+  234.664 B com caracteres UTF-8 de 2 bytes e 302.714 B no extremo de 3 bytes;
+- o cenário denso de QA inclui 64.933 B de knowledge, ProductOwnerSpecification de 114.931 B e
+  TechnicalSpecification de 178.346 B, além de rules, template, output contract, delimitadores e
+  overhead estrutural;
+- 384 KiB falharia nesse cenário por 12.415 B; 512 KiB preserva 118.657 B de margem, ou 22,63%;
+- a regressão usa Prompt Builder, assets e contexts reais e um `FakeAIProvider`; nenhuma chamada
+  real à OpenAI faz parte dos testes;
+- payload abaixo do limite é renderizado integralmente e payload artificial acima do limite ainda
+  falha com `PROMPT_BUILDER_BUDGET_EXCEEDED`, sem truncamento silencioso;
+- 4 testes de regressão adicionados; 767 testes aprovados no total, sendo 702 da suíte raiz e 65
+  da aplicação;
+- cobertura da suíte raiz: 93,52% statements, 85,22% branches, 98,37% functions e 93,93% lines;
+- cobertura da aplicação: 97,29% statements, 89,42% branches, 95% functions e 98,93% lines, com
+  `runtime.ts` em 100% de statements, functions e lines;
+- format, format check, lint, typecheck, Prisma validate e build de produção aprovados com Node.js
+  24.19.0; a suíte live do provider permaneceu excluída;
+- nenhum comportamento funcional dos agentes foi alterado e nenhum item da Sprint 16 foi iniciado.
 
 ## Fora do escopo confirmado
 
