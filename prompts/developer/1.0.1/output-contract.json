@@ -1,0 +1,1063 @@
+{
+  "id": "contract:developer-technical-specification",
+  "version": "1.0.1",
+  "format": "JSON_SCHEMA",
+  "instructions": [
+    "Retorne somente uma TechnicalSpecification aderente ao JSON Schema.",
+    "Derive readiness nesta ordem: preserve REQUIRES_CLARIFICATION da origem; depois use REQUIRES_CLARIFICATION para dúvida técnica bloqueante; preserve PARTIALLY_READY da origem; depois use PARTIALLY_READY para pergunta não bloqueante ou premissa pendente; use READY somente quando a origem estiver READY e não houver pendência técnica.",
+    "Preserve rastreabilidade para os IDs funcionais AC, BR e BL fornecidos e cubra integralmente cada critério de aceite em ao menos um item de traceability com destino técnico explícito.",
+    "Ownership MUST ser bidirecional: IF component.moduleIds contém um moduleId, THEN o Module correspondente MUST apontar de volta pelo mesmo componentId; IF um Module declara componentId, THEN esse Component MUST listar o Module em moduleIds. Ownership inconsistente ou ambíguo MUST NOT ser produzido.",
+    "Todo flow step MUST usar um componentId que corresponda a um Component existente. IF moduleId não for nulo, THEN o Module MUST existir e pertencer exatamente ao Component informado; um flow step MUST NOT combinar Module e Component de owners diferentes.",
+    "IF dataModel.changesRequired === false, THEN entities MUST ser [], relations MUST ser [] e migrationRequired MUST ser false. IF dataModel.changesRequired === true, THEN entities MUST conter pelo menos uma Entity, relations MAY ser [] e migrationRequired MUST refletir uma necessidade real de migração. IF relations contiver uma Relation, THEN sourceEntityId e targetEntityId MUST referenciar Entities declaradas em entities. Entity ou Relation MUST NOT ser inventada quando os requisitos funcionais não exigirem mudança de dados.",
+    "Não inclua código-fonte, testes, patches, comandos executados, artifacts ou propriedades adicionais."
+  ],
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "readiness",
+      "title",
+      "summary",
+      "objective",
+      "complexity",
+      "estimatedStoryPoints",
+      "architecture",
+      "components",
+      "modules",
+      "flows",
+      "contracts",
+      "apis",
+      "events",
+      "dataModel",
+      "internalDependencies",
+      "externalDependencies",
+      "risks",
+      "implementationPhases",
+      "implementationPlan",
+      "technicalBacklog",
+      "definitionOfDone",
+      "decisions",
+      "traceability",
+      "assumptions",
+      "openQuestions",
+      "outOfScope"
+    ],
+    "properties": {
+      "readiness": {
+        "type": "string",
+        "enum": ["READY", "PARTIALLY_READY", "REQUIRES_CLARIFICATION"]
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "objective": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "complexity": {
+        "type": "string",
+        "enum": ["LOW", "MEDIUM", "HIGH", "VERY_HIGH"]
+      },
+      "estimatedStoryPoints": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "architecture": { "$ref": "#/$defs/architecture" },
+      "components": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/component" }
+      },
+      "modules": {
+        "type": "array",
+        "maxItems": 80,
+        "items": { "$ref": "#/$defs/module" }
+      },
+      "flows": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/flow" }
+      },
+      "contracts": {
+        "type": "array",
+        "maxItems": 40,
+        "items": { "$ref": "#/$defs/contract" }
+      },
+      "apis": {
+        "type": "array",
+        "maxItems": 40,
+        "items": { "$ref": "#/$defs/api" }
+      },
+      "events": {
+        "type": "array",
+        "maxItems": 40,
+        "items": { "$ref": "#/$defs/event" }
+      },
+      "dataModel": { "$ref": "#/$defs/dataModel" },
+      "internalDependencies": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/internalDependency" }
+      },
+      "externalDependencies": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/externalDependency" }
+      },
+      "risks": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/risk" }
+      },
+      "implementationPhases": {
+        "type": "array",
+        "maxItems": 20,
+        "items": { "$ref": "#/$defs/implementationPhase" }
+      },
+      "implementationPlan": {
+        "type": "array",
+        "maxItems": 80,
+        "items": { "$ref": "#/$defs/implementationPlanItem" }
+      },
+      "technicalBacklog": {
+        "type": "array",
+        "maxItems": 80,
+        "items": { "$ref": "#/$defs/technicalBacklogItem" }
+      },
+      "definitionOfDone": {
+        "type": "array",
+        "maxItems": 40,
+        "items": { "$ref": "#/$defs/definitionOfDoneItem" }
+      },
+      "decisions": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/decision" }
+      },
+      "traceability": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/traceabilityItem" }
+      },
+      "assumptions": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/assumption" }
+      },
+      "openQuestions": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/openQuestion" }
+      },
+      "outOfScope": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "$ref": "#/$defs/outOfScopeItem" }
+      }
+    },
+    "$defs": {
+      "architecture": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "overview",
+          "style",
+          "rationale",
+          "principles",
+          "constraints",
+          "qualityAttributes",
+          "trustBoundaries"
+        ],
+        "properties": {
+          "overview": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "style": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "principles": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "qualityAttributes": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "trustBoundaries": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "component": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "changeType",
+          "responsibility",
+          "moduleIds",
+          "dependsOnComponentIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "APPLICATION",
+              "SERVICE",
+              "LIBRARY",
+              "DATABASE",
+              "INTEGRATION",
+              "INFRASTRUCTURE",
+              "DOCUMENTATION",
+              "OTHER"
+            ]
+          },
+          "changeType": {
+            "type": "string",
+            "enum": ["CREATE", "MODIFY", "DELETE"]
+          },
+          "responsibility": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "moduleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^MOD-[0-9]{3}$" }
+          },
+          "dependsOnComponentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          }
+        }
+      },
+      "module": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "path",
+          "changeType",
+          "responsibility",
+          "componentId",
+          "dependsOnModuleIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^MOD-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "changeType": {
+            "type": "string",
+            "enum": ["CREATE", "MODIFY", "DELETE"]
+          },
+          "responsibility": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "componentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "dependsOnModuleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^MOD-[0-9]{3}$" }
+          }
+        }
+      },
+      "flowStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["order", "componentId", "moduleId", "action"],
+        "properties": {
+          "order": { "type": "integer", "minimum": 1 },
+          "componentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "moduleId": {
+            "anyOf": [{ "type": "string", "pattern": "^MOD-[0-9]{3}$" }, { "type": "null" }]
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      },
+      "flow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "steps", "acceptanceCriteriaIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^FLW-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": { "$ref": "#/$defs/flowStep" }
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "contract": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "description",
+          "ownerComponentId",
+          "consumerComponentIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^CTR-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["REQUEST", "RESPONSE", "EVENT", "INTERNAL", "EXTERNAL"]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "ownerComponentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "consumerComponentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          }
+        }
+      },
+      "api": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "method",
+          "path",
+          "description",
+          "componentId",
+          "requestContractId",
+          "responseContractId",
+          "acceptanceCriteriaIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^API-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^/[^\\s\\u0000-\\u001f\\u007f]*$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "componentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "requestContractId": {
+            "anyOf": [{ "type": "string", "pattern": "^CTR-[0-9]{3}$" }, { "type": "null" }]
+          },
+          "responseContractId": {
+            "anyOf": [{ "type": "string", "pattern": "^CTR-[0-9]{3}$" }, { "type": "null" }]
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "event": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "description",
+          "producerComponentId",
+          "consumerComponentIds",
+          "payloadContractId",
+          "acceptanceCriteriaIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EVT-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "producerComponentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "consumerComponentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          },
+          "payloadContractId": {
+            "anyOf": [{ "type": "string", "pattern": "^CTR-[0-9]{3}$" }, { "type": "null" }]
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "entityField": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "nullable", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "nullable": { "type": "boolean" },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      },
+      "entity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "moduleId", "fields"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^ENT-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "moduleId": {
+            "anyOf": [{ "type": "string", "pattern": "^MOD-[0-9]{3}$" }, { "type": "null" }]
+          },
+          "fields": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "#/$defs/entityField" }
+          }
+        }
+      },
+      "relation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "sourceEntityId", "targetEntityId", "kind", "description"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^REL-[0-9]{3}$" },
+          "sourceEntityId": { "type": "string", "pattern": "^ENT-[0-9]{3}$" },
+          "targetEntityId": { "type": "string", "pattern": "^ENT-[0-9]{3}$" },
+          "kind": {
+            "type": "string",
+            "enum": ["ONE_TO_ONE", "ONE_TO_MANY", "MANY_TO_ONE", "MANY_TO_MANY"]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      },
+      "dataModel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["changesRequired", "migrationRequired", "entities", "relations"],
+        "properties": {
+          "changesRequired": { "type": "boolean" },
+          "migrationRequired": { "type": "boolean" },
+          "entities": {
+            "type": "array",
+            "maxItems": 40,
+            "items": { "$ref": "#/$defs/entity" }
+          },
+          "relations": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "$ref": "#/$defs/relation" }
+          }
+        }
+      },
+      "internalDependency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "componentId", "status", "blocking"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^IDEP-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "componentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "status": {
+            "type": "string",
+            "enum": ["AVAILABLE", "PLANNED", "UNKNOWN"]
+          },
+          "blocking": { "type": "boolean" }
+        }
+      },
+      "externalDependency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "description", "componentId", "kind", "status", "blocking"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^EDEP-[0-9]{3}$" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "componentId": { "type": "string", "pattern": "^CMP-[0-9]{3}$" },
+          "kind": {
+            "type": "string",
+            "enum": ["SERVICE", "LIBRARY", "PLATFORM", "TEAM", "DECISION", "OTHER"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["AVAILABLE", "PLANNED", "UNKNOWN"]
+          },
+          "blocking": { "type": "boolean" }
+        }
+      },
+      "risk": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "impact", "likelihood", "mitigation", "componentIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TRSK-[0-9]{3}$" },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "likelihood": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH"]
+          },
+          "mitigation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              { "type": "null" }
+            ]
+          },
+          "componentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          }
+        }
+      },
+      "implementationPhase": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "order", "name", "objective", "dependsOnPhaseIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^PH-[0-9]{3}$" },
+          "order": { "type": "integer", "minimum": 1 },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "objective": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "dependsOnPhaseIds": {
+            "type": "array",
+            "maxItems": 20,
+            "items": { "type": "string", "pattern": "^PH-[0-9]{3}$" }
+          }
+        }
+      },
+      "implementationPlanItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "order",
+          "title",
+          "description",
+          "phaseId",
+          "componentIds",
+          "moduleIds",
+          "dependsOnPlanItemIds",
+          "acceptanceCriteriaIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^PLAN-[0-9]{3}$" },
+          "order": { "type": "integer", "minimum": 1 },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "phaseId": { "type": "string", "pattern": "^PH-[0-9]{3}$" },
+          "componentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          },
+          "moduleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^MOD-[0-9]{3}$" }
+          },
+          "dependsOnPlanItemIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^PLAN-[0-9]{3}$" }
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "technicalBacklogItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "description",
+          "priority",
+          "implementationPlanIds",
+          "dependsOnBacklogItemIds",
+          "acceptanceCriteriaIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TBL-[0-9]{3}$" },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+          },
+          "implementationPlanIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^PLAN-[0-9]{3}$" }
+          },
+          "dependsOnBacklogItemIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^TBL-[0-9]{3}$" }
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "definitionOfDoneItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "criterion", "acceptanceCriteriaIds"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^DOD-[0-9]{3}$" },
+          "criterion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "acceptanceCriteriaIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+          }
+        }
+      },
+      "tradeOff": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["benefit", "cost"],
+        "properties": {
+          "benefit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "cost": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      },
+      "decision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "context",
+          "decision",
+          "alternatives",
+          "tradeOffs",
+          "rationale",
+          "requiresAdr",
+          "componentIds",
+          "moduleIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^DEC-[0-9]{3}$" },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "decision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "alternatives": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          },
+          "tradeOffs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": { "$ref": "#/$defs/tradeOff" }
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "requiresAdr": { "type": "boolean" },
+          "componentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          },
+          "moduleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^MOD-[0-9]{3}$" }
+          }
+        }
+      },
+      "traceabilityItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "sourceIds",
+          "componentIds",
+          "moduleIds",
+          "flowIds",
+          "contractIds",
+          "apiIds",
+          "eventIds",
+          "implementationPlanIds",
+          "technicalBacklogIds",
+          "definitionOfDoneIds"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TRC-[0-9]{3}$" },
+          "sourceIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": { "type": "string", "pattern": "^(?:AC|BR|BL)-[0-9]{3}$" }
+          },
+          "componentIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^CMP-[0-9]{3}$" }
+          },
+          "moduleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^MOD-[0-9]{3}$" }
+          },
+          "flowIds": {
+            "type": "array",
+            "maxItems": 30,
+            "items": { "type": "string", "pattern": "^FLW-[0-9]{3}$" }
+          },
+          "contractIds": {
+            "type": "array",
+            "maxItems": 40,
+            "items": { "type": "string", "pattern": "^CTR-[0-9]{3}$" }
+          },
+          "apiIds": {
+            "type": "array",
+            "maxItems": 40,
+            "items": { "type": "string", "pattern": "^API-[0-9]{3}$" }
+          },
+          "eventIds": {
+            "type": "array",
+            "maxItems": 40,
+            "items": { "type": "string", "pattern": "^EVT-[0-9]{3}$" }
+          },
+          "implementationPlanIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^PLAN-[0-9]{3}$" }
+          },
+          "technicalBacklogIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": { "type": "string", "pattern": "^TBL-[0-9]{3}$" }
+          },
+          "definitionOfDoneIds": {
+            "type": "array",
+            "maxItems": 40,
+            "items": { "type": "string", "pattern": "^DOD-[0-9]{3}$" }
+          }
+        }
+      },
+      "assumption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "requiresValidation"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TASM-[0-9]{3}$" },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "requiresValidation": { "type": "boolean" }
+        }
+      },
+      "openQuestion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "question", "impact"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TQ-[0-9]{3}$" },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["BLOCKING", "NON_BLOCKING"]
+          }
+        }
+      },
+      "outOfScopeItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TOOS-[0-9]{3}$" },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+          }
+        }
+      }
+    }
+  }
+}

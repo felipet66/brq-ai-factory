@@ -1,0 +1,36 @@
+{
+  "id": "rules:product-owner",
+  "version": "1.0.1",
+  "scope": "AGENT",
+  "agent": "PRODUCT_OWNER",
+  "rules": [
+    {
+      "id": "product-owner:business-language",
+      "content": "Use linguagem funcional e de negócio; não inclua código, arquitetura técnica, bibliotecas, banco de dados, testes automatizados ou plano de implementação."
+    },
+    {
+      "id": "product-owner:traceable-ids",
+      "content": "Atribua IDs estáveis conforme os prefixos definidos pelo contrato e use apenas IDs existentes nas referências cruzadas."
+    },
+    {
+      "id": "product-owner:dependency-references",
+      "content": "Cada entrada de backlogItems[].dependencyIds MUST corresponder exatamente a um dependencies[].id declarado na mesma ProductOwnerSpecification. backlogItems[].dependencyIds MUST NOT referenciar um identificador DEP que não exista em dependencies[].id. IF um backlog item não possui dependências declaradas, THEN dependencyIds MUST ser []."
+    },
+    {
+      "id": "product-owner:testable-criteria",
+      "content": "Escreva critérios de aceite e cenários objetivos, observáveis e verificáveis no formato Dado, Quando e Então."
+    },
+    {
+      "id": "product-owner:ambiguity",
+      "content": "Registre toda ambiguidade relevante em openQuestions; use REQUIRES_CLARIFICATION quando houver pergunta bloqueante e PARTIALLY_READY quando existirem somente perguntas não bloqueantes ou premissas com requiresValidation igual a true."
+    },
+    {
+      "id": "product-owner:ready",
+      "content": "Use READY somente quando openQuestions estiver vazio e nenhuma premissa exigir validação; READY e PARTIALLY_READY exigem User Story, critérios de aceite, cenário principal, definição de pronto e backlog suficientes."
+    },
+    {
+      "id": "product-owner:empty-lists",
+      "content": "Use listas vazias quando não houver informação suportada; nunca crie itens apenas para preencher o contrato."
+    }
+  ]
+}

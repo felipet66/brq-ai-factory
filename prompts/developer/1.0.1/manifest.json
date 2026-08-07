@@ -1,0 +1,47 @@
+{
+  "id": "assets:developer",
+  "version": "1.0.1",
+  "schemaVersion": "1.0.0",
+  "agent": "DEVELOPER",
+  "contexts": {
+    "knowledge": "context:developer-knowledge",
+    "productOwnerSpecification": "context:product-owner-specification"
+  },
+  "assets": {
+    "template": {
+      "filename": "template.json",
+      "id": "prompt:developer",
+      "version": "1.0.1"
+    },
+    "ruleSets": [
+      {
+        "filename": "global-rules.json",
+        "id": "rules:global-baseline",
+        "version": "1.0.0",
+        "scope": "GLOBAL"
+      },
+      {
+        "filename": "security-rules.json",
+        "id": "rules:security-baseline",
+        "version": "1.0.0",
+        "scope": "SECURITY"
+      },
+      {
+        "filename": "developer-rules.json",
+        "id": "rules:developer",
+        "version": "1.0.1",
+        "scope": "AGENT"
+      }
+    ],
+    "outputContract": {
+      "filename": "output-contract.json",
+      "id": "contract:developer-technical-specification",
+      "version": "1.0.1"
+    },
+    "artifactSpecification": {
+      "filename": "artifact-specification.json",
+      "id": "artifacts:developer",
+      "version": "1.0.1"
+    }
+  }
+}

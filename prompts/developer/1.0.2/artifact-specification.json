@@ -1,0 +1,154 @@
+{
+  "id": "artifacts:developer",
+  "version": "1.0.2",
+  "sourceContract": {
+    "id": "contract:developer-technical-specification",
+    "version": "1.0.2",
+    "format": "JSON_SCHEMA",
+    "contractHash": "3b563cd9b8ad096f3f6839af0016bc3e3b3939bb3fc4a07b167889c1e025edff"
+  },
+  "templates": [
+    {
+      "id": "artifact:developer-architecture",
+      "name": "Developer Architecture",
+      "filename": "architecture.md",
+      "type": "DEVELOPER_ARCHITECTURE",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "readiness", "path": ["readiness"] },
+        { "id": "title", "path": ["title"] },
+        { "id": "summary", "path": ["summary"] },
+        { "id": "objective", "path": ["objective"] },
+        { "id": "complexity", "path": ["complexity"] },
+        { "id": "estimated-story-points", "path": ["estimatedStoryPoints"] },
+        { "id": "architecture", "path": ["architecture"] },
+        { "id": "components", "path": ["components"] },
+        { "id": "modules", "path": ["modules"] },
+        { "id": "flows", "path": ["flows"] },
+        { "id": "contracts", "path": ["contracts"] },
+        { "id": "apis", "path": ["apis"] },
+        { "id": "events", "path": ["events"] },
+        { "id": "data-model", "path": ["dataModel"] },
+        { "id": "internal-dependencies", "path": ["internalDependencies"] },
+        { "id": "external-dependencies", "path": ["externalDependencies"] },
+        { "id": "risks", "path": ["risks"] },
+        { "id": "assumptions", "path": ["assumptions"] },
+        { "id": "open-questions", "path": ["openQuestions"] },
+        { "id": "out-of-scope", "path": ["outOfScope"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# Arquitetura técnica — " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Readiness\n\n" },
+        { "kind": "BINDING", "bindingId": "readiness", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Resumo\n\n" },
+        { "kind": "BINDING", "bindingId": "summary", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Objetivo\n\n" },
+        { "kind": "BINDING", "bindingId": "objective", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Estimativa\n\nComplexidade: " },
+        { "kind": "BINDING", "bindingId": "complexity", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\nStory points: " },
+        {
+          "kind": "BINDING",
+          "bindingId": "estimated-story-points",
+          "serialization": "JSON_COMPACT"
+        },
+        { "kind": "LITERAL", "value": "\n\n## Arquitetura\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "architecture", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Componentes\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "components", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Módulos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "modules", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Fluxos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "flows", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Contratos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "contracts", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## APIs\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "apis", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Eventos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "events", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Modelo de dados\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "data-model", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Dependências internas\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "internal-dependencies",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Dependências externas\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "external-dependencies",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Riscos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "risks", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Premissas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "assumptions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Dúvidas abertas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "open-questions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Fora de escopo\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "out-of-scope", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    },
+    {
+      "id": "artifact:developer-implementation-plan",
+      "name": "Developer Implementation Plan",
+      "filename": "implementation-plan.md",
+      "type": "DEVELOPER_IMPLEMENTATION_PLAN",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "title", "path": ["title"] },
+        { "id": "implementation-phases", "path": ["implementationPhases"] },
+        { "id": "implementation-plan", "path": ["implementationPlan"] },
+        { "id": "technical-backlog", "path": ["technicalBacklog"] },
+        { "id": "definition-of-done", "path": ["definitionOfDone"] },
+        { "id": "traceability", "path": ["traceability"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# Plano de implementação — " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Fases\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "implementation-phases",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Plano\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "implementation-plan",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Backlog técnico\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "technical-backlog",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Definition of Done\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "definition-of-done",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Rastreabilidade\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "traceability", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    },
+    {
+      "id": "artifact:developer-technical-decisions",
+      "name": "Developer Technical Decisions",
+      "filename": "technical-decisions.json",
+      "type": "DEVELOPER_TECHNICAL_DECISIONS",
+      "format": "JSON",
+      "mediaType": "application/json",
+      "bindings": [{ "id": "decisions", "path": ["decisions"] }],
+      "rootBindingId": "decisions"
+    }
+  ]
+}

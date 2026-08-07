@@ -188,6 +188,235 @@ describe('Developer Business Validation', () => {
     expect(Object.isFrozen(specification)).toBe(false);
   });
 
+  it('accepts an explicit Data Model with no changes and empty collections', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: false,
+          migrationRequired: false,
+          entities: [],
+          relations: [],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result).toMatchObject({ valid: true, issues: [] });
+  });
+
+  it('accepts a coherent Data Model change with entities and an optional relation', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: true,
+          migrationRequired: true,
+          entities: [
+            { id: 'ENT-001', moduleId: 'MOD-001' },
+            { id: 'ENT-002', moduleId: 'MOD-001' },
+          ],
+          relations: [
+            {
+              id: 'REL-001',
+              sourceEntityId: 'ENT-001',
+              targetEntityId: 'ENT-002',
+            },
+          ],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result).toMatchObject({ valid: true, issues: [] });
+  });
+
+  it('rejects a Module omitted by its declared owner Component', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        components: [{ id: 'CMP-001', moduleIds: [], dependsOnComponentIds: [] }],
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.INCONSISTENT_OWNERSHIP,
+        path: ['modules', 0, 'componentId'],
+      }),
+    );
+  });
+
+  it('rejects a Component that lists a Module owned by another Component', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        components: [
+          { id: 'CMP-001', moduleIds: ['MOD-001'], dependsOnComponentIds: [] },
+          { id: 'CMP-002', moduleIds: ['MOD-001'], dependsOnComponentIds: [] },
+        ],
+        modules: [
+          {
+            id: 'MOD-001',
+            path: 'core/example',
+            componentId: 'CMP-002',
+            dependsOnModuleIds: [],
+          },
+        ],
+        flows: [
+          {
+            id: 'FLW-001',
+            steps: [{ order: 1, componentId: 'CMP-002', moduleId: 'MOD-001' }],
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.INCONSISTENT_OWNERSHIP,
+        path: ['components', 0, 'moduleIds', 0],
+      }),
+    );
+  });
+
+  it('rejects a flow step whose Module belongs to another Component', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        components: [
+          { id: 'CMP-001', moduleIds: ['MOD-001'], dependsOnComponentIds: [] },
+          { id: 'CMP-002', moduleIds: [], dependsOnComponentIds: [] },
+        ],
+        flows: [
+          {
+            id: 'FLW-001',
+            steps: [{ order: 1, componentId: 'CMP-002', moduleId: 'MOD-001' }],
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.INCONSISTENT_OWNERSHIP,
+        path: ['flows', 0, 'steps', 0, 'moduleId'],
+      }),
+    );
+  });
+
+  it('rejects an unknown flow-step Component even when moduleId is null', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        flows: [
+          {
+            id: 'FLW-001',
+            steps: [{ order: 1, componentId: 'CMP-999', moduleId: null }],
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.UNKNOWN_REFERENCE,
+        path: ['flows', 0, 'steps', 0, 'componentId'],
+      }),
+    );
+  });
+
+  it('rejects entities when Data Model changes are not required', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: false,
+          migrationRequired: false,
+          entities: [{ id: 'ENT-001', moduleId: 'MOD-001' }],
+          relations: [],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.DATA_MODEL_MISMATCH,
+        path: ['dataModel'],
+      }),
+    );
+  });
+
+  it('rejects migration when Data Model changes are not required', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: false,
+          migrationRequired: true,
+          entities: [],
+          relations: [],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.DATA_MODEL_MISMATCH,
+        path: ['dataModel'],
+      }),
+    );
+  });
+
+  it('rejects required Data Model changes without an Entity', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: true,
+          migrationRequired: false,
+          entities: [],
+          relations: [],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.DATA_MODEL_MISMATCH,
+        path: ['dataModel'],
+      }),
+    );
+  });
+
+  it('rejects a Data Model Relation that references an undeclared Entity', () => {
+    const result = validateDeveloperBusinessRules(
+      validSpecification({
+        dataModel: {
+          changesRequired: true,
+          migrationRequired: false,
+          entities: [{ id: 'ENT-001', moduleId: 'MOD-001' }],
+          relations: [
+            {
+              id: 'REL-001',
+              sourceEntityId: 'ENT-001',
+              targetEntityId: 'ENT-999',
+            },
+          ],
+        },
+      }),
+      sourceSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.UNKNOWN_REFERENCE,
+        path: ['dataModel', 'relations', 0, 'targetEntityId'],
+      }),
+    );
+  });
+
   it('rejects unknown, duplicate and inconsistent references', () => {
     const result = validateDeveloperBusinessRules(
       validSpecification({

@@ -1,0 +1,72 @@
+{
+  "id": "rules:developer",
+  "version": "1.0.2",
+  "scope": "AGENT",
+  "agent": "DEVELOPER",
+  "rules": [
+    {
+      "id": "developer:technical-only",
+      "content": "Produza somente uma especificação técnica declarativa; não escreva código-fonte, testes automatizados, patches ou conteúdo pronto para execução."
+    },
+    {
+      "id": "developer:architecture-alignment",
+      "content": "Mantenha a solução compatível com a arquitetura, stack, padrões, segurança e fronteiras descritos no contexto técnico."
+    },
+    {
+      "id": "developer:preserve-business-contract",
+      "content": "Não altere requisitos, critérios de aceite ou regras de negócio; registre lacunas como perguntas abertas e preserve referências aos IDs funcionais existentes."
+    },
+    {
+      "id": "developer:traceability",
+      "content": "Use IDs estáveis com os prefixos definidos pelo contrato e mantenha rastreabilidade explícita entre AC, BR e BL e os componentes técnicos relacionados."
+    },
+    {
+      "id": "developer:component-module-ownership",
+      "content": "IF component.moduleIds contém um moduleId, THEN esse Module MUST existir e seu componentId MUST ser exatamente igual ao component.id. IF um Module declara componentId, THEN esse Component MUST existir e seu moduleIds MUST conter o ID do Module. Um Module MUST NOT pertencer a mais de um Component nem possuir ownership ambíguo."
+    },
+    {
+      "id": "developer:flow-step-ownership",
+      "content": "Todo flow step MUST declarar um componentId que corresponda a um Component existente. IF um item de flow.steps declara um moduleId não nulo, THEN esse Module MUST existir e module.componentId MUST ser exatamente igual a step.componentId. Um flow step MUST NOT usar um Module pertencente a outro Component."
+    },
+    {
+      "id": "developer:safe-module-path",
+      "content": "Todo modules[].path MUST ser relativo, estar normalizado em Unicode NFC e usar somente / como separador. MUST NOT começar com / ou prefixo de drive, conter \\, caracteres de controle, segmentos vazios, \".\" ou \"..\"."
+    },
+    {
+      "id": "developer:utf16-length-limits",
+      "content": "Todo texto MUST respeitar o maxLength do contrato medido como comprimento de string JavaScript UTF-16; cada caractere Unicode suplementar conta como duas unidades de comprimento."
+    },
+    {
+      "id": "developer:data-model-no-change",
+      "content": "IF dataModel.changesRequired === false, THEN dataModel.entities MUST ser [], dataModel.relations MUST ser [] e dataModel.migrationRequired MUST ser false; qualquer informação de mudança do modelo MUST permanecer vazia."
+    },
+    {
+      "id": "developer:data-model-change",
+      "content": "IF dataModel.changesRequired === true, THEN dataModel.entities MUST conter pelo menos uma Entity; dataModel.relations MAY ser [] quando relações não forem necessárias, e dataModel.migrationRequired MUST ser true somente quando a mudança declarada exigir migração real."
+    },
+    {
+      "id": "developer:data-model-relations",
+      "content": "IF dataModel.relations contém uma Relation, THEN relation.sourceEntityId e relation.targetEntityId MUST referenciar Entities existentes em dataModel.entities. Uma Relation MUST NOT apontar para uma Entity ausente."
+    },
+    {
+      "id": "developer:data-model-evidence",
+      "content": "IF os requisitos funcionais não exigem alteração de dados, THEN use dataModel.changesRequired como false, migrationRequired como false e as coleções entities e relations vazias. MUST NOT inventar Entity ou Relation apenas para preencher o contrato."
+    },
+    {
+      "id": "developer:no-execution-claims",
+      "content": "Não afirme que arquivos foram criados, comandos executados, código compilado, testes executados ou validações concluídas."
+    },
+    {
+      "id": "developer:review-boundaries",
+      "content": "Sinalize decisões arquiteturais, dependências externas, mudanças de contrato, banco, segurança ou infraestrutura como riscos e decisões que exigem revisão."
+    },
+    {
+      "id": "developer:ambiguity",
+      "content": "Nunca eleve a readiness recebida: preserve REQUIRES_CLARIFICATION da origem; depois considere dúvidas técnicas bloqueantes; preserve PARTIALLY_READY da origem; depois considere perguntas não bloqueantes e premissas pendentes; use READY somente quando a origem estiver READY e o plano técnico estiver completo."
+    },
+    {
+      "id": "developer:deterministic-order",
+      "content": "Mantenha listas na ordem lógica de execução, use listas vazias quando não houver informação suportada e nunca crie itens apenas para preencher o contrato."
+    }
+  ]
+}

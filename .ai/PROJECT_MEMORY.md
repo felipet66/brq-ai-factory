@@ -3,8 +3,9 @@
 ## Estado atual
 
 Sprint 15 — Frontend MVP aprovada e commitada. A correção da integração do runtime com o orçamento
-do Prompt Builder foi implementada sem commit e aguarda aprovação humana. Nenhum item da Sprint 16
-foi iniciado.
+do Prompt Builder, dos assets relacionais do Developer Agent `1.0.1`, do Product Owner Agent `1.0.1`
+e da paridade estrutural do Developer Agent `1.0.2` foram concluídos sem commit e aguardam aprovação
+humana. Nenhum item da Sprint 16 foi iniciado.
 
 ## Fundação técnica
 
@@ -167,7 +168,11 @@ foi iniciado.
 - a factory valida dependências e o bundle de assets uma vez antes de aceitar requests; `ASSET_LOADING` não integra os estágios da tentativa;
 - cada invocação encadeia `Knowledge Loader → Agent Runner → Response Validator → Business Validation → Artifact Generator` sem coordenar outros agentes;
 - demanda, specification, readiness e resultado possuem contratos e schemas versionados e imutáveis;
-- assets declarativos versionados em `prompts/product-owner/1.0.0`, com manifesto referenciando filenames, IDs e versões, loader calculando os hashes do template, rule sets, output contract, Validation Contract derivado, artifact specification e bundle, e `bundleHash` esperado fixado para impedir alteração silenciosa do release;
+- o release histórico `prompts/product-owner/1.0.0` permanece imutável; o loader seleciona
+  estaticamente `prompts/product-owner/1.0.1`, com manifesto, hashes canônicos e `bundleHash` fixado;
+- o bundle `1.0.1` explicita que `backlogItems[].dependencyIds` referencia somente IDs existentes em
+  `dependencies[].id`, alinhando as instruções à invariante já aplicada sem alterar o JSON Schema ou
+  a Product Owner Business Validation;
 - o JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita e permanecem um risco conhecido;
 - IDs dos assets e itens de domínio são explícitos e estáveis, independentemente dos filenames;
 - Business Validation específica do domínio recalcula readiness e verifica completude, unicidade e referências cruzadas sem corrigir a resposta; o relatório expõe no máximo 100 issues e informa `issuesTruncated`;
@@ -185,7 +190,9 @@ foi iniciado.
 - a saída funcional é uma `TechnicalSpecification` estrita com arquitetura, complexidade, story points, fases, plano, dependências internas e externas, riscos, decisões e rastreabilidade;
 - a Business Validation preserva IDs funcionais, rejeita referências inválidas, duplicidades e ciclos, deriva readiness e exige cobertura integral dos Acceptance Criteria da origem;
 - metadados preservam o hash canônico e a readiness da `ProductOwnerSpecification` recebida;
-- os assets versionados ficam em `prompts/developer/1.0.0` e geram exatamente `architecture.md`, `implementation-plan.md` e `technical-decisions.json` em memória;
+- os releases históricos `prompts/developer/1.0.0` e `1.0.1` permanecem imutáveis; o loader seleciona
+  estaticamente `prompts/developer/1.0.2`, que gera exatamente `architecture.md`,
+  `implementation-plan.md` e `technical-decisions.json` em memória;
 - o agente atua como arquiteto e não gera código ou testes, não executa comandos, não grava arquivos, não persiste, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator.
 
 ## QA Agent Layer
@@ -516,8 +523,8 @@ foi iniciado.
   um orçamento maior para suportar o pipeline multiagente e os contratos funcionais reais;
 - o valor de 512 KiB é metade do teto de 1 MiB já permitido pelos contratos de Product Owner,
   Developer e QA, sem alterar contratos, algoritmos, truncamento, hashing ou Knowledge Loader;
-- medição com knowledge, assets e projeções reais: Product Owner representativo em 98.738 B,
-  Developer denso em 246.098 B e QA denso em 405.631 B;
+- medição com knowledge, assets e projeções reais: Product Owner com o bundle `1.0.1` em 100.523 B,
+  Developer denso com o bundle `1.0.2` em 258.803 B e QA denso em 405.631 B;
 - no Product Owner, a entrada válida no máximo contratual mede cerca de 166.613 B em ASCII,
   234.664 B com caracteres UTF-8 de 2 bytes e 302.714 B no extremo de 3 bytes;
 - o cenário denso de QA inclui 64.933 B de knowledge, ProductOwnerSpecification de 114.931 B e
@@ -536,6 +543,89 @@ foi iniciado.
 - format, format check, lint, typecheck, Prisma validate e build de produção aprovados com Node.js
   24.19.0; a suíte live do provider permaneceu excluída;
 - nenhum comportamento funcional dos agentes foi alterado e nenhum item da Sprint 16 foi iniciado.
+
+## Alinhamento dos assets do Developer Agent
+
+- causa raiz confirmada: o bundle `1.0.0` descrevia a estrutura da `TechnicalSpecification`, mas não
+  explicitava todas as invariantes relacionais já aplicadas pela Developer Business Validation;
+- o conteúdo canônico dos sete assets do release histórico `prompts/developer/1.0.0` permanece
+  intacto, conforme ADR-009 e ADR-020;
+- o bundle patch histórico `1.0.1` permanece preservado com o `bundleHash`
+  `850dcbbd24154c4f0a4d921a05abae4de2a7a167203a5540d08abf689ed1284f`;
+- regras confiáveis e instruções do Output Contract usam `IF`, `THEN`, `MUST` e `MUST NOT` para
+  ownership bidirecional Component/Module, ownership de flow steps e coerência de `dataModel`;
+- `changesRequired=false` exige `entities=[]`, `relations=[]` e `migrationRequired=false`;
+  `changesRequired=true` exige ao menos uma Entity e permite relations vazias;
+- Entity e Relation não podem ser inventadas quando a especificação funcional não exige mudança de
+  dados;
+- o JSON Schema do Output Contract permanece igual ao `1.0.0`; invariantes cruzadas continuam sob
+  autoridade exclusiva da Business Validation;
+- o loader, os hashes fixos e os testes de drift foram atualizados sem criar registry, descoberta ou
+  seleção dinâmica de versão;
+- 15 testes de regressão foram adicionados: assets normativos e histórico, ownership bidirecional,
+  flow ownership, referências de Relations e combinações válidas e inválidas de `dataModel`;
+- 782 testes foram aprovados no total, sendo 717 da suíte raiz e 65 da aplicação;
+- cobertura da suíte raiz: 93,63% statements, 85,45% branches, 98,56% functions e 94,04% lines;
+- cobertura da aplicação: 97,29% statements, 89,42% branches, 95% functions e 98,93% lines;
+- format, format check, lint, typecheck, Prisma validate e build de produção foram aprovados com
+  Node.js 24.19.0; a suíte live do provider permaneceu excluída;
+- Developer Business Validation, Response Validator, schemas públicos e Orchestrator não foram
+  alterados;
+- nenhuma chamada real à OpenAI integra a correção e nenhum item da Sprint 16 foi iniciado.
+
+## Paridade estrutural dos assets do Developer Agent
+
+- causa raiz confirmada: o Response Validator aceitava o JSON Schema `1.0.1`, mas o parse posterior
+  pelo schema Zod público podia rejeitar a mesma `TechnicalSpecification` com
+  `DEVELOPER_INVALID_SPECIFICATION_STRUCTURE`;
+- a auditoria recursiva de 235 nós confirmou equivalência de tipos, required, nullability, enums,
+  arrays, IDs, referências e objetos estritos; as únicas divergências eram `modules[].path`, três
+  campos `order` sem teto de safe integer e a semântica Unicode de `maxLength`;
+- os releases `prompts/developer/1.0.0` e `1.0.1` permanecem imutáveis; o loader seleciona
+  estaticamente `prompts/developer/1.0.2`;
+- o JSON Schema ativo rejeita paths absolutos, prefixos de drive, backslashes, caracteres de
+  controle, segmentos vazios, `.` e `..`, e fixa `9007199254740991` como maximum dos três `order`;
+- normalização NFC não é representável pelo JSON Schema e `maxLength` Draft 2020-12 conta code
+  points, enquanto Zod conta unidades UTF-16; ambas as limitações estão explícitas nas regras e
+  permanecem sob validação autoritativa do Zod;
+- o `bundleHash` ativo é
+  `1ba2ab3886133cd4f7cac0bf5e3e01dbd3517083e9aa22f30ed57a2963195532`;
+- o cenário Developer denso passou de 255.434 B para 258.803 B (`55.146 B` de instruções,
+  `182.548 B` de input e `21.109 B` de Output Contract) e permanece dentro dos 512 KiB do host, sem
+  truncamento e sem alteração do default global do Prompt Builder;
+- a suíte dedicada adiciona 38 casos e usa Response Validator, assets, fixture e Zod reais, sem
+  provider real; o incremento líquido da suíte raiz é de 39 testes, incluindo o drift da versão;
+- 828 testes foram aprovados no total, sendo 763 da suíte raiz e 65 da aplicação;
+- cobertura da suíte raiz: 93,61% statements, 85,26% branches, 98,56% functions e 94,02% lines;
+- cobertura da aplicação: 97,29% statements, 89,42% branches, 95% functions e 98,93% lines;
+- format, format check, lint, typecheck, Prisma validate e build de produção foram aprovados com
+  Node.js 24.19.0;
+- schemas públicos, Developer Business Validation, Response Validator e agentes posteriores não
+  foram alterados;
+- nenhuma chamada real à OpenAI integra a correção e nenhum item da Sprint 16 foi iniciado.
+
+## Alinhamento dos assets do Product Owner Agent
+
+- o conteúdo canônico do release histórico `prompts/product-owner/1.0.0` permanece preservado,
+  conforme ADR-009 e ADR-019;
+- o bundle patch `prompts/product-owner/1.0.1` passa a ser selecionado estaticamente;
+- o bundle ativo fixa o `bundleHash`
+  `32d7454be1bb61eb6dbe28bd582d943bed76c9fbd501d631e13e0bd69d4a8275`;
+- as instruções confiáveis explicitam a invariante relacional
+  `backlogItems[].dependencyIds → dependencies[].id`;
+- a evolução não cria uma regra de negócio nova: o JSON Schema e a Product Owner Business
+  Validation permanecem inalterados;
+- não foram introduzidos registry, descoberta dinâmica ou seleção de versão por input externo.
+- sete casos de regressão foram adicionados para referências válidas, vazias, múltiplas, inexistentes
+  e duplicadas, preservação do release histórico, regra normativa, schema e hashes determinísticos;
+- o workflow de integração do host confirma `prompt:product-owner@1.0.1`, orçamento de 100.523 B
+  dentro dos 512 KiB configurados e uso exclusivo de `FakeAIProvider`;
+- 789 testes foram aprovados no total, sendo 724 da suíte raiz e 65 da aplicação;
+- cobertura da suíte raiz: 93,63% statements, 85,39% branches, 98,56% functions e 94,04% lines;
+- cobertura da aplicação: 97,29% statements, 89,42% branches, 95% functions e 98,93% lines;
+- format, format check, lint, typecheck, Prisma validate e build de produção foram aprovados com
+  Node.js 24.19.0; nenhuma chamada real à OpenAI foi executada e nenhum item da Sprint 16 foi
+  iniciado.
 
 ## Fora do escopo confirmado
 

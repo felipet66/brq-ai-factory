@@ -14,6 +14,19 @@ O pacote:
 
 O pacote não gera código, não gera testes, não persiste dados, não altera estados de execução, não implementa retry, não conhece QA Agent ou Orchestrator e não grava artifacts no filesystem.
 
+## Bundle ativo
+
+O loader seleciona estaticamente `prompts/developer/1.0.2`. Os releases históricos `1.0.0` e
+`1.0.1` permanecem inalterados. O `1.0.1` tornou explícitas as invariantes relacionais já exigidas
+pela Developer Business Validation. O `1.0.2` alinha o JSON Schema versionado ao schema Zod público:
+`modules[].path` rejeita caminhos absolutos, drives, backslashes, caracteres de controle, segmentos
+vazios, `.` e `..`, e os três campos `order` possuem teto em `Number.MAX_SAFE_INTEGER`.
+
+JSON Schema Draft 2020-12 mede `maxLength` por code points e não expressa normalização Unicode NFC,
+enquanto o contrato Zod preserva comprimento JavaScript UTF-16 e NFC para paths. Essas limitações
+permanecem explícitas nas regras confiáveis, cobertas pela suíte de paridade e autoritativamente
+verificadas pelo Zod. Schemas públicos e Developer Business Validation não foram alterados.
+
 ## API pública
 
 O entrypoint `@brq/developer-agent` expõe a factory, os contratos e schemas canônicos, a Developer Business Validation e o carregador validado de prompt assets. Funções internas de projeção, logging e montagem de resultado não fazem parte da API pública.

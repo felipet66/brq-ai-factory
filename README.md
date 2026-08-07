@@ -93,8 +93,13 @@ brq-ai-factory/
 │   ├── developer/
 │   └── qa/
 ├── prompts/
-│   ├── product-owner/1.0.0/
-│   ├── developer/1.0.0/
+│   ├── product-owner/
+│   │   ├── 1.0.0/
+│   │   └── 1.0.1/ (ativo)
+│   ├── developer/
+│   │   ├── 1.0.0/
+│   │   ├── 1.0.1/
+│   │   └── 1.0.2/ (ativo)
 │   └── qa/1.0.0/
 ├── shared/
 ├── prisma/
@@ -189,6 +194,11 @@ O workspace `agents/product-owner` implementa a primeira fachada concreta de age
 
 O contrato funcional produz uma `ProductOwnerSpecification` com readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`. A Business Validation recalcula essa decisão, verifica completude, IDs e referências cruzadas sem alterar a resposta e sinaliza truncamento quando excede o limite de issues. Somente uma saída aceita gera exatamente os drafts canônicos `story.md`, `acceptance.md` e `backlog.json`. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. Persistência, retry e avanço de workflow continuam fora do agente.
 
+O release `prompts/product-owner/1.0.0` permanece preservado. O bundle ativo `1.0.1` explicita nas
+instruções que `backlogItems[].dependencyIds` deve referenciar somente IDs existentes em
+`dependencies[].id`, sem alterar o JSON Schema ou a Business Validation que já aplica essa
+invariante.
+
 [Fluxo visual do Product Owner Agent](knowledge/32-PRODUCT_OWNER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-019](knowledge/ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md)
 
 ## Developer Agent
@@ -198,6 +208,8 @@ O workspace `agents/developer` implementa a segunda fachada concreta, com uma ú
 A saída é uma `TechnicalSpecification` declarativa com arquitetura, complexidade, story points, fases, plano, dependências, decisões e rastreabilidade integral dos Acceptance Criteria. Readiness considera tanto a specification funcional de origem quanto perguntas e premissas técnicas. Somente uma saída aceita gera, nessa ordem, `architecture.md`, `implementation-plan.md` e `technical-decisions.json`, preservando o hash e a readiness da origem nos metadados.
 
 O Developer atua como arquiteto: não gera código ou testes, não executa comandos, não persiste drafts, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator. O contexto `DEVELOPER` mantém seis documentos obrigatórios dentro do orçamento padrão de 64 KiB; documentos adicionais continuam opcionais e determinísticos.
+
+Os releases `prompts/developer/1.0.0` e `1.0.1` permanecem preservados. O bundle ativo `1.0.2` alinha o JSON Schema versionado ao schema Zod público: paths de módulos inseguros e valores `order` acima de `Number.MAX_SAFE_INTEGER` são rejeitados já no Response Validator. Normalização Unicode NFC e a diferença entre `maxLength` por code points e comprimento UTF-16 permanecem explicitadas no prompt e autoritativamente verificadas pelo Zod.
 
 [Fluxo visual do Developer Agent](knowledge/34-DEVELOPER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-020](knowledge/ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md)
 

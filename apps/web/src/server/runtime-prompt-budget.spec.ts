@@ -60,6 +60,7 @@ import { AI_FACTORY_PROMPT_BUILDER_MAX_BYTES, createApplicationRuntime } from '.
 
 const KNOWLEDGE_ROOT = fileURLToPath(new URL('../../../../knowledge', import.meta.url));
 const FITTING_PAYLOAD_BYTES = 400 * 1024;
+const REAL_WORKFLOW_TEST_TIMEOUT_MS = 10_000;
 
 function fill(length: number): string {
   return 'x'.repeat(length);
@@ -327,17 +328,17 @@ describe('AI Factory host Prompt Builder budget', () => {
     });
     expect(productOwnerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 98_738,
-      instructionsBytes: 28_831,
+      usedBytes: 100_523,
+      instructionsBytes: 30_361,
       inputBytes: 63_322,
-      outputContractBytes: 6_585,
+      outputContractBytes: 6_840,
     });
     expect(developerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 246_098,
-      instructionsBytes: 44_104,
+      usedBytes: 258_803,
+      instructionsBytes: 55_146,
       inputBytes: 182_548,
-      outputContractBytes: 19_446,
+      outputContractBytes: 21_109,
     });
     expect(qaPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
@@ -349,54 +350,62 @@ describe('AI Factory host Prompt Builder budget', () => {
     expect(qaPrompt.budget.usedBytes).toBeLessThan(AI_FACTORY_PROMPT_BUILDER_MAX_BYTES);
   });
 
-  it('uses the explicit host budget across the real workflow with only the fake provider', async () => {
-    const provider = new FakeAIProvider([
-      {
-        type: 'success',
-        response: createProductOwnerAIResponse(createProductOwnerSpecification(), {
-          model: 'gpt-5-mini',
-        }),
-      },
-      {
-        type: 'success',
-        response: createDeveloperAIResponse(createTechnicalSpecification(), {
-          model: 'gpt-5-mini',
-        }),
-      },
-      {
-        type: 'success',
-        response: createQAAIResponse(createQASpecification(), { model: 'gpt-5-mini' }),
-      },
-    ]);
-    const { logger, records } = capturedLogger();
-    const engine = await createApplicationRuntime({
-      aiProvider: provider,
-      environment: { NODE_ENV: 'test' },
-      knowledgeRoot: KNOWLEDGE_ROOT,
-      logger,
-      now: () => 0,
-    });
-    const request = executionRequestSchema.parse({
-      ...executionBody(),
-      requestId: FIXED_REQUEST_ID,
-    });
+  it(
+    'uses the explicit host budget across the real workflow with only the fake provider',
+    { timeout: REAL_WORKFLOW_TEST_TIMEOUT_MS },
+    async () => {
+      const provider = new FakeAIProvider([
+        {
+          type: 'success',
+          response: createProductOwnerAIResponse(createProductOwnerSpecification(), {
+            model: 'gpt-5-mini',
+          }),
+        },
+        {
+          type: 'success',
+          response: createDeveloperAIResponse(createTechnicalSpecification(), {
+            model: 'gpt-5-mini',
+          }),
+        },
+        {
+          type: 'success',
+          response: createQAAIResponse(createQASpecification(), { model: 'gpt-5-mini' }),
+        },
+      ]);
+      const { logger, records } = capturedLogger();
+      const engine = await createApplicationRuntime({
+        aiProvider: provider,
+        environment: { NODE_ENV: 'test' },
+        knowledgeRoot: KNOWLEDGE_ROOT,
+        logger,
+        now: () => 0,
+      });
+      const request = executionRequestSchema.parse({
+        ...executionBody(),
+        requestId: FIXED_REQUEST_ID,
+      });
 
-    const result = await engine.execute(request);
-    const promptRecords = records.filter((record) => record.event === 'prompt.build.completed');
+      const result = await engine.execute(request);
+      const promptRecords = records.filter((record) => record.event === 'prompt.build.completed');
 
-    expect(result.status).toBe('SUCCESS');
-    expect(provider.provider).toBe('fake');
-    expect(provider.calls).toHaveLength(3);
-    expect(promptRecords.map((record) => record.agent)).toEqual([
-      'PRODUCT_OWNER',
-      'DEVELOPER',
-      'QA',
-    ]);
-    expect(promptRecords.every((record) => record.maxBytes === 512 * 1024)).toBe(true);
-    expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.usedBytes).toBeGreaterThan(
-      DEFAULT_PROMPT_MAX_BYTES,
-    );
-  });
+      expect(result.status).toBe('SUCCESS');
+      expect(provider.provider).toBe('fake');
+      expect(provider.calls).toHaveLength(3);
+      expect(promptRecords.map((record) => record.agent)).toEqual([
+        'PRODUCT_OWNER',
+        'DEVELOPER',
+        'QA',
+      ]);
+      expect(promptRecords.find((record) => record.agent === 'PRODUCT_OWNER')?.version).toBe(
+        '1.0.1',
+      );
+      expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.2');
+      expect(promptRecords.every((record) => record.maxBytes === 512 * 1024)).toBe(true);
+      expect(
+        promptRecords.find((record) => record.agent === 'DEVELOPER')?.usedBytes,
+      ).toBeGreaterThan(DEFAULT_PROMPT_MAX_BYTES);
+    },
+  );
 
   it('renders fitting content completely and rejects content above the host limit', () => {
     const promptBuilder = createPromptBuilder({

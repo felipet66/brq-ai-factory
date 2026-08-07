@@ -160,6 +160,89 @@ describe('Product Owner Business Validation', () => {
     );
   });
 
+  it.each([
+    {
+      label: 'one existing dependency',
+      dependencies: [{ id: 'DEP-001' }],
+      dependencyIds: ['DEP-001'],
+    },
+    {
+      label: 'an empty dependency list',
+      dependencies: [],
+      dependencyIds: [],
+    },
+    {
+      label: 'multiple existing dependencies',
+      dependencies: [{ id: 'DEP-001' }, { id: 'DEP-002' }],
+      dependencyIds: ['DEP-001', 'DEP-002'],
+    },
+  ])('accepts backlog items with $label', ({ dependencies, dependencyIds }) => {
+    const result = validateProductOwnerBusinessRules(
+      validSpecification({
+        dependencies,
+        backlogItems: [
+          {
+            id: 'BL-001',
+            dependencyIds,
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+    );
+
+    expect(result).toMatchObject({ valid: true, issues: [] });
+  });
+
+  it('rejects a backlog dependency reference that does not exist', () => {
+    const result = validateProductOwnerBusinessRules(
+      validSpecification({
+        backlogItems: [
+          {
+            id: 'BL-001',
+            dependencyIds: ['DEP-999'],
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+    );
+
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES.UNKNOWN_DEPENDENCY_REFERENCE,
+        path: ['backlogItems', 0, 'dependencyIds', 0],
+      }),
+    ]);
+  });
+
+  it('reports both duplicate and unknown issues for a repeated invalid dependency', () => {
+    const result = validateProductOwnerBusinessRules(
+      validSpecification({
+        backlogItems: [
+          {
+            id: 'BL-001',
+            dependencyIds: ['DEP-999', 'DEP-999'],
+            acceptanceCriteriaIds: ['AC-001'],
+          },
+        ],
+      }),
+    );
+
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES.UNKNOWN_DEPENDENCY_REFERENCE,
+        path: ['backlogItems', 0, 'dependencyIds', 0],
+      }),
+      expect.objectContaining({
+        code: PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES.DUPLICATE_REFERENCE,
+        path: ['backlogItems', 0, 'dependencyIds', 1],
+      }),
+      expect.objectContaining({
+        code: PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES.UNKNOWN_DEPENDENCY_REFERENCE,
+        path: ['backlogItems', 0, 'dependencyIds', 1],
+      }),
+    ]);
+  });
+
   it('does not mutate the specification while validating it', () => {
     const specification = validSpecification();
     const snapshot = structuredClone(specification);
