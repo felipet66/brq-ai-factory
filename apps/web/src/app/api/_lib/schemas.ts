@@ -1,4 +1,8 @@
 import { executionRequestSchema, executionResultSchema } from '@brq/execution-engine';
+import {
+  executionRecordListQuerySchema,
+  executionRecordStatusSchema,
+} from '@brq/execution-repository';
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
 import { semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
@@ -86,6 +90,166 @@ export const executionResponseSchema = z
   .object({
     success: z.literal(true),
     data: executionResultSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+const nullableExecutionIdSchema = executionIdPathSchema.nullable();
+const nullableDateTimeSchema = z.string().datetime({ offset: true }).nullable();
+const nullableDurationSchema = z.number().int().nonnegative().nullable();
+const nullableHashSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/)
+  .nullable();
+const nullableKnowledgeHashSchema = z
+  .string()
+  .regex(/^sha256:[a-f0-9]{64}$/)
+  .nullable();
+
+export const executionListQueryHttpSchema = z
+  .object({
+    status: executionRecordStatusSchema.optional(),
+    readiness: executionRecordListQuerySchema.shape.readiness,
+    createdAfter: executionRecordListQuerySchema.shape.createdAfter,
+    createdBefore: executionRecordListQuerySchema.shape.createdBefore,
+    limit: z
+      .string()
+      .regex(/^\d+$/)
+      .transform(Number)
+      .pipe(z.number().int().min(1).max(100))
+      .optional(),
+    cursor: executionRecordListQuerySchema.shape.cursor,
+  })
+  .strict()
+  .superRefine((query, context) => {
+    if (
+      query.createdAfter !== undefined &&
+      query.createdBefore !== undefined &&
+      Date.parse(query.createdAfter) > Date.parse(query.createdBefore)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['createdAfter'],
+        message: 'createdAfter não pode ser posterior a createdBefore.',
+      });
+    }
+  });
+
+export const executionHistoryItemSchema = z
+  .object({
+    executionId: nullableExecutionIdSchema,
+    workflowId: z.string().min(1).max(128),
+    projectName: z.string().min(1).max(500),
+    status: executionRecordStatusSchema,
+    readiness: z.string().min(1).max(64).nullable(),
+    startedAt: nullableDateTimeSchema,
+    finishedAt: nullableDateTimeSchema,
+    durationMs: nullableDurationSchema,
+  })
+  .strict();
+
+export const executionHistoryPageSchema = z
+  .object({
+    items: z.array(executionHistoryItemSchema).max(100),
+    nextCursor: z.string().min(1).max(128).nullable(),
+  })
+  .strict();
+
+const executionHistoryHashesSchema = z
+  .object({
+    executionRequestHash: nullableHashSchema,
+    workflowRequestHash: nullableHashSchema,
+    workflowHash: nullableHashSchema,
+    lineageHash: nullableHashSchema,
+    provenanceHash: nullableHashSchema,
+    executionHash: nullableHashSchema,
+  })
+  .strict();
+
+const executionHistoryLineageSchema = z
+  .object({
+    outputs: z
+      .object({
+        productOwnerSpecificationHash: nullableKnowledgeHashSchema,
+        technicalSpecificationHash: nullableKnowledgeHashSchema,
+        qaSpecificationHash: nullableKnowledgeHashSchema,
+      })
+      .strict(),
+    handoffs: z
+      .array(
+        z
+          .object({
+            from: z.enum(['PRODUCT_OWNER', 'DEVELOPER']),
+            to: z.enum(['DEVELOPER', 'QA']),
+            specification: z.enum(['PRODUCT_OWNER_SPECIFICATION', 'TECHNICAL_SPECIFICATION']),
+            verified: z.literal(true),
+          })
+          .strict(),
+      )
+      .max(3),
+  })
+  .strict();
+
+const executionHistoryProvenanceSchema = z
+  .object({
+    stages: z
+      .array(
+        z
+          .object({
+            stage: z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']),
+            agentVersion: z.string().min(1).max(128),
+            outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
+            readiness: z.string().min(1).max(64).nullable(),
+            hashes: z
+              .object({
+                assetBundleHash: z.string().regex(/^[a-f0-9]{64}$/),
+                knowledgeContextHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+                promptHash: z.string().regex(/^[a-f0-9]{64}$/),
+                responseHash: z.string().regex(/^[a-f0-9]{64}$/),
+                validationHash: z.string().regex(/^[a-f0-9]{64}$/),
+                generationHash: nullableHashSchema,
+                artifactHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(100),
+              })
+              .strict(),
+          })
+          .strict(),
+      )
+      .max(3),
+  })
+  .strict();
+
+export const executionHistoryDetailSchema = executionHistoryItemSchema
+  .extend({
+    executionId: executionIdPathSchema,
+    createdAt: z.string().datetime({ offset: true }),
+    requestId: z.string().min(1).max(128).nullable(),
+    metadata: z
+      .object({
+        engineVersion: semanticVersionSchema,
+        contractVersion: semanticVersionSchema,
+        attempt: z.number().int().positive(),
+      })
+      .strict(),
+    hashes: executionHistoryHashesSchema,
+    lineage: executionHistoryLineageSchema.nullable(),
+    provenance: executionHistoryProvenanceSchema.nullable(),
+  })
+  .strict();
+
+export const executionHistoryPageResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: executionHistoryPageSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const executionHistoryDetailResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: executionHistoryDetailSchema,
     metadata: apiResponseMetadataSchema,
     errors: z.tuple([]),
   })

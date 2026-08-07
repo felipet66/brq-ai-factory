@@ -2,10 +2,9 @@
 
 ## Estado atual
 
-Sprint 16 — Execution History & Observability implementada, validada localmente e aguardando
-aprovação humana. A Sprint ainda não está aprovada e não possui commit. O bug conhecido de
-Structured Outputs do Developer Agent permanece como hotfix separado e não foi alterado. Nenhum
-item da Sprint 17 foi iniciado.
+Sprint 17 — Execution Repository & Persistence implementada e validada localmente, aguardando
+aprovação humana. A Sprint não possui commit. O bug conhecido de Structured Outputs do Developer
+Agent permanece como hotfix separado e não foi alterado. Nenhum item da Sprint 18 foi iniciado.
 
 ## Fundação técnica
 
@@ -26,8 +25,10 @@ item da Sprint 17 foi iniciado.
 - Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
 - HTTP API como adapter Next.js sobre o Execution Engine, com composition root lazy no host;
 - Frontend MVP como Presentation Adapter HTTP-only sobre a API pública;
-- Observability como decorator best-effort da API pública do Execution Engine, com histórico
-  bounded e efêmero em memória;
+- Observability como decorator best-effort da API pública do Execution Engine, com reducer síncrono
+  em memória e projeção durável pelo Execution Repository;
+- Execution Repository como agregado persistente separado, com port assíncrono, adapters em
+  memória e Prisma e read models minimizados;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -235,6 +236,8 @@ item da Sprint 17 foi iniciado.
 - ADR-026 registra a fronteira de Execution History & Observability, o decorator do Engine, a bridge
   allowlisted de logs, o store bounded em memória, o endpoint de timeline e a exclusão integral de
   conteúdo sensível;
+- ADR-027 registra o agregado `ExecutionRecord` separado, o refinamento limitado do ADR-012, a
+  composição persistente externa ao Engine, o modelo Prisma normalizado e as consultas duráveis;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -675,6 +678,46 @@ item da Sprint 17 foi iniciado.
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 17
   foi iniciado.
 
+## Implementação da Sprint 17
+
+- workspace `@brq/execution-repository` criado em `core/execution-repository`, com port público,
+  schemas Zod estritos, mappers, erros sanitizados, imutabilidade e logging allowlisted;
+- adapters em memória e Prisma implementam o mesmo contrato assíncrono de lifecycle, observação,
+  lookup e paginação;
+- o aggregate `ExecutionRecord` é aditivo e separado do model `Execution` legado, que permanece
+  intacto com seus repositories e contratos históricos;
+- migration `20260807170000_execution_repository` cria tabelas normalizadas para registro, hashes,
+  lifecycle, observação, timeline, métricas, lineage e provenance;
+- o host compõe `concrete Engine → observed Engine → persistent coordinator`; o Engine concreto e
+  o workspace de Observability da Sprint 16 não importam repository ou Prisma;
+- o coordinator registra `CREATED`, `RUNNING` e o resultado terminal, delega exatamente uma vez e
+  anexa o `executionId` somente quando a API pública do Engine o revela;
+- observações intermediárias continuam fail-open; a consolidação terminal persiste resultado e
+  snapshot normalizado sem reexecutar o workflow;
+- `GET /api/executions` aceita paginação e filtros por status, readiness e intervalo de criação;
+  `GET /api/executions/[id]` e o endpoint de timeline passam a consultar o repository;
+- a API expõe somente read models minimizados e não importa Prisma, agentes ou internals do
+  workflow;
+- o Frontend adiciona as páginas `/executions` e `/executions/[id]`, cliente HTTP próprio e
+  componentes isolados da experiência da Sprint 16;
+- prompts, demanda detalhada, contexto adicional, knowledge, specifications, respostas, conteúdo
+  de artifacts, segredos e objetos internos não integram o modelo persistido;
+- ADR-027 e `knowledge/41-EXECUTION_REPOSITORY_FLOW.md` documentam Repository, Persistence Flow,
+  Execution Lifecycle, API Query Flow e Prisma Model;
+- SQLite permanece local e single-host; crash depois de `RUNNING` pode deixar registro stale e não
+  há garantia exactly-once sem retry, outbox ou recovery, todos fora da Sprint;
+- 936 testes foram aprovados no total, sendo 814 da suíte raiz e 122 da aplicação web;
+- cobertura da suíte raiz: 93,56% statements, 85,11% branches, 98,67% functions e 94,13% lines;
+- cobertura de `core/execution-repository`: 91,80% statements, 80,31% branches, 96,42% functions e
+  93,16% lines;
+- cobertura da aplicação web: 95,62% statements, 86,06% branches, 96,17% functions e 97,33% lines;
+- format, format check, lint, typecheck, testes, coverage, Prisma validate, build e
+  `git diff --check` foram aprovados com Node.js 24.19.0;
+- a migration foi comparada com o schema sem drift e aplicada com sucesso ao SQLite local de
+  desenvolvimento;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 18
+  foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
@@ -682,9 +725,9 @@ item da Sprint 17 foi iniciado.
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, workflows dinâmicos e concorrência;
-- páginas adicionais, dashboard completo, artifacts completos e logs no frontend;
-- persistência funcional das execuções dos agentes;
+- dashboard completo, artifacts completos e logs no frontend;
+- persistência de conteúdo funcional dos agentes;
 - revisão humana integrada ao fluxo;
 - autenticação e autorização;
-- persistência durável e observabilidade distribuída;
+- persistência distribuída e observabilidade distribuída;
 - deploy e configuração de Vercel.

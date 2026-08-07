@@ -1,10 +1,10 @@
-import { getExecutionEngine } from '@/server/runtime';
+import { getExecutionEngine, getExecutionRepository } from '@/server/runtime';
 
 import { createExecutionsHandler } from '../_lib/executions-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createExecutionsHandler({ getExecutionEngine });
+const handler = createExecutionsHandler({ getExecutionEngine, getExecutionRepository });
 
 export const GET = handler;
 export const POST = handler;

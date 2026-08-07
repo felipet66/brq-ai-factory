@@ -1,10 +1,7 @@
 // @vitest-environment node
 
-import type {
-  ExecutionHistoryReader,
-  ExecutionObservabilitySnapshot,
-  ExecutionStageMetrics,
-} from '@brq/observability';
+import type { ExecutionRecord, ExecutionRecordRepository } from '@brq/execution-repository';
+import type { ExecutionObservabilitySnapshot, ExecutionStageMetrics } from '@brq/observability';
 import { describe, expect, it, vi } from 'vitest';
 
 import { EXECUTION_ID, FIXED_REQUEST_ID, capturedLogger } from '@/test/api-fixtures';
@@ -112,11 +109,17 @@ const SNAPSHOT = {
   summary: null,
 } as const satisfies ExecutionObservabilitySnapshot;
 
-function fakeHistory(): ExecutionHistoryReader & { readonly get: ReturnType<typeof vi.fn> } {
-  const get = vi.fn((id: string): ExecutionObservabilitySnapshot | null =>
-    id === EXECUTION_ID || id === WORKFLOW_ID ? SNAPSHOT : null,
-  );
-  return { get };
+function record(snapshot: ExecutionObservabilitySnapshot = SNAPSHOT): ExecutionRecord {
+  return { observation: snapshot } as ExecutionRecord;
+}
+
+function fakeRepository() {
+  const findByExecutionId = vi.fn(async (id: string) => (id === EXECUTION_ID ? record() : null));
+  const findByWorkflowId = vi.fn(async (id: string) => (id === WORKFLOW_ID ? record() : null));
+  return { findByExecutionId, findByWorkflowId } as unknown as ExecutionRecordRepository & {
+    readonly findByExecutionId: typeof findByExecutionId;
+    readonly findByWorkflowId: typeof findByWorkflowId;
+  };
 }
 
 function context(id: string) {
@@ -125,10 +128,10 @@ function context(id: string) {
 
 describe('execution timeline HTTP adapter', () => {
   it('returns an existing snapshot in the standard secure envelope', async () => {
-    const history = fakeHistory();
+    const repository = fakeRepository();
     const { logger, records } = capturedLogger();
     const handler = createExecutionTimelineHandler({
-      getExecutionHistory: () => history,
+      getExecutionRepository: async () => repository,
       logger,
       now: () => 50,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -151,8 +154,9 @@ describe('execution timeline HTTP adapter', () => {
       },
       errors: [],
     });
-    expect(history.get).toHaveBeenCalledOnce();
-    expect(history.get).toHaveBeenCalledWith(EXECUTION_ID);
+    expect(repository.findByExecutionId).toHaveBeenCalledOnce();
+    expect(repository.findByExecutionId).toHaveBeenCalledWith(EXECUTION_ID);
+    expect(repository.findByWorkflowId).not.toHaveBeenCalled();
     expect(response.headers.get('x-request-id')).toBe(FIXED_REQUEST_ID);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
@@ -175,9 +179,9 @@ describe('execution timeline HTTP adapter', () => {
   });
 
   it('looks up an active timeline by its workflowId alias', async () => {
-    const history = fakeHistory();
+    const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
-      getExecutionHistory: () => history,
+      getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
     });
@@ -192,13 +196,14 @@ describe('execution timeline HTTP adapter', () => {
     expect(body.data.status).toBe('RUNNING');
     expect(body.data.executionId).toBe(EXECUTION_ID);
     expect(body.metadata.executionId).toBe(EXECUTION_ID);
-    expect(history.get).toHaveBeenCalledWith(WORKFLOW_ID);
+    expect(repository.findByWorkflowId).toHaveBeenCalledWith(WORKFLOW_ID);
+    expect(repository.findByExecutionId).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown valid identifier', async () => {
-    const history = fakeHistory();
+    const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
-      getExecutionHistory: () => history,
+      getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
     });
@@ -221,13 +226,13 @@ describe('execution timeline HTTP adapter', () => {
         },
       ],
     });
-    expect(history.get).toHaveBeenCalledWith(UNKNOWN_EXECUTION_ID);
+    expect(repository.findByExecutionId).toHaveBeenCalledWith(UNKNOWN_EXECUTION_ID);
   });
 
   it('rejects malformed identifiers and query parameters before lookup', async () => {
-    const history = fakeHistory();
+    const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
-      getExecutionHistory: () => history,
+      getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
     });
@@ -253,13 +258,14 @@ describe('execution timeline HTTP adapter', () => {
       data: null,
       errors: [{ code: 'INVALID_REQUEST' }],
     });
-    expect(history.get).not.toHaveBeenCalled();
+    expect(repository.findByExecutionId).not.toHaveBeenCalled();
+    expect(repository.findByWorkflowId).not.toHaveBeenCalled();
   });
 
   it('returns a standardized 405 without consulting history', async () => {
-    const history = fakeHistory();
+    const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
-      getExecutionHistory: () => history,
+      getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
     });
@@ -280,6 +286,28 @@ describe('execution timeline HTTP adapter', () => {
       metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '1.0.0' },
       errors: [{ code: 'METHOD_NOT_ALLOWED' }],
     });
-    expect(history.get).not.toHaveBeenCalled();
+    expect(repository.findByExecutionId).not.toHaveBeenCalled();
+    expect(repository.findByWorkflowId).not.toHaveBeenCalled();
+  });
+
+  it('maps repository failures to a sanitized 503 response', async () => {
+    const repository = fakeRepository();
+    repository.findByExecutionId.mockRejectedValueOnce(new Error('file:private-database.db'));
+    const { logger, records } = capturedLogger();
+    const handler = createExecutionTimelineHandler({
+      getExecutionRepository: async () => repository,
+      logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline`),
+      context(EXECUTION_ID),
+    );
+    const serialized = JSON.stringify(await response.json()) + JSON.stringify(records);
+
+    expect(response.status).toBe(503);
+    expect(serialized).toContain('EXECUTION_REPOSITORY_UNAVAILABLE');
+    expect(serialized).not.toContain('private-database.db');
   });
 });

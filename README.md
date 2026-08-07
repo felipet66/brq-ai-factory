@@ -43,7 +43,8 @@ brq-ai-factory/
 │   │   ├── ADR-023-EXECUTION-ENGINE-BOUNDARY.md
 │   │   ├── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
 │   │   ├── ADR-025-FRONTEND-MVP.md
-│   │   └── ADR-026-OBSERVABILITY-BOUNDARY.md
+│   │   ├── ADR-026-OBSERVABILITY-BOUNDARY.md
+│   │   └── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -85,12 +86,14 @@ brq-ai-factory/
 │   ├── 37-EXECUTION_ENGINE_FLOW.md
 │   ├── 38-HTTP_API_FLOW.md
 │   ├── 39-FRONTEND_FLOW.md
-│   └── 40-OBSERVABILITY_FLOW.md
+│   ├── 40-OBSERVABILITY_FLOW.md
+│   └── 41-EXECUTION_REPOSITORY_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
 │   ├── execution-engine/
-│   └── observability/
+│   ├── observability/
+│   └── execution-repository/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -141,7 +144,10 @@ O workspace `@brq/prisma` implementa os repositories definidos em `@brq/shared`.
 npm run prisma:migrate:dev -- --name nome_da_migration
 ```
 
-Não existe seed obrigatório. Input e output de agentes, provenance de artifacts e contexto de logs são persistidos como JSON.
+Não existe seed obrigatório. Os repositories históricos de domínio permanecem disponíveis sem
+alteração. A Sprint 17 adiciona o agregado normalizado `ExecutionRecord`, dedicado ao histórico
+minimizado de execuções, sem persistir prompts, specifications, respostas, knowledge ou conteúdo
+de artifacts.
 
 ## AI Provider
 
@@ -262,11 +268,11 @@ registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
 
 ## HTTP API
 
-A Sprint 14 expõe o Execution Engine exclusivamente por Next.js 16 Route Handlers. Os endpoints
-originais são `GET /api/health`, `POST /api/executions` e `GET /api/executions/[id]`. A criação é
-síncrona e efêmera; a consulta geral por ID valida o contrato e retorna 501 até existir
-persistência. A Sprint 16 acrescenta `GET /api/executions/[id]/timeline`, limitado ao histórico de
-observabilidade mantido em memória.
+A Sprint 14 expõe o Execution Engine exclusivamente por Next.js 16 Route Handlers. A criação
+continua síncrona por `POST /api/executions`; `GET /api/health` não consulta banco, IA ou workflow.
+A Sprint 17 torna operacionais `GET /api/executions`, com paginação e filtros, e
+`GET /api/executions/[id]`, além de trocar a fonte de
+`GET /api/executions/[id]/timeline` pelo repository durável.
 
 O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId`,
 propaga o mesmo `AbortSignal` e transporta `ExecutionResult` sem alterar hashes, métricas, lineage
@@ -274,8 +280,9 @@ ou provenance. Logs e erros usam allowlists sanitizadas e todas as respostas rec
 mínimos de segurança.
 
 O composition root fica no host em `apps/web/src/server/runtime.ts`. Ele monta factories públicas
-de forma lazy e fornece somente o `ExecutionEngine`; nenhum workspace de runtime foi criado no
-domínio. A API não conhece agentes ou componentes internos do workflow.
+de forma lazy e fornece `ExecutionEngine` e `ExecutionRecordRepository`; nenhum workspace de
+runtime foi criado no domínio. A API não conhece agentes, Prisma ou componentes internos do
+workflow.
 
 [Fluxo visual da HTTP API](knowledge/38-HTTP_API_FLOW.md) · [ADR-024](knowledge/ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md)
 
@@ -310,25 +317,46 @@ tokens, etapas executadas ou ignoradas e os hashes finais sem recalculá-los. Co
 card aprovado e versionado, `totalCostEstimate` permanece `null`.
 
 O Frontend consulta `GET /api/executions/[id]/timeline` com React puro. Durante o POST síncrono, o
-`workflowId` funciona apenas como correlação ativa; após o término, somente o `executionId`
-canônico consulta o histórico retido. Polling não retenta o workflow, aplica deadline degradável de
-cinco segundos por leitura e para em resultado terminal ou unmount.
+`workflowId` funciona como correlação da execução ainda ativa; após o término, o `executionId`
+canônico consulta o histórico persistido. Polling não retenta o workflow, aplica deadline
+degradável de cinco segundos por leitura e para em resultado terminal ou unmount.
 
-O host compartilha o store entre Route Handlers no mesmo processo, mas restart, HMR, eviction ou
-troca de instância não oferecem continuidade garantida. Falha de observabilidade é best-effort e
-nunca altera a execução funcional. A implementação foi validada localmente e aguarda a aprovação
-humana da Sprint 16.
+O reducer em memória da Sprint 16 continua sendo a projeção síncrona e fail-open dos eventos. A
+Sprint 17 projeta esses snapshots no repository durável; falhas observacionais intermediárias
+continuam best-effort, enquanto a gravação terminal faz parte da fronteira persistente do host.
 
 [Fluxo visual da Observabilidade](knowledge/40-OBSERVABILITY_FLOW.md) · [ADR-026](knowledge/ADR/ADR-026-OBSERVABILITY-BOUNDARY.md)
+
+## Execution Repository & Persistence
+
+A Sprint 17 implementa `@brq/execution-repository` em `core/execution-repository`. O workspace
+possui o port `ExecutionRecordRepository`, schemas Zod, projeções imutáveis, adapter em memória e
+adapter Prisma. O agregado `ExecutionRecord` é separado do model `Execution` histórico e usa
+tabelas normalizadas para lifecycle, hashes, observação, timeline, métricas, lineage e provenance.
+
+Um coordinator externo, composto pelo host depois do decorator observacional, registra `CREATED`,
+`RUNNING` e o estado terminal sem alterar o Execution Engine concreto. Como a API pública do Engine
+só revela a identidade determinística durante a execução, registros ativos começam correlacionados
+por `workflowId` e recebem `executionId` assim que ele se torna público. O algoritmo de hashing não
+é duplicado.
+
+O Frontend adiciona `/executions` e `/executions/[id]`, consumindo apenas read models HTTP
+minimizados. A listagem aceita `status`, `readiness`, `createdAfter`, `createdBefore`, `limit` e
+`cursor`. Nenhum componente React importa o repository, Prisma ou o núcleo da AI Factory.
+
+[Fluxo visual do Execution Repository](knowledge/41-EXECUTION_REPOSITORY_FLOW.md) ·
+[ADR-027](knowledge/ADR/ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md)
 
 ## Validações
 
 ```bash
+npm run format
+npm run format:check
 npm run lint
 npm run typecheck
 npm run test
 npm run test:coverage
 npm run prisma:validate
 npm run build
-npm run format:check
+git diff --check
 ```

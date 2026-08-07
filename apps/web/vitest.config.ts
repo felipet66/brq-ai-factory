@@ -20,8 +20,10 @@ export default defineConfig({
       include: [
         'src/app/api/**/*.ts',
         'src/app/page.tsx',
+        'src/app/executions/**/*.tsx',
         'src/api/**/*.ts',
         'src/components/execution/**/*.tsx',
+        'src/components/history/**/*.tsx',
         'src/server/runtime.ts',
       ],
       exclude: ['src/**/*.spec.ts', 'src/app/api/**/route.ts'],

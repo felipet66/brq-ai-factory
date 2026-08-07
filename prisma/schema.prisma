@@ -55,27 +55,27 @@ model PromptVersion {
 }
 
 model AgentExecution {
-  id              String        @id @default(cuid())
-  executionId     String
-  agent           String
-  status          String        @default("CREATED")
-  attempt         Int
-  input           Json
-  output          Json?
-  agentVersion    String
-  promptVersion   String
-  schemaVersion   String
-  model           String?
-  inputTokens     Int?
-  outputTokens    Int?
-  durationMs      Int?
-  createdAt       DateTime      @default(now())
-  startedAt       DateTime?
-  finishedAt      DateTime?
-  execution       Execution     @relation(fields: [executionId], references: [id], onDelete: Restrict)
-  prompt          PromptVersion @relation(fields: [agent, promptVersion], references: [agent, version], onDelete: Restrict, onUpdate: Restrict)
-  artifacts       Artifact[]
-  logs            Log[]
+  id            String        @id @default(cuid())
+  executionId   String
+  agent         String
+  status        String        @default("CREATED")
+  attempt       Int
+  input         Json
+  output        Json?
+  agentVersion  String
+  promptVersion String
+  schemaVersion String
+  model         String?
+  inputTokens   Int?
+  outputTokens  Int?
+  durationMs    Int?
+  createdAt     DateTime      @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  execution     Execution     @relation(fields: [executionId], references: [id], onDelete: Restrict)
+  prompt        PromptVersion @relation(fields: [agent, promptVersion], references: [agent, version], onDelete: Restrict, onUpdate: Restrict)
+  artifacts     Artifact[]
+  logs          Log[]
 
   @@unique([executionId, agent, attempt])
   @@index([executionId, createdAt])
@@ -125,4 +125,203 @@ model Log {
   @@index([event, createdAt])
   @@index([requestId])
   @@index([traceId])
+}
+
+model ExecutionRecord {
+  storageId         String                          @id @default(cuid())
+  workflowId        String                          @unique
+  executionId       String?                         @unique
+  requestId         String?
+  traceId           String?
+  projectName       String
+  status            String                          @default("CREATED")
+  workflowStatus    String?
+  readiness         String?
+  createdAt         DateTime
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  durationMs        Int?
+  engineVersion     String
+  contractVersion   String
+  attempt           Int                             @default(1)
+  revision          Int                             @default(0)
+  failureKind       String?
+  failureCode       String?
+  failureSourceCode String?
+  hashes            ExecutionRecordHash?
+  lifecycleEvents   ExecutionRecordLifecycleEvent[]
+  observation       ExecutionObservation?
+  lineageOutput     ExecutionLineageOutput?
+  lineageHandoffs   ExecutionLineageHandoff[]
+  provenanceStages  ExecutionProvenanceStage[]
+
+  @@index([status, createdAt])
+  @@index([readiness, createdAt])
+  @@index([requestId])
+  @@index([finishedAt])
+}
+
+model ExecutionRecordHash {
+  executionRecordId    String          @id
+  executionRequestHash String?
+  workflowRequestHash  String?
+  workflowHash         String?
+  lineageHash          String?
+  provenanceHash       String?
+  executionHash        String?
+  executionRecord      ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+
+  @@index([executionHash])
+}
+
+model ExecutionRecordLifecycleEvent {
+  id                String          @id @default(cuid())
+  executionRecordId String
+  sequence          Int
+  event             String
+  state             String
+  occurredAt        DateTime
+  durationMs        Int?
+  executionRecord   ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+
+  @@unique([executionRecordId, sequence])
+  @@index([executionRecordId, occurredAt])
+}
+
+model ExecutionObservation {
+  executionRecordId      String                      @id
+  observabilityVersion   String
+  revision               Int
+  executionId            String
+  workflowId             String
+  requestId              String?
+  status                 String
+  updatedAt              DateTime
+  summaryWorkflowStatus  String?
+  summaryReadinessFinal  String?
+  summaryTotalDurationMs Int?
+  summaryTotalTokens     Int?
+  summaryCostAmount      Float?
+  summaryCostCurrency    String?
+  summaryRateCardVersion String?
+  executionRecord        ExecutionRecord             @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  events                 ExecutionObservationEvent[]
+  stages                 ExecutionObservedStage[]
+
+  @@index([executionId])
+  @@index([workflowId])
+  @@index([status, updatedAt])
+}
+
+model ExecutionObservedStage {
+  id                     String                @id @default(cuid())
+  executionObservationId String
+  ordinal                Int
+  stageId                String
+  stageName              String
+  status                 String
+  startedAt              DateTime?
+  finishedAt             DateTime?
+  durationMs             Int?
+  requestId              String?
+  executionId            String
+  executionObservation   ExecutionObservation  @relation(fields: [executionObservationId], references: [executionRecordId], onDelete: Restrict)
+  metrics                ExecutionStageMetric?
+
+  @@unique([executionObservationId, stageId])
+  @@unique([executionObservationId, ordinal])
+  @@index([status])
+}
+
+model ExecutionStageMetric {
+  executionObservedStageId     String                 @id
+  stageId                      String
+  durationMs                   Int?
+  promptBytes                  Int?
+  completionBytes              Int?
+  inputTokens                  Int?
+  outputTokens                 Int?
+  totalTokens                  Int?
+  providerLatencyMs            Int?
+  validationDurationMs         Int?
+  artifactGenerationDurationMs Int?
+  executionObservedStage       ExecutionObservedStage @relation(fields: [executionObservedStageId], references: [id], onDelete: Restrict)
+}
+
+model ExecutionObservationEvent {
+  id                     String               @id @default(cuid())
+  executionObservationId String
+  sequence               Int
+  type                   String
+  stageId                String
+  stageName              String
+  status                 String
+  startedAt              DateTime?
+  finishedAt             DateTime?
+  durationMs             Int?
+  requestId              String?
+  executionId            String
+  errorCode              String?
+  executionObservation   ExecutionObservation @relation(fields: [executionObservationId], references: [executionRecordId], onDelete: Restrict)
+
+  @@unique([executionObservationId, sequence])
+  @@index([executionObservationId, status])
+}
+
+model ExecutionLineageOutput {
+  executionRecordId             String          @id
+  productOwnerSpecificationHash String?
+  technicalSpecificationHash    String?
+  qaSpecificationHash           String?
+  executionRecord               ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+}
+
+model ExecutionLineageHandoff {
+  id                String          @id @default(cuid())
+  executionRecordId String
+  ordinal           Int
+  fromStage         String
+  toStage           String
+  specification     String
+  calculatedHash    String
+  declaredHash      String
+  verified          Boolean
+  executionRecord   ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+
+  @@unique([executionRecordId, ordinal])
+}
+
+model ExecutionProvenanceStage {
+  id                   String                            @id @default(cuid())
+  executionRecordId    String
+  ordinal              Int
+  stage                String
+  agent                String
+  executionId          String
+  agentExecutionId     String
+  agentVersion         String
+  outcome              String
+  readiness            String?
+  assetBundleHash      String
+  knowledgeContextHash String
+  promptHash           String
+  responseHash         String
+  validationHash       String
+  generationHash       String?
+  executionRecord      ExecutionRecord                   @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  artifactHashes       ExecutionProvenanceArtifactHash[]
+
+  @@unique([executionRecordId, ordinal])
+  @@index([stage, outcome])
+}
+
+model ExecutionProvenanceArtifactHash {
+  id                         String                   @id @default(cuid())
+  executionProvenanceStageId String
+  ordinal                    Int
+  hash                       String
+  executionProvenanceStage   ExecutionProvenanceStage @relation(fields: [executionProvenanceStageId], references: [id], onDelete: Restrict)
+
+  @@unique([executionProvenanceStageId, ordinal])
+  @@index([hash])
 }

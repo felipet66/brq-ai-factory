@@ -7,6 +7,13 @@ import { createArtifactGenerator } from '@brq/artifact-generator';
 import { createDeveloperAgent, loadDeveloperPromptAssets } from '@brq/developer-agent';
 import { createExecutionEngine, type ExecutionEngine } from '@brq/execution-engine';
 import {
+  createInMemoryExecutionRecordRepository,
+  createPersistentExecutionEngine,
+  createRepositoryBackedExecutionHistory,
+  type ExecutionRecordRepository,
+} from '@brq/execution-repository';
+import { PrismaExecutionRecordRepository } from '@brq/execution-repository/prisma';
+import {
   createKnowledgeLoader,
   KNOWLEDGE_MANIFEST,
   type KnowledgeSource,
@@ -24,6 +31,7 @@ import { createProductOwnerAgent, loadProductOwnerPromptAssets } from '@brq/prod
 import { createPromptBuilder } from '@brq/prompt-builder';
 import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
+import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
 export const AI_FACTORY_PROMPT_BUILDER_MAX_BYTES = 512 * 1024;
@@ -34,6 +42,7 @@ export interface ApplicationRuntimeOptions {
   readonly knowledgeRoot?: string;
   readonly knowledgeSource?: KnowledgeSource;
   readonly executionHistory?: ExecutionHistoryRecorder;
+  readonly executionRepository?: ExecutionRecordRepository;
   readonly logger?: Logger;
   readonly now?: () => number;
 }
@@ -62,7 +71,13 @@ export async function createApplicationRuntime(
 ): Promise<ExecutionEngine> {
   const now = options.now ?? Date.now;
   const baseLogger = options.logger ?? createLogger();
-  const executionHistory = options.executionHistory ?? createInMemoryExecutionHistory({ now });
+  const repository = options.executionRepository ?? createInMemoryExecutionRecordRepository();
+  const memoryHistory = options.executionHistory ?? createInMemoryExecutionHistory({ now });
+  const executionHistory = createRepositoryBackedExecutionHistory({
+    history: memoryHistory,
+    repository,
+    logger: baseLogger,
+  });
   const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
   const environment = options.environment ?? process.env;
   const knowledgeRoot = validateKnowledgeRoot(
@@ -122,12 +137,21 @@ export async function createApplicationRuntime(
     now,
   });
   const engine = createExecutionEngine({ orchestrator, logger, now });
-  return createObservedExecutionEngine({ engine, history: executionHistory });
+  const observedEngine = createObservedExecutionEngine({ engine, history: executionHistory });
+  return createPersistentExecutionEngine({
+    engine: observedEngine,
+    repository,
+    history: executionHistory,
+    logger: baseLogger,
+    now,
+  });
 }
 
 interface ApplicationRuntimeState {
   runtime: Promise<ExecutionEngine> | undefined;
   readonly executionHistory: ExecutionHistoryRecorder;
+  executionRepository: ExecutionRecordRepository | undefined;
+  prismaClient: DatabaseClient | undefined;
 }
 
 const runtimeGlobal = globalThis as typeof globalThis & {
@@ -136,13 +160,28 @@ const runtimeGlobal = globalThis as typeof globalThis & {
 const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
   runtime: undefined,
   executionHistory: createInMemoryExecutionHistory(),
+  executionRepository: undefined,
+  prismaClient: undefined,
 });
 
 export function getExecutionEngine(): Promise<ExecutionEngine> {
-  runtimeState.runtime ??= createApplicationRuntime({
-    executionHistory: runtimeState.executionHistory,
-  });
+  runtimeState.runtime ??= getExecutionRepository().then((executionRepository) =>
+    createApplicationRuntime({
+      executionHistory: runtimeState.executionHistory,
+      executionRepository,
+    }),
+  );
   return runtimeState.runtime;
+}
+
+export async function getExecutionRepository(): Promise<ExecutionRecordRepository> {
+  if (runtimeState.executionRepository === undefined) {
+    runtimeState.prismaClient ??= createPrismaClient();
+    runtimeState.executionRepository = new PrismaExecutionRecordRepository(
+      runtimeState.prismaClient,
+    );
+  }
+  return runtimeState.executionRepository;
 }
 
 export function getExecutionHistory(): ExecutionHistoryReader {

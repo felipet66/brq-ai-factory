@@ -1,9 +1,10 @@
-import type { ExecutionHistoryReader } from '@brq/observability';
+import type { ExecutionRecordRepository } from '@brq/execution-repository';
 import type { Logger } from '@brq/shared/logger/logger';
 
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
+import { executeRepositoryQuery, resolveExecutionRepository } from './execution-repository';
 import { rejectQueryParameters } from './request';
 import { executionTimelineResponse } from './responses';
 import { createRouteHandler } from './route-handler';
@@ -14,7 +15,7 @@ export interface ExecutionTimelineContext {
 }
 
 interface ExecutionTimelineHandlerOptions {
-  readonly getExecutionHistory: () => ExecutionHistoryReader;
+  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
@@ -35,16 +36,21 @@ export function createExecutionTimelineHandler(options: ExecutionTimelineHandler
           path: 'id',
         });
       }
-      const snapshot = options.getExecutionHistory().get(id);
-      if (snapshot === null) {
+      const repository = await resolveExecutionRepository(options.getExecutionRepository);
+      const record = await executeRepositoryQuery(() =>
+        id.startsWith('execution-')
+          ? repository.findByExecutionId(id)
+          : repository.findByWorkflowId(id),
+      );
+      if (record?.observation == null) {
         throw new HttpApiError('A timeline da execução não foi encontrada.', {
           code: API_ERROR_CODES.EXECUTION_TIMELINE_NOT_FOUND,
           status: 404,
         });
       }
       return {
-        response: executionTimelineResponse(snapshot, requestId),
-        executionId: snapshot.executionId,
+        response: executionTimelineResponse(record.observation, requestId),
+        executionId: record.observation.executionId,
       };
     },
   });

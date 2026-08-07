@@ -1,8 +1,10 @@
+import { getExecutionRepository } from '@/server/runtime';
+
 import { createExecutionLookupHandler } from '../../_lib/execution-lookup-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createExecutionLookupHandler();
+const handler = createExecutionLookupHandler({ getExecutionRepository });
 
 export const GET = handler;
 export const POST = handler;

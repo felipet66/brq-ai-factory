@@ -4,11 +4,16 @@ import {
   type ExecutionResult,
 } from '@brq/execution-engine';
 import type { ExecutionObservabilitySnapshot } from '@brq/observability';
+import type { z } from 'zod';
 
 import { HTTP_API_VERSION, type ApiErrorCode } from './constants';
 import type { ApiError } from './contracts';
 import {
   errorResponseSchema,
+  executionHistoryDetailResponseSchema,
+  executionHistoryDetailSchema,
+  executionHistoryPageResponseSchema,
+  executionHistoryPageSchema,
   executionResponseSchema,
   executionTimelineResponseSchema,
   healthResponseSchema,
@@ -67,6 +72,36 @@ export function executionResponse(result: ExecutionResult, requestId: string): R
       requestId,
       apiVersion: HTTP_API_VERSION,
       executionId: result.executionId,
+    },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId });
+}
+
+export function executionHistoryPageResponse(
+  page: z.input<typeof executionHistoryPageSchema>,
+  requestId: string,
+): Response {
+  const body = executionHistoryPageResponseSchema.parse({
+    success: true,
+    data: page,
+    metadata: { requestId, apiVersion: HTTP_API_VERSION },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId });
+}
+
+export function executionHistoryDetailResponse(
+  detail: z.input<typeof executionHistoryDetailSchema>,
+  requestId: string,
+): Response {
+  const body = executionHistoryDetailResponseSchema.parse({
+    success: true,
+    data: detail,
+    metadata: {
+      requestId,
+      apiVersion: HTTP_API_VERSION,
+      executionId: detail.executionId,
     },
     errors: [],
   });

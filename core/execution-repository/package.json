@@ -1,0 +1,18 @@
+{
+  "name": "@brq/execution-repository",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./prisma": "./adapters/prisma-execution-record-repository.ts",
+    "./testing": "./testing/execution-record-fixtures.ts"
+  },
+  "dependencies": {
+    "@brq/execution-engine": "0.1.0",
+    "@brq/observability": "0.1.0",
+    "@brq/prisma": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

@@ -2,13 +2,13 @@
 
 ## Sprint atual
 
-Sprint 16 — Execution History & Observability implementada e validada localmente. A implementação
-ainda aguarda a aprovação humana, não possui commit e não autoriza o início da Sprint 17. O
-bug conhecido de Structured Outputs do Developer Agent permanece fora deste escopo como hotfix
-separado.
+Sprint 17 — Execution Repository & Persistence implementada e validada localmente. O agregado
+durável, os adapters Prisma e em memória, a integração do host, as consultas HTTP e o Frontend de
+histórico foram concluídos sem commit. O bug conhecido de Structured Outputs do Developer Agent
+permanece fora deste escopo como hotfix separado.
 
 ## Próximas ações
 
-1. Revisar o relatório final e os resultados registrados em `PROJECT_MEMORY.md`.
-2. Aguardar aprovação humana antes de qualquer commit ou início da Sprint 17.
-3. Tratar o bug conhecido de Structured Outputs do Developer Agent somente em hotfix separado.
+1. Revisar o relatório final e aguardar aprovação humana antes de qualquer commit ou início da
+   Sprint 18.
+2. Tratar o bug conhecido de Structured Outputs do Developer Agent somente em hotfix separado.

@@ -1,0 +1,389 @@
+.shell {
+  min-height: 100vh;
+  padding: 3rem 1.25rem;
+}
+
+.layout {
+  display: grid;
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  gap: 1.5rem;
+}
+
+.hero {
+  padding: 1rem 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0.75rem 0 1rem;
+  font-size: clamp(2.5rem, 7vw, 5.5rem);
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.hero > p:last-child,
+.muted {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.panel,
+.state {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 18%);
+  backdrop-filter: blur(1rem);
+}
+
+.panel {
+  padding: 1.5rem;
+}
+
+.state {
+  display: flex;
+  min-height: 9rem;
+  padding: 1.5rem;
+  gap: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.state p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.state strong {
+  display: block;
+}
+
+.errorState {
+  border-color: rgb(255 158 171 / 32%);
+  background: var(--danger-surface);
+  color: var(--danger);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: history-spin 700ms linear infinite;
+}
+
+.panelHeading {
+  display: flex;
+  margin-bottom: 1.25rem;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.panelHeading h2,
+.panelHeading p {
+  margin: 0;
+}
+
+.panelHeading h2 {
+  margin-top: 0.35rem;
+  font-size: 1.5rem;
+}
+
+.panelHeading > span,
+.panelHeading > time {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.tableScroller {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+}
+
+.table {
+  width: 100%;
+  min-width: 68rem;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table td {
+  font-size: 0.875rem;
+}
+
+.table code,
+.executionLink code,
+.hashList code,
+.overview code {
+  overflow-wrap: anywhere;
+  color: inherit;
+}
+
+.executionLink,
+.backLink {
+  color: var(--accent);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.statusBadge {
+  display: inline-flex;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.statusBadge[data-status='SUCCESS'] {
+  color: var(--accent);
+}
+
+.statusBadge[data-status='FAILED'],
+.statusBadge[data-status='CANCELLED'] {
+  color: var(--danger);
+}
+
+.statusBadge[data-status='RUNNING'] {
+  color: #ffd166;
+}
+
+.pagination {
+  display: flex;
+  margin-top: 1rem;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pagination span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.pagination button {
+  min-width: 6rem;
+  min-height: 2.7rem;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--accent);
+  color: #041511;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.overview,
+.hashList,
+.compactFacts {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  gap: 0.75rem;
+}
+
+.overview {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.overview > div,
+.hashList > div,
+.compactFacts > div {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-soft);
+}
+
+.overview dt,
+.hashList dt,
+.compactFacts dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.overview dd,
+.hashList dd,
+.compactFacts dd {
+  margin: 0.45rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.summaryGrid,
+.metricsGrid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.provenanceList,
+.timeline {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  gap: 0.7rem;
+  list-style: none;
+}
+
+.provenanceList li {
+  display: grid;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-soft);
+  gap: 0.35rem;
+}
+
+.provenanceList span,
+.provenanceList small {
+  color: var(--muted);
+}
+
+.timeline li {
+  display: flex;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-soft);
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.timeline li > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.timeline li span,
+.timeline li small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.timelineDot {
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: 0 0 auto;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+
+.timeline li[data-status='SUCCESS'] .timelineDot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.timeline li[data-status='FAILED'] .timelineDot,
+.timeline li[data-status='CANCELLED'] .timelineDot {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+.timeline li[data-status='RUNNING'] .timelineDot {
+  border-color: #ffd166;
+  background: #ffd166;
+}
+
+.metricsGrid {
+  margin-top: 1rem;
+}
+
+.metricsGrid article {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+}
+
+.metricsGrid h3 {
+  margin: 0 0 0.8rem;
+  font-size: 0.9rem;
+}
+
+.backLink {
+  justify-self: start;
+}
+
+@media (min-width: 48rem) {
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metricsGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 40rem) {
+  .shell {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .panel,
+  .state {
+    padding: 1rem;
+  }
+
+  .panelHeading,
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+@keyframes history-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

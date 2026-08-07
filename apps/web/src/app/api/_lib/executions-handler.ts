@@ -1,16 +1,25 @@
 import { executionResultSchema, type ExecutionEngine } from '@brq/execution-engine';
+import type { ExecutionRecordRepository } from '@brq/execution-repository';
 import type { Logger } from '@brq/shared/logger/logger';
 
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
-import { readExecutionJson, rejectQueryParameters } from './request';
-import { executionResponse } from './responses';
+import { toExecutionHistoryItem } from './execution-history-projection';
+import { executeRepositoryQuery, resolveExecutionRepository } from './execution-repository';
+import {
+  readExecutionJson,
+  readExecutionListQuery,
+  rejectQueryParameters,
+  rejectRequestBody,
+} from './request';
+import { executionHistoryPageResponse, executionResponse } from './responses';
 import { createRouteHandler } from './route-handler';
 import { executionHttpRequestSchema } from './schemas';
 
 interface ExecutionsHandlerOptions {
   readonly getExecutionEngine: () => Promise<ExecutionEngine>;
+  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
@@ -40,9 +49,25 @@ async function resolveEngine(factory: () => Promise<ExecutionEngine>): Promise<E
 export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
   return createRouteHandler<unknown>({
     endpoint: API_ENDPOINTS.EXECUTIONS,
-    allowedMethods: ['POST'],
+    allowedMethods: ['GET', 'POST'],
     ...options,
     async operation(request, _context, requestId) {
+      if (request.method === 'GET') {
+        rejectRequestBody(request);
+        const query = readExecutionListQuery(request);
+        const repository = await resolveExecutionRepository(options.getExecutionRepository);
+        const page = await executeRepositoryQuery(() => repository.list(query));
+        return {
+          response: executionHistoryPageResponse(
+            {
+              items: page.items.map(toExecutionHistoryItem),
+              nextCursor: page.nextCursor,
+            },
+            requestId,
+          ),
+        };
+      }
+
       rejectQueryParameters(request);
       const body = await readExecutionJson(request);
       const parsed = executionHttpRequestSchema.safeParse(body);

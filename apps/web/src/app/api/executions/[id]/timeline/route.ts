@@ -1,10 +1,10 @@
-import { getExecutionHistory } from '@/server/runtime';
+import { getExecutionRepository } from '@/server/runtime';
 
 import { createExecutionTimelineHandler } from '../../../_lib/execution-timeline-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createExecutionTimelineHandler({ getExecutionHistory });
+const handler = createExecutionTimelineHandler({ getExecutionRepository });
 
 export const GET = handler;
 export const POST = handler;

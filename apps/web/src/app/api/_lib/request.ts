@@ -1,5 +1,7 @@
 import { API_ERROR_CODES, MAX_EXECUTION_PAYLOAD_BYTES } from './constants';
+import type { ExecutionListQueryHttp } from './contracts';
 import { HttpApiError } from './errors';
+import { executionListQueryHttpSchema } from './schemas';
 
 export function createRequestId(): string {
   return `request-${crypto.randomUUID()}`;
@@ -112,4 +114,50 @@ export function rejectQueryParameters(request: Request): void {
       path: 'query',
     });
   }
+}
+
+export function rejectRequestBody(request: Request): void {
+  const contentLength = request.headers.get('content-length');
+  if (request.body !== null || (contentLength !== null && contentLength !== '0')) {
+    throw new HttpApiError('O método GET não aceita corpo.', {
+      code: API_ERROR_CODES.INVALID_REQUEST,
+      status: 400,
+      path: 'body',
+    });
+  }
+}
+
+export function readExecutionListQuery(request: Request): ExecutionListQueryHttp {
+  const search = new URL(request.url).searchParams;
+  const query: Record<string, string> = {};
+  const knownKeys = new Set([
+    'status',
+    'readiness',
+    'createdAfter',
+    'createdBefore',
+    'limit',
+    'cursor',
+  ]);
+
+  for (const key of new Set(search.keys())) {
+    if (!knownKeys.has(key) || search.getAll(key).length !== 1) {
+      throw new HttpApiError('Os parâmetros de consulta são inválidos.', {
+        code: API_ERROR_CODES.INVALID_REQUEST,
+        status: 400,
+        path: `query.${key}`,
+      });
+    }
+    query[key] = search.get(key)!;
+  }
+
+  const parsed = executionListQueryHttpSchema.safeParse(query);
+  if (!parsed.success) {
+    const path = parsed.error.issues[0]?.path.map(String).join('.') || 'query';
+    throw new HttpApiError('Os parâmetros de consulta são inválidos.', {
+      code: API_ERROR_CODES.INVALID_REQUEST,
+      status: 400,
+      path: path === 'query' ? path : `query.${path}`,
+    });
+  }
+  return parsed.data;
 }
