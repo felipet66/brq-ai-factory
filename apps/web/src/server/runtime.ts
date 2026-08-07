@@ -38,6 +38,7 @@ import { createProductOwnerAgent, loadProductOwnerPromptAssets } from '@brq/prod
 import { createPromptBuilder } from '@brq/prompt-builder';
 import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
+import { createDevelopmentResponseValidator } from '@brq/response-validator/development';
 import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
@@ -145,7 +146,17 @@ export async function createApplicationRuntime(
     now,
   });
   const agentRunner = createAgentRunner({ promptBuilder, aiProvider, logger, now });
-  const responseValidator = createResponseValidator({ logger, now });
+  const responseValidator =
+    environment.NODE_ENV === 'development'
+      ? createDevelopmentResponseValidator({
+          environment,
+          logger,
+          now,
+          reporter: (report) => {
+            baseLogger.debug('response.validation.structured_output_debug', { ...report });
+          },
+        })
+      : createResponseValidator({ logger, now });
   const artifactGenerator = createArtifactGenerator({ logger, now });
 
   const productOwnerAgent = createProductOwnerAgent({

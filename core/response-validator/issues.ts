@@ -5,7 +5,7 @@ import { VALIDATION_ISSUE_CODES } from './schemas';
 
 const MAX_TECHNICAL_PATH_LENGTH = 1_024;
 
-function boundedTechnicalPath(value: string): string {
+export function boundedTechnicalPath(value: string): string {
   return value.slice(0, MAX_TECHNICAL_PATH_LENGTH);
 }
 
@@ -13,7 +13,7 @@ function escapeJsonPointerSegment(value: string): string {
   return value.replaceAll('~', '~0').replaceAll('/', '~1');
 }
 
-function schemaIssuePath(error: ErrorObject): string {
+export function schemaIssuePath(error: ErrorObject): string {
   const basePath = error.instancePath.length === 0 ? '' : error.instancePath;
   const missingProperty =
     error.keyword === 'required' && typeof error.params.missingProperty === 'string'

@@ -193,6 +193,13 @@ O workspace `@brq/response-validator` recebe um `AgentRunResult` não confiável
 
 Falhas funcionais produzem um `ValidationResult` imutável com issues e hashes rastreáveis. O módulo não chama IA, não corrige respostas, não executa retry, não persiste dados e não contém regras específicas de Product Owner, Developer ou QA.
 
+O entrypoint padrão e seus logs continuam sem detalhes diagnósticos adicionais. Exclusivamente em
+desenvolvimento, o host pode habilitar o subpath `@brq/response-validator/development` com
+`AI_FACTORY_STRUCTURED_OUTPUT_DEBUG=true`; nesse modo, rejeições de JSON Schema geram um evento
+local separado com paths, keywords, tipos encontrados, mensagens canônicas sanitizadas e hashes,
+sem incluir schema, valores ou resposta. A combinação é fail-open, fica desabilitada em produção
+mesmo quando a flag está presente e não altera o `ValidationResult` nem seus hashes.
+
 [Fluxo visual do Response Validator](knowledge/29-RESPONSE_VALIDATOR_FLOW.md)
 
 ## Artifact Generator
@@ -225,6 +232,24 @@ A saída é uma `TechnicalSpecification` declarativa com arquitetura, complexida
 O Developer atua como arquiteto: não gera código ou testes, não executa comandos, não persiste drafts, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator. O contexto `DEVELOPER` mantém seis documentos obrigatórios dentro do orçamento padrão de 64 KiB; documentos adicionais continuam opcionais e determinísticos.
 
 Os releases `prompts/developer/1.0.0` e `1.0.1` permanecem preservados. O bundle ativo `1.0.2` alinha o JSON Schema versionado ao schema Zod público: paths de módulos inseguros e valores `order` acima de `Number.MAX_SAFE_INTEGER` são rejeitados já no Response Validator. Normalização Unicode NFC e a diferença entre `maxLength` por code points e comprimento UTF-16 permanecem explicitadas no prompt e autoritativamente verificadas pelo Zod.
+
+O diagnóstico local do Structured Output não chama provider. Coloque uma resposta JSON capturada
+em `.ai/debug/structured-output/` — diretório ignorado pelo Git — e execute:
+
+```bash
+AI_FACTORY_STRUCTURED_OUTPUT_RAW_DEBUG=true npm run --silent debug:developer-output -- .ai/debug/structured-output/developer-output.json
+```
+
+O comando aceita a `TechnicalSpecification` diretamente ou um wrapper local com `candidate` e
+`productOwnerSpecification`, e imprime somente o relatório sanitizado das etapas Response
+Validator, Zod e Business Validation. Sem a specification de origem, a etapa de negócio usa uma
+fixture canônica e marca `businessContextSource` como `DEFAULT_FIXTURE`; use o wrapper para
+reproduzir o handoff histórico. `candidateHash` identifica somente o JSON local e não equivale ao
+`responseHash` do envelope de produção. O arquivo pode conter dados funcionais: deve permanecer
+local, não deve conter segredos e nunca é capturado automaticamente, persistido ou enviado ao
+frontend. A auditoria do 1.0.2 não encontrou drift entre o output contract, o schema usado pelo
+Validator e o schema transportado por Agent Runner e OpenAI adapter; por isso, nenhum bundle
+1.0.3 é criado sem reproduzir a resposta histórica.
 
 [Fluxo visual do Developer Agent](knowledge/34-DEVELOPER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-020](knowledge/ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md)
 

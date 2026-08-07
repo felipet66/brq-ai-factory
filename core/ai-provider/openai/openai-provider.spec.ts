@@ -102,6 +102,32 @@ describe('OpenAIProvider', () => {
       logger: silentLogger(),
       now: vi.fn().mockReturnValueOnce(1_000).mockReturnValueOnce(1_025),
     });
+    const structuredOutputSchema: Extract<
+      AIRequest['responseFormat'],
+      { type: 'json_schema' }
+    >['schema'] = {
+      type: 'object',
+      properties: {
+        status: { type: 'string', pattern: '^[A-Z_]+$', minLength: 1, maxLength: 32 },
+        score: { type: 'integer', minimum: 0, maximum: 100 },
+        labels: {
+          type: 'array',
+          items: { $ref: '#/$defs/label' },
+          minItems: 1,
+          maxItems: 5,
+        },
+      },
+      required: ['status', 'score', 'labels'],
+      additionalProperties: false,
+      $defs: {
+        label: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+          additionalProperties: false,
+        },
+      },
+    };
     const request: AIRequest = {
       ...CONTRACT_REQUEST,
       instructions: 'SYSTEM_PROMPT_SECRET',
@@ -111,12 +137,7 @@ describe('OpenAIProvider', () => {
         type: 'json_schema',
         name: 'agent_output',
         description: 'Contrato de teste.',
-        schema: {
-          type: 'object',
-          properties: { status: { type: 'string' } },
-          required: ['status'],
-          additionalProperties: false,
-        },
+        schema: structuredOutputSchema,
         strict: true,
       },
     };
@@ -124,7 +145,7 @@ describe('OpenAIProvider', () => {
     const response = await provider.generate(request);
 
     expect(create).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[0]?.[0]).toMatchObject({
+    expect(create.mock.calls[0]?.[0]).toEqual({
       model: 'test-model',
       instructions: 'SYSTEM_PROMPT_SECRET',
       input: 'USER_INPUT_SECRET',
@@ -135,6 +156,8 @@ describe('OpenAIProvider', () => {
         format: {
           type: 'json_schema',
           name: 'agent_output',
+          description: 'Contrato de teste.',
+          schema: structuredOutputSchema,
           strict: true,
         },
       },

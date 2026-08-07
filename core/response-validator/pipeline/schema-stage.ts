@@ -1,6 +1,6 @@
 import { schemaMismatchIssue } from '../issues';
 import { schemaErrors } from '../json-schema-validator';
-import { addIssues, halt, type ValidationReport } from './validation-report';
+import { addIssue, halt, type ValidationReport } from './validation-report';
 
 export function validateSchema(report: ValidationReport): void {
   if (report.halted || report.request.contract.format === 'TEXT') return;
@@ -10,7 +10,12 @@ export function validateSchema(report: ValidationReport): void {
   }
 
   if (!report.schemaValidator(report.parsedValue)) {
-    addIssues(report, schemaErrors(report.schemaValidator).map(schemaMismatchIssue));
+    for (const error of schemaErrors(report.schemaValidator)) {
+      if (report.issues.length < report.maxIssues) {
+        report.diagnosticCollector?.capture(error, report.parsedValue, 'SCHEMA_MISMATCH');
+      }
+      addIssue(report, schemaMismatchIssue(error));
+    }
     halt(report);
   }
 }

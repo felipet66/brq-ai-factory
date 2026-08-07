@@ -3,6 +3,7 @@ import type { ValidateFunction } from 'ajv';
 import type { JsonValue } from '@brq/shared/types/json-value';
 
 import type { ValidatedOutput, ValidationIssue, ValidationRequest } from '../contracts';
+import type { StructuredOutputDiagnosticCollector } from '../diagnostics';
 
 export interface ValidationReport {
   readonly request: ValidationRequest;
@@ -15,6 +16,7 @@ export interface ValidationReport {
   parsedValue: JsonValue | undefined;
   validatedOutput: ValidatedOutput | null;
   schemaValidator: ValidateFunction | undefined;
+  readonly diagnosticCollector?: StructuredOutputDiagnosticCollector;
 }
 
 export function createValidationReport(
@@ -22,6 +24,7 @@ export function createValidationReport(
   maxIssues: number,
   contractHash: string,
   contentHash: string,
+  diagnosticCollector?: StructuredOutputDiagnosticCollector,
 ): ValidationReport {
   return {
     request,
@@ -34,6 +37,7 @@ export function createValidationReport(
     parsedValue: undefined,
     validatedOutput: null,
     schemaValidator: undefined,
+    ...(diagnosticCollector === undefined ? {} : { diagnosticCollector }),
   };
 }
 

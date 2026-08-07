@@ -39,6 +39,46 @@ describe('Agent Runner AI request mapper', () => {
     expect(toAIRequest(prompt, 'text-model').responseFormat).toEqual({ type: 'text' });
   });
 
+  it('preserves every JSON Schema keyword from PromptOutputContract to AIRequest', () => {
+    const request = createAgentRunRequest();
+    if (request.prompt.outputContract.format !== 'JSON_SCHEMA') {
+      throw new TypeError('The fixture must use a JSON Schema output contract.');
+    }
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[A-Z]' },
+        score: { type: 'integer', minimum: 0, maximum: 100 },
+        tags: {
+          type: 'array',
+          items: { type: 'string', enum: ['A', 'B'] },
+          minItems: 1,
+          maxItems: 3,
+        },
+        note: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      },
+      required: ['name', 'score', 'tags', 'note'],
+      additionalProperties: false,
+    };
+    const prompt = createPromptBuilder({ logger: quietLogger() }).build({
+      ...request.prompt,
+      outputContract: { ...request.prompt.outputContract, schema },
+    });
+
+    const aiRequest = toAIRequest(prompt, request.model);
+
+    expect(aiRequest.responseFormat).toEqual({
+      type: 'json_schema',
+      name: structuredOutputName(prompt.metadata.outputContractHash),
+      schema,
+      strict: true,
+    });
+    if (aiRequest.responseFormat.type !== 'json_schema') {
+      throw new TypeError('The mapped request must use JSON Schema.');
+    }
+    expect(aiRequest.responseFormat.schema).not.toBe(schema);
+  });
+
   it('always derives a provider-safe 64-character name from the contract hash', () => {
     expect(structuredOutputName('a'.repeat(64))).toBe(`contract_${'a'.repeat(55)}`);
     expect(structuredOutputName('a'.repeat(64))).toHaveLength(64);

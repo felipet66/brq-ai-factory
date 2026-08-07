@@ -27,6 +27,30 @@ enquanto o contrato Zod preserva comprimento JavaScript UTF-16 e NFC para paths.
 permanecem explícitas nas regras confiáveis, cobertas pela suíte de paridade e autoritativamente
 verificadas pelo Zod. Schemas públicos e Developer Business Validation não foram alterados.
 
+## Diagnóstico local de Structured Outputs
+
+O harness de desenvolvimento executa uma resposta capturada por `Response Validator real → Zod
+público → Developer Business Validation real`, sem construir prompt e sem instanciar ou chamar um
+AI Provider. Use somente um arquivo local dentro do diretório ignorado pelo Git:
+
+```bash
+mkdir -p .ai/debug/structured-output
+AI_FACTORY_STRUCTURED_OUTPUT_RAW_DEBUG=true npm run --silent debug:developer-output -- .ai/debug/structured-output/developer-output.json
+```
+
+O JSON pode ser a `TechnicalSpecification` direta ou o wrapper
+`{ "candidate": ..., "productOwnerSpecification": ... }`. O relatório informa somente estágio,
+codes, paths, keywords e hashes; não imprime o payload. Uma entrada direta usa a fixture funcional
+canônica e informa `businessContextSource: DEFAULT_FIXTURE`; para reproduzir a Business Validation
+histórica, forneça o wrapper completo. `candidateHash` é o hash do JSON local, não o
+`responseHash` do envelope retornado em produção. A flag separada confirma a leitura deliberada de
+conteúdo bruto. Esse arquivo deve permanecer local e sem segredos.
+
+O modo seguro do Response Validator também exige simultaneamente `NODE_ENV=development` e
+`AI_FACTORY_STRUCTURED_OUTPUT_DEBUG=true`. Produção, API HTTP, Execution Repository e frontend não
+recebem o relatório. A auditoria preserva os bundles 1.0.0, 1.0.1 e 1.0.2: não foi demonstrado
+drift no 1.0.2 e uma versão 1.0.3 depende da reprodução concreta do payload histórico.
+
 ## API pública
 
 O entrypoint `@brq/developer-agent` expõe a factory, os contratos e schemas canônicos, a Developer Business Validation e o carregador validado de prompt assets. Funções internas de projeção, logging e montagem de resultado não fazem parte da API pública.

@@ -15,6 +15,11 @@ import {
   ResponseValidatorError,
   type ResponseValidationStage,
 } from './errors';
+import {
+  createStructuredOutputDiagnosticCollector,
+  emitStructuredOutputDebugReport,
+  type StructuredOutputDebugReporter,
+} from './diagnostics';
 import { calculateCanonicalHash, calculateTextHash } from './hashing';
 import { logValidationError, requestLogContext, resultLogContext } from './logging';
 import { validateRequest } from './pipeline/request-stage';
@@ -72,6 +77,7 @@ function contractHash(request: ValidationRequest): string {
 function validateWithConfiguration(
   configuration: ResponseValidatorConfiguration,
   options: CreateResponseValidatorOptions,
+  diagnosticReporter?: StructuredOutputDebugReporter,
 ): ResponseValidator {
   const logger = options.logger ?? createLogger();
   const now = options.now ?? (() => performance.now());
@@ -84,11 +90,16 @@ function validateWithConfiguration(
 
       try {
         request = validateRequest(rawRequest, elapsed(now, startedAt));
+        const diagnosticCollector =
+          diagnosticReporter === undefined
+            ? undefined
+            : createStructuredOutputDiagnosticCollector();
         const report = createValidationReport(
           request,
           configuration.maxIssues,
           contractHash(request),
           calculateTextHash(request.runResult.output.content),
+          diagnosticCollector,
         );
 
         logger.info('response.validation.started', {
@@ -108,6 +119,9 @@ function validateWithConfiguration(
           result.valid ? 'response.validation.accepted' : 'response.validation.rejected',
           resultLogContext(result, durationMs),
         );
+        if (diagnosticReporter !== undefined && diagnosticCollector !== undefined) {
+          emitStructuredOutputDebugReport(diagnosticReporter, diagnosticCollector, result);
+        }
 
         return result;
       } catch (error) {
@@ -130,4 +144,13 @@ export function createResponseValidator(
   assertDependencies(options);
   const configuration = resolveResponseValidatorConfiguration(options.configuration);
   return validateWithConfiguration(configuration, options);
+}
+
+export function createResponseValidatorWithDiagnostics(
+  options: CreateResponseValidatorOptions,
+  reporter: StructuredOutputDebugReporter,
+): ResponseValidator {
+  assertDependencies(options);
+  const configuration = resolveResponseValidatorConfiguration(options.configuration);
+  return validateWithConfiguration(configuration, options, reporter);
 }

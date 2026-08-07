@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 18 — Asynchronous Execution Queue implementada e validada localmente com Node.js 24.19.0.
-A Sprint não possui commit. O bug conhecido de Structured Outputs do Developer Agent permanece
-como hotfix separado e não foi alterado. Nenhum item da Sprint 19 foi iniciado.
+Sprint 18 — Asynchronous Execution Queue concluída, aprovada e commitada. O hotfix separado de
+Structured Outputs do Developer Agent adiciona diagnóstico seguro DEVELOPMENT-only e reprodução
+local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 
 ## Fundação técnica
 
@@ -777,6 +777,48 @@ como hotfix separado e não foi alterado. Nenhum item da Sprint 19 foi iniciado.
   escopo;
 - o hotfix de Structured Outputs do Developer Agent permanece separado; nenhuma chamada real à
   OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 19 foi iniciado.
+
+## Hotfix de diagnóstico do Developer Structured Output
+
+- a execução histórica confirmou dois `SCHEMA_MISMATCH`, mas os logs minimizados e os registros
+  persistidos não contêm os paths nem o payload; o `responseHash` é irreversível e não permite
+  reconstruir retroativamente os campos rejeitados;
+- a auditoria do bundle Developer 1.0.2 encontrou paridade estrutural entre JSON Schema e Zod em
+  tipos, enums, limites, arrays, nullability, required, additionalProperties, safe integers e
+  paths; as únicas divergências documentadas continuam sendo NFC e contagem Unicode, ambas aceitas
+  pelo Ajv e rejeitadas posteriormente pelo Zod, portanto não explicam `SCHEMA_MISMATCH`;
+- `PromptOutputContract → AIRequest → OpenAI Responses API` preserva o schema e `strict: true` sem
+  perda ou reescrita de keywords; testes sentinela cobrem pattern, min/max, min/maxLength,
+  min/maxItems, enum, required, additionalProperties, arrays, objetos e nullability;
+- o entrypoint padrão de `@brq/response-validator` e o `ValidationResult` permanecem inalterados; o
+  subpath explícito `@brq/response-validator/development` só ativa diagnóstico com
+  `NODE_ENV=development` e `AI_FACTORY_STRUCTURED_OUTPUT_DEBUG=true`;
+- o relatório de debug é imutável e allowlisted: IDs de execução, contrato/versão/hashes,
+  responseHash, quantidade, truncamento, paths, keyword, mensagem canônica sanitizada e tipo do
+  valor; nunca contém schema, valores ou resposta e o reporter é fail-open;
+- o composition root envia esse evento somente ao logger base, separado do pipeline de
+  Observability, Execution Repository e HTTP API;
+- o harness `debug:developer-output` exige ainda `AI_FACTORY_STRUCTURED_OUTPUT_RAW_DEBUG=true`, lê
+  apenas JSON sob `.ai/debug/structured-output/` e executa Response Validator, Zod e Developer
+  Business Validation reais sem AI Provider; o acesso é revalidado também dentro do entrypoint de
+  teste e o subprocesso entrega apenas o relatório sanitizado por arquivo temporário privado;
+- entradas sem `productOwnerSpecification` usam fixture canônica declarada como
+  `businessContextSource: DEFAULT_FIXTURE`; `candidateHash` identifica somente o JSON inspecionado
+  e não é apresentado como o `responseHash` do envelope de produção;
+- fixtures locais reproduzem exatamente dois mismatches plausíveis no contrato real:
+  `/modules/0/path` com `pattern` e `/implementationPhases/0/order` com `maximum`; isso prova a
+  capacidade diagnóstica, mas não identifica os dois campos da execução histórica sem seu payload;
+- Developer 1.0.3 não foi criado: os bundles 1.0.0, 1.0.1 e 1.0.2 permanecem intactos e qualquer
+  evolução versionada depende de uma causa concreta reproduzida localmente;
+- nenhuma validação, schema público, Business Validation, prompt asset ou limite de runtime foi
+  alterado; nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da
+  Sprint 19 foi iniciado.
+- 1.025 testes foram aprovados no total, sendo 894 em 135 arquivos da suíte raiz e 131 em 29
+  arquivos da aplicação web; cobertura raiz: 93,37% statements, 85,37% branches, 98,54% functions
+  e 94,05% lines; cobertura web: 95,05% statements, 87,55% branches, 91,82% functions e 96,40%
+  lines.
+- format, format check, lint, typecheck, testes, coverage, Prisma validate, build de produção e
+  `git diff --check` foram aprovados com Node.js 24.19.0.
 
 ## Fora do escopo confirmado
 

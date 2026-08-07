@@ -8,7 +8,7 @@ import {
 } from '../issues';
 import { schemaErrors } from '../json-schema-validator';
 import { nestingDepth } from './content-stage';
-import { addIssue, addIssues, type ValidationReport } from './validation-report';
+import { addIssue, type ValidationReport } from './validation-report';
 
 export function validateStructuredOutput(
   report: ValidationReport,
@@ -39,7 +39,16 @@ export function validateStructuredOutput(
   if (nestingDepth(structuredData) > configuration.maxNestingDepth) {
     addIssue(report, structuredDataNestingTooDeepIssue());
   } else if (!report.schemaValidator(structuredData)) {
-    addIssues(report, schemaErrors(report.schemaValidator).map(structuredDataSchemaMismatchIssue));
+    for (const error of schemaErrors(report.schemaValidator)) {
+      if (report.issues.length < report.maxIssues) {
+        report.diagnosticCollector?.capture(
+          error,
+          structuredData,
+          'STRUCTURED_DATA_SCHEMA_MISMATCH',
+        );
+      }
+      addIssue(report, structuredDataSchemaMismatchIssue(error));
+    }
   }
 
   if (calculateCanonicalHash(structuredData) !== calculateCanonicalHash(report.parsedValue)) {

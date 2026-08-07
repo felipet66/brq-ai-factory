@@ -3,6 +3,7 @@ node_modules/
 coverage/
 dist/
 generated/
+.ai/debug/structured-output/
 
 .env
 .env.*
