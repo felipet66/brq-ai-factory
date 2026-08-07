@@ -12,6 +12,7 @@ import type {
   CreateExecutionEngineOptions,
   ExecutionEngine,
   ExecutionFailure,
+  ExecutionIdentity,
   ExecutionOptions,
   ExecutionRequest,
   ExecutionResult,
@@ -25,8 +26,9 @@ import {
 } from './errors';
 import { createExecutionResult } from './execution-result';
 import { calculateCanonicalJsonHash, createDeterministicExecutionId } from './hashing';
+import { deepFreeze } from './immutability';
 import { executionLogContext } from './logging';
-import { executionRequestSchema } from './schemas';
+import { executionIdentitySchema, executionRequestSchema } from './schemas';
 import { transitionExecutionState } from './state-machine';
 
 export const EXECUTION_ENGINE_VERSION = '1.0.0';
@@ -77,6 +79,33 @@ function assertDependencies(options: CreateExecutionEngineOptions): void {
       durationMs: 0,
     });
   }
+}
+
+function parseExecutionRequest(rawRequest: ExecutionRequest): ExecutionRequest {
+  const parsedRequest = executionRequestSchema.safeParse(rawRequest);
+  if (!parsedRequest.success) {
+    throw new ExecutionEngineError('ExecutionRequest inválido.', {
+      code: EXECUTION_ENGINE_ERROR_CODES.INVALID_REQUEST,
+      state: 'CREATED',
+      durationMs: 0,
+      cause: parsedRequest.error,
+    });
+  }
+  return parsedRequest.data;
+}
+
+function identityFor(request: ExecutionRequest): ExecutionIdentity {
+  const executionRequestHash = calculateCanonicalJsonHash(request);
+  return deepFreeze(
+    executionIdentitySchema.parse({
+      executionRequestHash,
+      executionId: createDeterministicExecutionId(executionRequestHash, EXECUTION_CONTRACT_VERSION),
+    }),
+  );
+}
+
+export function deriveExecutionIdentity(rawRequest: ExecutionRequest): ExecutionIdentity {
+  return identityFor(parseExecutionRequest(rawRequest));
 }
 
 function parseWorkflowResult(value: unknown): WorkflowResult {
@@ -139,21 +168,8 @@ export function createExecutionEngine(options: CreateExecutionEngineOptions): Ex
       rawRequest: ExecutionRequest,
       executionOptions: ExecutionOptions = {},
     ): Promise<ExecutionResult> {
-      const parsedRequest = executionRequestSchema.safeParse(rawRequest);
-      if (!parsedRequest.success) {
-        throw new ExecutionEngineError('ExecutionRequest inválido.', {
-          code: EXECUTION_ENGINE_ERROR_CODES.INVALID_REQUEST,
-          state: 'CREATED',
-          durationMs: 0,
-          cause: parsedRequest.error,
-        });
-      }
-      const request = parsedRequest.data;
-      const executionRequestHash = calculateCanonicalJsonHash(request);
-      const executionId = createDeterministicExecutionId(
-        executionRequestHash,
-        EXECUTION_CONTRACT_VERSION,
-      );
+      const request = parseExecutionRequest(rawRequest);
+      const { executionId, executionRequestHash } = identityFor(request);
       const workflowRequest = workflowRequestSchema.parse({ ...request, executionId });
       const workflowRequestHash = calculateCanonicalJsonHash(workflowRequest);
       let state: ExecutionState = 'CREATED';

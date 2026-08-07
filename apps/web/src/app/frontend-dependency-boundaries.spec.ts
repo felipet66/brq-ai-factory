@@ -51,7 +51,15 @@ describe('Frontend dependency boundary', () => {
     ];
     expect(presentationContractImports.length).toBeGreaterThan(0);
     for (const contractImport of presentationContractImports) {
-      expect(contractImport[1]?.trim()).toBe('ExecutionSummary');
+      const importedContracts = contractImport[1]
+        ?.split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+      for (const importedContract of importedContracts ?? []) {
+        expect(importedContract).toMatch(
+          /^(?:ExecutionSummary|ExecutionJobStatus|ExecutionJobView)$/,
+        );
+      }
     }
   });
 

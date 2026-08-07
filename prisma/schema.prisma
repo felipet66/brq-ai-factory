@@ -149,6 +149,7 @@ model ExecutionRecord {
   failureCode       String?
   failureSourceCode String?
   hashes            ExecutionRecordHash?
+  job               ExecutionJob?
   lifecycleEvents   ExecutionRecordLifecycleEvent[]
   observation       ExecutionObservation?
   lineageOutput     ExecutionLineageOutput?
@@ -158,6 +159,19 @@ model ExecutionRecord {
   @@index([status, createdAt])
   @@index([readiness, createdAt])
   @@index([requestId])
+  @@index([finishedAt])
+}
+
+model ExecutionJob {
+  jobId             String          @id
+  executionRecordId String          @unique
+  status            String
+  queuedAt          DateTime
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  executionRecord   ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+
+  @@index([status, queuedAt])
   @@index([finishedAt])
 }
 

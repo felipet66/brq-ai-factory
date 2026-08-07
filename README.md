@@ -44,7 +44,8 @@ brq-ai-factory/
 │   │   ├── ADR-024-HTTP-API-ADAPTER-BOUNDARY.md
 │   │   ├── ADR-025-FRONTEND-MVP.md
 │   │   ├── ADR-026-OBSERVABILITY-BOUNDARY.md
-│   │   └── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
+│   │   ├── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
+│   │   └── ADR-028-JOB-QUEUE-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -87,13 +88,16 @@ brq-ai-factory/
 │   ├── 38-HTTP_API_FLOW.md
 │   ├── 39-FRONTEND_FLOW.md
 │   ├── 40-OBSERVABILITY_FLOW.md
-│   └── 41-EXECUTION_REPOSITORY_FLOW.md
+│   ├── 41-EXECUTION_REPOSITORY_FLOW.md
+│   └── 42-JOB_QUEUE_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
 │   ├── execution-engine/
 │   ├── observability/
-│   └── execution-repository/
+│   ├── execution-repository/
+│   ├── job-queue/
+│   └── execution-worker/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -147,7 +151,9 @@ npm run prisma:migrate:dev -- --name nome_da_migration
 Não existe seed obrigatório. Os repositories históricos de domínio permanecem disponíveis sem
 alteração. A Sprint 17 adiciona o agregado normalizado `ExecutionRecord`, dedicado ao histórico
 minimizado de execuções, sem persistir prompts, specifications, respostas, knowledge ou conteúdo
-de artifacts.
+de artifacts. A Sprint 18 adiciona a relação normalizada `ExecutionJob`, que persiste somente
+`jobId`, status e timestamps da fila; o `ExecutionRequest` permanece exclusivamente em memória
+enquanto o job estiver ativo.
 
 ## AI Provider
 
@@ -264,42 +270,56 @@ a versão da fronteira.
 O Engine não conhece agentes ou componentes inferiores, não persiste, não retenta, não mantém
 registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
 
+Para o dispatch assíncrono, o Engine também expõe `deriveExecutionIdentity(request)`: uma operação
+pura que reserva o `executionId` e o `executionRequestHash` usando o mesmo algoritmo versionado de
+`execute()`, sem iniciar o Orchestrator ou alterar estado. API, fila e Frontend nunca calculam a
+identidade da execução.
+
 [Fluxo visual do Execution Engine](knowledge/37-EXECUTION_ENGINE_FLOW.md) · [ADR-023](knowledge/ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md)
 
 ## HTTP API
 
-A Sprint 14 expõe o Execution Engine exclusivamente por Next.js 16 Route Handlers. A criação
-continua síncrona por `POST /api/executions`; `GET /api/health` não consulta banco, IA ou workflow.
-A Sprint 17 torna operacionais `GET /api/executions`, com paginação e filtros, e
-`GET /api/executions/[id]`, além de trocar a fonte de
-`GET /api/executions/[id]/timeline` pelo repository durável.
+A API permanece um adapter em Next.js 16 Route Handlers. Na versão `2.0.0`,
+`POST /api/executions` valida a entrada, delega ao `ExecutionDispatcher` e devolve imediatamente
+`202 Accepted` com `executionId`, `jobId` e status `QUEUED`; o workflow não mantém a conexão HTTP
+aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`, `SUCCESS`,
+`FAILED` ou `CANCELLED` com timestamps minimizados.
 
-O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId`,
-propaga o mesmo `AbortSignal` e transporta `ExecutionResult` sem alterar hashes, métricas, lineage
-ou provenance. Logs e erros usam allowlists sanitizadas e todas as respostas recebem headers
-mínimos de segurança.
+`GET /api/health` continua sem consultar banco, IA ou workflow. `GET /api/executions`,
+`GET /api/executions/[id]` e `GET /api/executions/[id]/timeline` continuam consultando o
+Execution Repository, com paginação, filtros e read models públicos já aprovados.
+
+O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId` e
+não altera hashes, métricas, lineage ou provenance. Após a aceitação, o sinal da requisição HTTP
+não controla o job: cancelamento e shutdown pertencem ao Worker. Logs e erros usam allowlists
+sanitizadas e todas as respostas recebem headers mínimos de segurança.
 
 O composition root fica no host em `apps/web/src/server/runtime.ts`. Ele monta factories públicas
-de forma lazy e fornece `ExecutionEngine` e `ExecutionRecordRepository`; nenhum workspace de
-runtime foi criado no domínio. A API não conhece agentes, Prisma ou componentes internos do
-workflow.
+de forma lazy e fornece Engine persistente/observado, repository, fila local, dispatcher e Worker;
+nenhum workspace de runtime foi criado no domínio. A API não conhece agentes, Prisma ou
+componentes internos do workflow.
 
 [Fluxo visual da HTTP API](knowledge/38-HTTP_API_FLOW.md) · [ADR-024](knowledge/ADR/ADR-024-HTTP-API-ADAPTER-BOUNDARY.md)
 
 ## Frontend MVP
 
-A Sprint 15 adiciona uma única página para iniciar o workflow por `POST /api/executions`. O
-formulário recebe Project Name e Objective e apresenta somente executionId, status, duração,
-readiness, hashes e resumos de lineage e provenance.
+O formulário recebe Project Name e Objective e envia uma única vez `POST /api/executions`. Na
+Sprint 18, o client HTTP recebe o contrato de aceitação do job e consulta sequencialmente
+`GET /api/jobs/[id]`, mantendo no máximo uma leitura em andamento. Polling consulta estado; nunca
+repete o POST nem representa retry do workflow.
 
-Um client HTTP interno é o único ponto que chama `fetch`. O `ExecutionResult` bruto fica restrito a
-ele e é reduzido para `ExecutionSummary`, único contrato aceito pela árvore React. O Frontend não
-importa Engine, Orchestrator, agentes, runtime ou internals da API e não renderiza prompts,
-specifications, artifacts, knowledge, respostas da IA ou logs.
+A apresentação mostra `Fila → Executando → Finalizado`, encerra polling em qualquer estado
+terminal, aborto ou unmount e, em `SUCCESS`, abre automaticamente `/executions/[executionId]`.
+Falhas e cancelamentos não disparam nova execução. O histórico e o detalhe continuam consumindo
+somente read models HTTP minimizados.
 
-A API `1.0.0` ainda exige IDs e configurações técnicas dos agentes no request. O client fornece um
-perfil técnico versionado e gera IDs por submissão como limitação temporária; essa responsabilidade
-deverá migrar para configuração confiável no backend em uma futura evolução versionada do contrato.
+Clients HTTP internos continuam sendo os únicos pontos que chamam `fetch`. O Frontend não importa
+Engine, Worker, fila, repository, Orchestrator, agentes, runtime ou internals da API e não renderiza
+prompts, specifications, artifacts, knowledge, respostas da IA ou logs.
+
+O request HTTP `2.0.0` ainda preserva IDs e configurações técnicas dos agentes herdados do contrato
+anterior. O client fornece um perfil técnico versionado e gera esses IDs por submissão como
+limitação temporária; `executionId` e `jobId` são sempre produzidos no backend.
 
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
 
@@ -316,10 +336,10 @@ validação e geração de artifacts. O `Execution Summary` consolida status, re
 tokens, etapas executadas ou ignoradas e os hashes finais sem recalculá-los. Como não existe rate
 card aprovado e versionado, `totalCostEstimate` permanece `null`.
 
-O Frontend consulta `GET /api/executions/[id]/timeline` com React puro. Durante o POST síncrono, o
-`workflowId` funciona como correlação da execução ainda ativa; após o término, o `executionId`
-canônico consulta o histórico persistido. Polling não retenta o workflow, aplica deadline
-degradável de cinco segundos por leitura e para em resultado terminal ou unmount.
+O Frontend consulta `GET /api/executions/[id]/timeline` com React puro nas telas de histórico e
+detalhe. A timeline e as métricas continuam sendo produzidas pelo decorator existente durante o
+processamento do Worker. O polling de job e de timeline apenas consulta projeções, não retenta o
+workflow e para em resultado terminal ou unmount.
 
 O reducer em memória da Sprint 16 continua sendo a projeção síncrona e fail-open dos eventos. A
 Sprint 17 projeta esses snapshots no repository durável; falhas observacionais intermediárias
@@ -336,9 +356,9 @@ tabelas normalizadas para lifecycle, hashes, observação, timeline, métricas, 
 
 Um coordinator externo, composto pelo host depois do decorator observacional, registra `CREATED`,
 `RUNNING` e o estado terminal sem alterar o Execution Engine concreto. Como a API pública do Engine
-só revela a identidade determinística durante a execução, registros ativos começam correlacionados
-por `workflowId` e recebem `executionId` assim que ele se torna público. O algoritmo de hashing não
-é duplicado.
+reserva a identidade determinística antes do dispatch, o fluxo assíncrono cria o registro já com
+`executionId` e a relação `ExecutionJob`. O mesmo algoritmo interno é reutilizado por `execute()`,
+sem duplicação de hashing.
 
 O Frontend adiciona `/executions` e `/executions/[id]`, consumindo apenas read models HTTP
 minimizados. A listagem aceita `status`, `readiness`, `createdAfter`, `createdBefore`, `limit` e
@@ -346,6 +366,29 @@ minimizados. A listagem aceita `status`, `readiness`, `createdAfter`, `createdBe
 
 [Fluxo visual do Execution Repository](knowledge/41-EXECUTION_REPOSITORY_FLOW.md) ·
 [ADR-027](knowledge/ADR/ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md)
+
+## Asynchronous Execution Queue
+
+A Sprint 18 implementa `@brq/job-queue` e `@brq/execution-worker`. O primeiro define o port
+substituível, contratos, schemas, eventos, métricas e o adapter local `InMemoryJobQueue`; o segundo
+contém o dispatcher e o único consumidor sequencial, que chama exclusivamente a API pública do
+Execution Engine.
+
+O fluxo é `HTTP → Dispatcher → JobQueue → Execution Worker → Execution Engine → Repository`. A
+fila usa FIFO, um consumidor, `attempt: 1` e a máquina
+`QUEUED → RUNNING → SUCCESS | FAILED | CANCELLED`, além de `QUEUED → CANCELLED`. Não existem
+retry, requeue, backoff, scheduler, concorrência ou worker externo. Os eventos imutáveis
+`job.created`, `job.started`, `job.finished`, `job.failed` e `job.cancelled` contêm somente
+metadados técnicos sanitizados.
+
+O dispatcher registra a metadata durável antes de enfileirar. O payload permanece privado no
+adapter em memória e é removido em qualquer estado terminal. Reinício do processo perde jobs
+ativos, embora a metadata persista; registros podem ficar stale porque recovery está fora do
+escopo. Múltiplas instâncias mantêm filas independentes e ambientes serverless não garantem que o
+processo continue ativo depois do `202`.
+
+[Fluxo visual da Job Queue](knowledge/42-JOB_QUEUE_FLOW.md) ·
+[ADR-028](knowledge/ADR/ADR-028-JOB-QUEUE-BOUNDARY.md)
 
 ## Validações
 

@@ -2,6 +2,7 @@ export {
   EXECUTION_CONTRACT_VERSION,
   EXECUTION_ENGINE_VERSION,
   createExecutionEngine,
+  deriveExecutionIdentity,
 } from './execution-engine';
 export * from './contracts';
 export {

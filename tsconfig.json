@@ -12,6 +12,8 @@
     "core/artifact-generator/**/*.ts",
     "core/execution-engine/**/*.ts",
     "core/execution-repository/**/*.ts",
+    "core/execution-worker/**/*.ts",
+    "core/job-queue/**/*.ts",
     "core/knowledge-loader/**/*.ts",
     "core/observability/**/*.ts",
     "core/orchestrator/**/*.ts",

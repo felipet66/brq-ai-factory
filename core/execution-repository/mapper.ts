@@ -7,11 +7,17 @@ import {
 import type {
   ExecutionRecord,
   ExecutionRecordCreatedInput,
+  ExecutionRecordJobRunningInput,
+  ExecutionRecordJobTerminalInput,
   ExecutionRecordLifecycleEvent,
+  ExecutionRecordQueuedInput,
 } from './contracts';
 import { immutableClone } from './immutability';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordJobRunningInputSchema,
+  executionRecordJobTerminalInputSchema,
+  executionRecordQueuedInputSchema,
   executionRecordSchema,
   persistedLineageSchema,
   persistedProvenanceSchema,
@@ -42,6 +48,7 @@ export function createExecutionRecord(
       startedAt: null,
       finishedAt: null,
       durationMs: null,
+      job: null,
       hashes: EMPTY_HASHES,
       failure: null,
       lineage: null,
@@ -57,6 +64,75 @@ export function createExecutionRecord(
         },
       ],
       revision: 0,
+    }),
+  );
+}
+
+export function createQueuedExecutionRecord(
+  storageId: string,
+  input: ExecutionRecordQueuedInput,
+): ExecutionRecord {
+  const validInput = executionRecordQueuedInputSchema.parse(input);
+  const created = createExecutionRecord(storageId, {
+    workflowId: validInput.workflowId,
+    requestId: validInput.requestId,
+    traceId: validInput.traceId,
+    projectName: validInput.projectName,
+    createdAt: validInput.queuedAt,
+    metadata: validInput.metadata,
+  });
+  return immutableClone(
+    executionRecordSchema.parse({
+      ...created,
+      executionId: validInput.executionId,
+      job: {
+        jobId: validInput.jobId,
+        status: 'QUEUED',
+        queuedAt: validInput.queuedAt,
+        startedAt: null,
+        finishedAt: null,
+      },
+    }),
+  );
+}
+
+export function projectJobRunningExecutionRecord(
+  record: ExecutionRecord,
+  input: ExecutionRecordJobRunningInput,
+): ExecutionRecord {
+  const validInput = executionRecordJobRunningInputSchema.parse(input);
+  if (record.job?.jobId !== validInput.jobId || record.job.status !== 'QUEUED') {
+    throw new TypeError('Somente um job QUEUED correspondente pode iniciar.');
+  }
+  return immutableClone(
+    executionRecordSchema.parse({
+      ...record,
+      job: { ...record.job, status: 'RUNNING', startedAt: validInput.startedAt },
+      revision: record.revision + 1,
+    }),
+  );
+}
+
+export function projectJobTerminalExecutionRecord(
+  record: ExecutionRecord,
+  input: ExecutionRecordJobTerminalInput,
+): ExecutionRecord {
+  const validInput = executionRecordJobTerminalInputSchema.parse(input);
+  if (
+    record.job?.jobId !== validInput.jobId ||
+    (!['QUEUED', 'RUNNING'].includes(record.job.status) && record.job.status !== validInput.status)
+  ) {
+    throw new TypeError('Somente um job ativo ou terminal equivalente pode ser atualizado.');
+  }
+  return immutableClone(
+    executionRecordSchema.parse({
+      ...record,
+      job: {
+        ...record.job,
+        status: validInput.status,
+        finishedAt: validInput.finishedAt,
+      },
+      revision: record.revision + 1,
     }),
   );
 }
@@ -148,6 +224,14 @@ export function projectTerminalExecutionRecord(
       startedAt: result.startedAt,
       finishedAt: result.finishedAt,
       durationMs: result.metrics.observed.totalDurationMs,
+      job:
+        record.job === null
+          ? null
+          : {
+              ...record.job,
+              status: result.status,
+              finishedAt: result.finishedAt,
+            },
       metadata: result.metadata,
       hashes: result.hashes,
       failure:

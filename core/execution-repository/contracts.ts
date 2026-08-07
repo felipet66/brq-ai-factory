@@ -10,8 +10,11 @@ import type { z } from 'zod';
 import type {
   executionRecordCreatedInputSchema,
   executionRecordLifecycleEventSchema,
+  executionRecordJobRunningInputSchema,
+  executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
   executionRecordPageSchema,
+  executionRecordQueuedInputSchema,
   executionRecordRunningInputSchema,
   executionRecordSchema,
   executionRecordStatusSchema,
@@ -40,11 +43,23 @@ export type ExecutionRecordCreatedInput = DeepReadonly<
 export type ExecutionRecordRunningInput = DeepReadonly<
   z.infer<typeof executionRecordRunningInputSchema>
 >;
+export type ExecutionRecordQueuedInput = DeepReadonly<
+  z.infer<typeof executionRecordQueuedInputSchema>
+>;
+export type ExecutionRecordJobRunningInput = DeepReadonly<
+  z.infer<typeof executionRecordJobRunningInputSchema>
+>;
+export type ExecutionRecordJobTerminalInput = DeepReadonly<
+  z.infer<typeof executionRecordJobTerminalInputSchema>
+>;
 export type ExecutionRecordListQuery = DeepReadonly<z.input<typeof executionRecordListQuerySchema>>;
 export type ExecutionRecordPage = DeepReadonly<z.infer<typeof executionRecordPageSchema>>;
 
 export interface ExecutionRecordRepository {
   create(input: ExecutionRecordCreatedInput): Promise<ExecutionRecord>;
+  createQueued(input: ExecutionRecordQueuedInput): Promise<ExecutionRecord>;
+  markJobRunning(input: ExecutionRecordJobRunningInput): Promise<ExecutionRecord>;
+  markJobTerminal(input: ExecutionRecordJobTerminalInput): Promise<ExecutionRecord>;
   markRunning(input: ExecutionRecordRunningInput): Promise<ExecutionRecord>;
   saveObservation(
     workflowId: string,
@@ -56,6 +71,7 @@ export interface ExecutionRecordRepository {
     snapshot: ExecutionObservabilitySnapshot | null,
   ): Promise<ExecutionRecord>;
   findByExecutionId(executionId: string): Promise<ExecutionRecord | null>;
+  findByJobId(jobId: string): Promise<ExecutionRecord | null>;
   findByWorkflowId(workflowId: string): Promise<ExecutionRecord | null>;
   list(query?: ExecutionRecordListQuery): Promise<ExecutionRecordPage>;
 }

@@ -1,10 +1,12 @@
-import { executionResultSchema, type ExecutionEngine } from '@brq/execution-engine';
 import type { ExecutionRecordRepository } from '@brq/execution-repository';
+import type { ExecutionDispatcher } from '@brq/execution-worker';
+import { jobRecordSchema } from '@brq/job-queue';
 import type { Logger } from '@brq/shared/logger/logger';
 
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
+import { dispatchExecution, resolveExecutionDispatcher } from './execution-dispatcher';
 import { toExecutionHistoryItem } from './execution-history-projection';
 import { executeRepositoryQuery, resolveExecutionRepository } from './execution-repository';
 import {
@@ -13,12 +15,12 @@ import {
   rejectQueryParameters,
   rejectRequestBody,
 } from './request';
-import { executionHistoryPageResponse, executionResponse } from './responses';
+import { executionAcceptedResponse, executionHistoryPageResponse } from './responses';
 import { createRouteHandler } from './route-handler';
 import { executionHttpRequestSchema } from './schemas';
 
 interface ExecutionsHandlerOptions {
-  readonly getExecutionEngine: () => Promise<ExecutionEngine>;
+  readonly getExecutionDispatcher: () => Promise<ExecutionDispatcher>;
   readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
@@ -32,18 +34,6 @@ function invalidRequest(error: { issues: readonly { path: PropertyKey[] }[] }): 
     status: 400,
     path: firstPath,
   });
-}
-
-async function resolveEngine(factory: () => Promise<ExecutionEngine>): Promise<ExecutionEngine> {
-  try {
-    return await factory();
-  } catch (error) {
-    throw new HttpApiError('O serviço de execução não está disponível.', {
-      code: API_ERROR_CODES.EXECUTION_ENGINE_UNAVAILABLE,
-      status: 503,
-      cause: error,
-    });
-  }
 }
 
 export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
@@ -73,22 +63,20 @@ export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
       const parsed = executionHttpRequestSchema.safeParse(body);
       if (!parsed.success) throw invalidRequest(parsed.error);
 
-      const engine = await resolveEngine(options.getExecutionEngine);
-      const result = await engine.execute(
-        { ...parsed.data, requestId },
-        { signal: request.signal },
-      );
-      const validResult = executionResultSchema.safeParse(result);
-      if (!validResult.success) {
-        throw new HttpApiError('O contrato da execução não pôde ser processado.', {
-          code: API_ERROR_CODES.EXECUTION_CONTRACT_VIOLATION,
+      const dispatcher = await resolveExecutionDispatcher(options.getExecutionDispatcher);
+      const job = await dispatchExecution(dispatcher, { ...parsed.data, requestId });
+      const validJob = jobRecordSchema.safeParse(job);
+      if (!validJob.success || validJob.data.status !== 'QUEUED') {
+        throw new HttpApiError('O contrato de despacho não pôde ser processado.', {
+          code: API_ERROR_CODES.EXECUTION_DISPATCH_CONTRACT_VIOLATION,
           status: 500,
-          cause: validResult.error,
+          ...(validJob.success ? {} : { cause: validJob.error }),
         });
       }
       return {
-        response: executionResponse(validResult.data, requestId),
-        executionId: validResult.data.executionId,
+        response: executionAcceptedResponse(validJob.data, requestId),
+        executionId: validJob.data.executionId,
+        jobId: validJob.data.jobId,
       };
     },
   });

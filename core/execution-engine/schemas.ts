@@ -46,6 +46,13 @@ export const executionRequestSchema = z
     }
   });
 
+export const executionIdentitySchema = z
+  .object({
+    executionId: z.string().regex(/^execution-[a-f0-9]{32}$/),
+    executionRequestHash: hashSchema,
+  })
+  .strict();
+
 export const executionTimelineEventSchema = z
   .object({
     sequence: z.number().int().positive(),

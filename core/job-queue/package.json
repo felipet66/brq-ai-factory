@@ -1,0 +1,15 @@
+{
+  "name": "@brq/job-queue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./testing": "./testing/job-queue-fixtures.ts"
+  },
+  "dependencies": {
+    "@brq/execution-engine": "0.1.0",
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

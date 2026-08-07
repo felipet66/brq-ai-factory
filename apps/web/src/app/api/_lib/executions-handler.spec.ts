@@ -1,15 +1,12 @@
 // @vitest-environment node
 
-import {
-  EXECUTION_ENGINE_ERROR_CODES,
-  ExecutionEngineError,
-  type ExecutionEngine,
-} from '@brq/execution-engine';
 import type {
   ExecutionRecord,
   ExecutionRecordPage,
   ExecutionRecordRepository,
 } from '@brq/execution-repository';
+import type { ExecutionDispatcher } from '@brq/execution-worker';
+import { jobRecordSchema, type JobRecord } from '@brq/job-queue';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -17,18 +14,75 @@ import {
   FIXED_REQUEST_ID,
   capturedLogger,
   executionBody,
-  executionResult,
-  fakeEngine,
   jsonRequest,
 } from '@/test/api-fixtures';
 
 import { createExecutionsHandler } from './executions-handler';
 
-function createHandler(engine: ExecutionEngine, extra: Record<string, unknown> = {}) {
+const JOB_ID = `job-${'a'.repeat(32)}`;
+const QUEUED_AT = '2026-08-07T10:00:00.000Z';
+
+function queuedJob(overrides: Partial<JobRecord> = {}): JobRecord {
+  return jobRecordSchema.parse({
+    jobId: JOB_ID,
+    executionId: EXECUTION_ID,
+    workflowId: 'workflow-001',
+    status: 'QUEUED',
+    attempt: 1,
+    queuedAt: QUEUED_AT,
+    startedAt: null,
+    finishedAt: null,
+    durationMs: null,
+    failure: null,
+    events: [
+      {
+        sequence: 1,
+        type: 'job.created',
+        jobId: JOB_ID,
+        executionId: EXECUTION_ID,
+        workflowId: 'workflow-001',
+        status: 'QUEUED',
+        occurredAt: QUEUED_AT,
+        durationMs: null,
+        errorCode: null,
+      },
+    ],
+    ...overrides,
+  });
+}
+
+function runningJob(): JobRecord {
+  return jobRecordSchema.parse({
+    ...queuedJob(),
+    status: 'RUNNING',
+    startedAt: '2026-08-07T10:00:00.010Z',
+    events: [
+      ...queuedJob().events,
+      {
+        sequence: 2,
+        type: 'job.started',
+        jobId: JOB_ID,
+        executionId: EXECUTION_ID,
+        workflowId: 'workflow-001',
+        status: 'RUNNING',
+        occurredAt: '2026-08-07T10:00:00.010Z',
+        durationMs: null,
+        errorCode: null,
+      },
+    ],
+  });
+}
+
+function fakeDispatcher(job: JobRecord = queuedJob()) {
+  const dispatch = vi.fn(async () => job);
+  return { dispatch } as ExecutionDispatcher & { readonly dispatch: typeof dispatch };
+}
+
+function createHandler(dispatcher: ExecutionDispatcher, extra: Record<string, unknown> = {}) {
   const logger = capturedLogger().logger;
   const repository = fakeRepository();
   return createExecutionsHandler({
-    getExecutionEngine: async () => engine,
+    getExecutionDispatcher: async () => dispatcher,
     getExecutionRepository: async () => repository,
     requestIdFactory: () => FIXED_REQUEST_ID,
     logger,
@@ -58,37 +112,42 @@ function fakeRepository(page: ExecutionRecordPage = { items: [], nextCursor: nul
 }
 
 describe('executions HTTP adapter', () => {
-  it('injects requestId, propagates cancellation and preserves ExecutionResult', async () => {
-    const engine = fakeEngine();
-    const controller = new AbortController();
+  it('injects requestId, dispatches once and returns a minimized 202 receipt', async () => {
+    const dispatcher = fakeDispatcher();
     const { logger, records } = capturedLogger();
-    const handler = createHandler(engine, { logger, now: () => 50 });
-    const request = jsonRequest('http://localhost/api/executions', undefined, {
-      signal: controller.signal,
-    });
+    const handler = createHandler(dispatcher, { logger, now: () => 50 });
 
-    const response = await handler(request, undefined);
+    const response = await handler(jsonRequest('http://localhost/api/executions'), undefined);
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.data).toEqual(executionResult());
-    expect(body.metadata).toEqual({
-      requestId: FIXED_REQUEST_ID,
-      apiVersion: '1.0.0',
-      executionId: EXECUTION_ID,
+    expect(response.status).toBe(202);
+    expect(body).toEqual({
+      success: true,
+      data: { executionId: EXECUTION_ID, jobId: JOB_ID, status: 'QUEUED' },
+      metadata: {
+        requestId: FIXED_REQUEST_ID,
+        apiVersion: '2.0.0',
+        executionId: EXECUTION_ID,
+      },
+      errors: [],
     });
-    expect(engine.execute).toHaveBeenCalledWith(
-      { ...executionBody(), requestId: FIXED_REQUEST_ID },
-      { signal: request.signal },
-    );
+    expect(dispatcher.dispatch).toHaveBeenCalledOnce();
+    expect(dispatcher.dispatch).toHaveBeenCalledWith({
+      ...executionBody(),
+      requestId: FIXED_REQUEST_ID,
+    });
     expect(records.at(-1)).toMatchObject({
       event: 'http.request.completed',
       requestId: FIXED_REQUEST_ID,
       executionId: EXECUTION_ID,
-      statusCode: 200,
+      jobId: JOB_ID,
+      statusCode: 202,
     });
-    expect(JSON.stringify(records)).not.toContain('Implemente');
-    expect(JSON.stringify(records)).not.toContain('workflowHash');
+    const logs = JSON.stringify(records);
+    expect(logs).not.toContain('Consulta de pedidos');
+    expect(logs).not.toContain('Reduzir contatos');
+    expect(JSON.stringify(body)).not.toContain('events');
+    expect(JSON.stringify(body)).not.toContain('workflowId');
   });
 
   it.each([
@@ -142,18 +201,18 @@ describe('executions HTTP adapter', () => {
       status: 400,
       code: 'INVALID_REQUEST',
     },
-  ])('rejects $label before calling the engine', async ({ request, status, code }) => {
-    const engine = fakeEngine();
-    const response = await createHandler(engine)(request(), undefined);
+  ])('rejects $label before calling the dispatcher', async ({ request, status, code }) => {
+    const dispatcher = fakeDispatcher();
+    const response = await createHandler(dispatcher)(request(), undefined);
 
     expect(response.status).toBe(status);
     expect((await response.json()).errors[0].code).toBe(code);
-    expect(engine.execute).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
-  it('enforces declared and streamed payload limits', async () => {
-    const engine = fakeEngine();
-    const handler = createHandler(engine);
+  it('enforces declared and streamed payload limits before dispatch', async () => {
+    const dispatcher = fakeDispatcher();
+    const handler = createHandler(dispatcher);
     const declared = jsonRequest('http://localhost/api/executions', undefined, {
       headers: { 'content-length': String(512 * 1024 + 1) },
     });
@@ -166,80 +225,64 @@ describe('executions HTTP adapter', () => {
       expect(response.status).toBe(413);
       expect((await response.json()).errors[0].code).toBe('PAYLOAD_TOO_LARGE');
     }
-    expect(engine.execute).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
-  it('maps runtime unavailability without exposing its cause', async () => {
+  it('maps dispatcher factory and dispatch failures without exposing their causes', async () => {
     const { logger, records } = capturedLogger();
-    const handler = createExecutionsHandler({
-      getExecutionEngine: async () => {
-        throw new Error('OPENAI_API_KEY=super-secret');
+    const unavailable = createExecutionsHandler({
+      getExecutionDispatcher: async () => {
+        throw new Error('QUEUE_SECRET=private-factory');
       },
       getExecutionRepository: async () => fakeRepository(),
       logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
     });
+    const dispatcher = fakeDispatcher();
+    dispatcher.dispatch.mockRejectedValueOnce(new Error('private-dispatch-payload'));
+    const failed = createExecutionsHandler({
+      getExecutionDispatcher: async () => dispatcher,
+      getExecutionRepository: async () => fakeRepository(),
+      logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
 
-    const response = await handler(jsonRequest('http://localhost/api/executions'), undefined);
-    const serialized = JSON.stringify(await response.json()) + JSON.stringify(records);
-
-    expect(response.status).toBe(503);
-    expect(serialized).toContain('EXECUTION_ENGINE_UNAVAILABLE');
-    expect(serialized).not.toContain('super-secret');
+    for (const handler of [unavailable, failed]) {
+      const response = await handler(jsonRequest('http://localhost/api/executions'), undefined);
+      expect(response.status).toBe(503);
+      expect((await response.json()).errors[0].code).toBe('EXECUTION_DISPATCHER_UNAVAILABLE');
+    }
+    const serialized = JSON.stringify(records);
+    expect(serialized).not.toContain('private-factory');
+    expect(serialized).not.toContain('private-dispatch-payload');
   });
 
   it.each([
-    [EXECUTION_ENGINE_ERROR_CODES.CANCELLED, 408, 'EXECUTION_CANCELLED'],
-    [EXECUTION_ENGINE_ERROR_CODES.CONTRACT_VIOLATION, 500, 'EXECUTION_CONTRACT_VIOLATION'],
-    [EXECUTION_ENGINE_ERROR_CODES.ORCHESTRATOR_FAILED, 500, 'EXECUTION_ENGINE_FAILED'],
-    [EXECUTION_ENGINE_ERROR_CODES.INVALID_REQUEST, 400, 'INVALID_REQUEST'],
-    [EXECUTION_ENGINE_ERROR_CODES.INVALID_CONFIGURATION, 503, 'EXECUTION_ENGINE_UNAVAILABLE'],
-  ] as const)('maps engine error %s', async (engineCode, status, apiCode) => {
-    const engine: ExecutionEngine = {
-      execute: vi.fn(async () => {
-        throw new ExecutionEngineError('sensitive engine error', {
-          code: engineCode,
-          state: 'FAILED',
-          durationMs: 1,
-          executionId: EXECUTION_ID,
-        });
-      }),
-    };
-
-    const response = await createHandler(engine)(
-      jsonRequest('http://localhost/api/executions'),
-      undefined,
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(status);
-    expect(body.errors[0].code).toBe(apiCode);
-    expect(JSON.stringify(body)).not.toContain('sensitive engine error');
-  });
-
-  it('rejects an invalid ExecutionResult at the public boundary', async () => {
-    const engine = {
-      execute: vi.fn(async () => ({ executionId: 'invalid' })),
-    } as unknown as ExecutionEngine;
-    const response = await createHandler(engine)(
+    ['malformed job', { jobId: 'invalid' }],
+    ['already-running job', runningJob()],
+  ])('rejects a %s at the dispatcher boundary', async (_label, result) => {
+    const dispatcher = {
+      dispatch: vi.fn(async () => result),
+    } as unknown as ExecutionDispatcher;
+    const response = await createHandler(dispatcher)(
       jsonRequest('http://localhost/api/executions'),
       undefined,
     );
 
     expect(response.status).toBe(500);
-    expect((await response.json()).errors[0].code).toBe('EXECUTION_CONTRACT_VIOLATION');
+    expect((await response.json()).errors[0].code).toBe('EXECUTION_DISPATCH_CONTRACT_VIOLATION');
   });
 
   it('returns a standardized 405 response', async () => {
-    const engine = fakeEngine();
-    const response = await createHandler(engine)(
+    const dispatcher = fakeDispatcher();
+    const response = await createHandler(dispatcher)(
       new Request('http://localhost/api/executions', { method: 'PUT' }),
       undefined,
     );
 
     expect(response.status).toBe(405);
     expect(response.headers.get('allow')).toBe('GET, POST');
-    expect(engine.execute).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
   it('lists minimized persisted records with filters and cursor pagination', async () => {
@@ -248,18 +291,15 @@ describe('executions HTTP adapter', () => {
         listRecord({
           storageId: 'private-storage-id',
           traceId: 'private-trace-id',
-          failure: {
-            kind: 'PRIVATE',
-            code: 'PRIVATE_FAILURE',
-            sourceCode: null,
-          },
+          failure: { kind: 'PRIVATE', code: 'PRIVATE_FAILURE', sourceCode: null },
         }),
       ],
       nextCursor: 'cursor-002',
     });
+    const getExecutionDispatcher = vi.fn(async () => fakeDispatcher());
     const { logger, records } = capturedLogger();
     const handler = createExecutionsHandler({
-      getExecutionEngine: async () => fakeEngine(),
+      getExecutionDispatcher,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger,
@@ -296,16 +336,11 @@ describe('executions HTTP adapter', () => {
       ],
       nextCursor: 'cursor-002',
     });
+    expect(getExecutionDispatcher).not.toHaveBeenCalled();
     expect(JSON.stringify(body)).not.toContain('private-storage-id');
     expect(JSON.stringify(body)).not.toContain('private-trace-id');
     expect(JSON.stringify(body)).not.toContain('PRIVATE_FAILURE');
     expect(JSON.stringify(records)).not.toContain('Portal do cliente');
-    expect(records.at(-1)).toMatchObject({
-      event: 'http.request.completed',
-      endpoint: '/api/executions',
-      method: 'GET',
-      statusCode: 200,
-    });
   });
 
   it.each([
@@ -320,8 +355,9 @@ describe('executions HTTP adapter', () => {
     ],
   ])('rejects %s before querying the repository', async (_label, query, path) => {
     const repository = fakeRepository();
+    const dispatcher = fakeDispatcher();
     const handler = createExecutionsHandler({
-      getExecutionEngine: async () => fakeEngine(),
+      getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,
@@ -336,13 +372,14 @@ describe('executions HTTP adapter', () => {
     expect(response.status).toBe(400);
     expect(body.errors[0]).toMatchObject({ code: 'INVALID_REQUEST', path });
     expect(repository.list).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
   it('maps repository factory and query failures without exposing their causes', async () => {
     const { logger, records } = capturedLogger();
-    const engine = fakeEngine();
+    const dispatcher = fakeDispatcher();
     const unavailable = createExecutionsHandler({
-      getExecutionEngine: async () => engine,
+      getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => {
         throw new Error('DATABASE_URL=file:secret.db');
       },
@@ -352,7 +389,7 @@ describe('executions HTTP adapter', () => {
     const failingRepository = fakeRepository();
     failingRepository.list.mockRejectedValueOnce(new Error('query secret'));
     const failingQuery = createExecutionsHandler({
-      getExecutionEngine: async () => engine,
+      getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => failingRepository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger,
@@ -366,6 +403,6 @@ describe('executions HTTP adapter', () => {
     const logs = JSON.stringify(records);
     expect(logs).not.toContain('secret.db');
     expect(logs).not.toContain('query secret');
-    expect(engine.execute).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 });

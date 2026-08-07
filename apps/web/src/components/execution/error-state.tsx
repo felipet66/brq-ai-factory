@@ -1,13 +1,13 @@
-import type { ExecutionSummary } from '@/api/execution-contracts';
+import type { ExecutionJobView } from '@/api/execution-contracts';
 
-import { ExecutionTimeline } from './execution-timeline';
+import { ExecutionJobProgress } from './execution-job-progress';
 
 interface ErrorStateProps {
   readonly message: string;
-  readonly observability?: ExecutionSummary['observability'];
+  readonly job?: ExecutionJobView | null;
 }
 
-export function ErrorState({ message, observability = null }: ErrorStateProps) {
+export function ErrorState({ message, job = null }: ErrorStateProps) {
   return (
     <div className="execution-error-output">
       <section
@@ -19,7 +19,7 @@ export function ErrorState({ message, observability = null }: ErrorStateProps) {
         <h2>Unable to complete the request</h2>
         <p>{message}</p>
       </section>
-      {observability === null ? null : <ExecutionTimeline observability={observability} />}
+      {job === null ? null : <ExecutionJobProgress job={job} />}
     </div>
   );
 }

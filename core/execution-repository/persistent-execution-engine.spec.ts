@@ -1,4 +1,4 @@
-import { ExecutionEngineError } from '@brq/execution-engine';
+import { ExecutionEngineError, deriveExecutionIdentity } from '@brq/execution-engine';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PersistentExecutionHistory } from './contracts';
@@ -22,6 +22,49 @@ function history(): PersistentExecutionHistory {
 }
 
 describe('persistent execution engine coordinator', () => {
+  it('reuses only the queued record claimed by the worker', async () => {
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createExecutionRequestFixture();
+    const identity = deriveExecutionIdentity(request);
+    const jobId = `job-${identity.executionId.replace('execution-', '')}`;
+    await repository.createQueued({
+      workflowId: request.workflowId,
+      executionId: identity.executionId,
+      jobId,
+      requestId: request.requestId ?? null,
+      traceId: request.traceId ?? null,
+      projectName: request.demand.title,
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markJobRunning({
+      jobId,
+      startedAt: '2026-08-07T12:00:00.005Z',
+    });
+    const result = createExecutionResultFixture({ executionId: identity.executionId });
+    const execute = vi.fn(async () => result);
+    const emptyHistory: PersistentExecutionHistory = {
+      begin() {},
+      capture() {},
+      complete() {},
+      get: () => null,
+      flush: vi.fn(async () => undefined),
+    };
+    const engine = createPersistentExecutionEngine({
+      engine: { execute },
+      repository,
+      history: emptyHistory,
+      now: () => Date.parse('2026-08-07T12:00:00.010Z'),
+    });
+
+    await expect(engine.execute(request)).resolves.toBe(result);
+    expect(execute).toHaveBeenCalledTimes(1);
+    await expect(repository.findByJobId(jobId)).resolves.toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED' },
+    });
+  });
+
   it('persists CREATED, RUNNING and terminal state while delegating exactly once', async () => {
     const repository = createInMemoryExecutionRecordRepository();
     const result = createExecutionResultFixture();

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createInMemoryExecutionRecordRepository } from './adapters/in-memory-execution-record-repository';
 import { EXECUTION_REPOSITORY_ERROR_CODES } from './errors';
 import {
+  EXECUTION_JOB_FIXTURE_ID,
+  EXECUTION_RECORD_FIXTURE_ID,
   createExecutionObservationFixture,
   createExecutionResultFixture,
 } from './testing/execution-record-fixtures';
@@ -17,6 +19,77 @@ const createdInput = (workflowId: string, createdAt = '2026-08-07T12:00:00.000Z'
 });
 
 describe('in-memory execution record repository', () => {
+  it('persists queued job metadata independently and resolves it by jobId', async () => {
+    const repository = createInMemoryExecutionRecordRepository();
+    const queued = await repository.createQueued({
+      workflowId: 'workflow-001',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: 'request-001',
+      traceId: null,
+      projectName: 'Queued project',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    const runningJob = await repository.markJobRunning({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      startedAt: '2026-08-07T12:00:00.005Z',
+    });
+    await repository.markRunning({
+      workflowId: 'workflow-001',
+      startedAt: '2026-08-07T12:00:00.010Z',
+    });
+    const completed = await repository.complete(
+      'workflow-001',
+      createExecutionResultFixture(),
+      createExecutionObservationFixture(),
+    );
+    const settled = await repository.markJobTerminal({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      status: 'FAILED',
+      finishedAt: '2026-08-07T12:00:00.060Z',
+    });
+
+    expect(queued).toMatchObject({ status: 'CREATED', job: { status: 'QUEUED' } });
+    expect(runningJob.job).toMatchObject({ status: 'RUNNING' });
+    expect(completed).toMatchObject({ status: 'FAILED', job: { status: 'FAILED' } });
+    expect(settled.job).toMatchObject({
+      status: 'FAILED',
+      finishedAt: '2026-08-07T12:00:00.060Z',
+    });
+    expect(await repository.findByJobId(EXECUTION_JOB_FIXTURE_ID)).toEqual(settled);
+    expect(Object.isFrozen(settled.job)).toBe(true);
+  });
+
+  it('persists queued cancellation without pretending the Engine executed', async () => {
+    const repository = createInMemoryExecutionRecordRepository();
+    await repository.createQueued({
+      workflowId: 'workflow-001',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: null,
+      traceId: null,
+      projectName: 'Cancelled before execution',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    const cancelled = await repository.markJobTerminal({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      status: 'CANCELLED',
+      finishedAt: '2026-08-07T12:00:00.005Z',
+    });
+
+    expect(cancelled.status).toBe('CREATED');
+    expect(cancelled.startedAt).toBeNull();
+    expect(cancelled.job).toMatchObject({ status: 'CANCELLED' });
+    await expect(
+      repository.markJobRunning({
+        jobId: EXECUTION_JOB_FIXTURE_ID,
+        startedAt: '2026-08-07T12:00:00.010Z',
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
   it('persists the complete lifecycle, observation, hashes and immutable snapshots', async () => {
     const repository = createInMemoryExecutionRecordRepository();
     const created = await repository.create(createdInput('workflow-001'));

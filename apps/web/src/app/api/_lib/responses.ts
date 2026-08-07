@@ -1,8 +1,5 @@
-import {
-  EXECUTION_CONTRACT_VERSION,
-  EXECUTION_ENGINE_VERSION,
-  type ExecutionResult,
-} from '@brq/execution-engine';
+import { EXECUTION_CONTRACT_VERSION, EXECUTION_ENGINE_VERSION } from '@brq/execution-engine';
+import type { JobRecord } from '@brq/job-queue';
 import type { ExecutionObservabilitySnapshot } from '@brq/observability';
 import type { z } from 'zod';
 
@@ -10,13 +7,14 @@ import { HTTP_API_VERSION, type ApiErrorCode } from './constants';
 import type { ApiError } from './contracts';
 import {
   errorResponseSchema,
+  executionAcceptedResponseSchema,
   executionHistoryDetailResponseSchema,
   executionHistoryDetailSchema,
   executionHistoryPageResponseSchema,
   executionHistoryPageSchema,
-  executionResponseSchema,
   executionTimelineResponseSchema,
   healthResponseSchema,
+  jobLookupResponseSchema,
 } from './schemas';
 
 export function responseHeaders(requestId: string, allow?: readonly string[]): Headers {
@@ -64,14 +62,42 @@ export function healthResponse(requestId: string): Response {
   return jsonResponse(body, { status: 200, requestId });
 }
 
-export function executionResponse(result: ExecutionResult, requestId: string): Response {
-  const body = executionResponseSchema.parse({
+export function executionAcceptedResponse(job: JobRecord, requestId: string): Response {
+  const body = executionAcceptedResponseSchema.parse({
     success: true,
-    data: result,
+    data: {
+      executionId: job.executionId,
+      jobId: job.jobId,
+      status: 'QUEUED',
+    },
     metadata: {
       requestId,
       apiVersion: HTTP_API_VERSION,
-      executionId: result.executionId,
+      executionId: job.executionId,
+    },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 202, requestId });
+}
+
+export function jobLookupResponse(
+  job: {
+    readonly jobId: string;
+    readonly executionId: string;
+    readonly status: string;
+    readonly queuedAt: string;
+    readonly startedAt: string | null;
+    readonly finishedAt: string | null;
+  },
+  requestId: string,
+): Response {
+  const body = jobLookupResponseSchema.parse({
+    success: true,
+    data: job,
+    metadata: {
+      requestId,
+      apiVersion: HTTP_API_VERSION,
+      executionId: job.executionId,
     },
     errors: [],
   });

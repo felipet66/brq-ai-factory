@@ -49,6 +49,28 @@ describe('execution history presentation components', () => {
     expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled();
   });
 
+  it('does not link a reserved asynchronous execution before terminal detail exists', () => {
+    const active = {
+      ...historyPage().items[0]!,
+      executionId: `execution-${'b'.repeat(32)}`,
+      status: 'CREATED' as const,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+    };
+    render(
+      <ExecutionHistoryList
+        items={[active]}
+        hasNextPage={false}
+        loadingNextPage={false}
+        onNextPage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(active.executionId)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
   it('renders nullable detail metadata honestly', () => {
     render(
       <ExecutionHistoryDetail

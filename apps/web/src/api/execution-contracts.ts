@@ -56,3 +56,20 @@ export interface ExecutionSummary {
     } | null;
   } | null;
 }
+
+export type ExecutionJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+
+/**
+ * Public browser projection for the asynchronous execution lifecycle.
+ *
+ * React components consume only this immutable view model. HTTP envelopes, repository records and
+ * complete execution results remain private to the HTTP clients.
+ */
+export interface ExecutionJobView {
+  readonly executionId: string;
+  readonly jobId: string;
+  readonly status: ExecutionJobStatus;
+  readonly queuedAt: string | null;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+}

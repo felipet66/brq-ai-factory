@@ -128,6 +128,10 @@ Na seguinte ordem:
 39-FRONTEND_FLOW.md
 
 40-OBSERVABILITY_FLOW.md
+
+41-EXECUTION_REPOSITORY_FLOW.md
+
+42-JOB_QUEUE_FLOW.md
 ```
 
 Depois leia todos os ADRs.
@@ -441,14 +445,24 @@ logs técnicos allowlisted e um store bounded em memória mantém eventos, timel
 agente e `Execution Summary` minimizado. O workspace depende apenas de `@brq/execution-engine`,
 `@brq/shared` e Zod; não conhece Orchestrator, agentes ou componentes inferiores.
 
-O endpoint `GET /api/executions/[id]/timeline` aceita `executionId` canônico para histórico retido e
-`workflowId` apenas como correlação ativa durante o POST síncrono. O Frontend usa polling React
-puro com deadline degradável por leitura, sem WebSocket, fila ou retry de workflow. Timestamps,
-métricas, custo e polling permanecem fora dos hashes; `totalCostEstimate` é `null` sem rate card
-aprovado. O histórico não é persistência e não oferece continuidade garantida em restart, HMR,
-eviction ou troca de instância; sua falha nunca altera o workflow. A Sprint 16 foi implementada,
-validada localmente e aguarda aprovação humana; nenhum item da Sprint 17 pode ser iniciado
-automaticamente.
+O endpoint `GET /api/executions/[id]/timeline` usa `executionId` canônico. Timestamps, métricas,
+custo e polling permanecem fora dos hashes; `totalCostEstimate` é `null` sem rate card aprovado.
+A observabilidade continua fail-open e não altera o workflow.
+
+Na Sprint 17, `core/execution-repository` introduz o port assíncrono, adapters em memória e Prisma
+e o agregado normalizado `ExecutionRecord`. O host compõe o Engine observado com o coordinator
+persistente; a API e o Frontend consultam read models minimizados de histórico e timeline. Prompts,
+demanda detalhada, knowledge, specifications, respostas, artifacts, segredos e objetos internos
+não são persistidos. A Sprint 17 foi concluída, validada, aprovada e commitada.
+
+Na Sprint 18, `core/job-queue` define o port substituível e o adapter FIFO local em memória;
+`core/execution-worker` implementa o dispatcher e um único consumidor sequencial que chama apenas
+a API pública do Execution Engine. O POST evolui para o contrato HTTP `2.0.0`, responde
+`202 Accepted` com `executionId`, `jobId` e `QUEUED`, e `GET /api/jobs/[id]` consulta a metadata
+persistida. Não existem retry, requeue, concorrência, scheduler ou fila externa. O payload ativo é
+process-local: restart pode perdê-lo, múltiplas instâncias possuem filas independentes e não há
+garantia de continuidade em serverless. A implementação e a validação local completa foram
+concluídas com Node.js 24.19.0; nenhum item da Sprint 19 pode ser iniciado automaticamente.
 
 ---
 

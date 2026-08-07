@@ -3,6 +3,8 @@ import {
   EXECUTION_ENGINE_ERROR_CODES,
   EXECUTION_ENGINE_VERSION,
   createExecutionEngine,
+  deriveExecutionIdentity,
+  executionIdentitySchema,
   executionRequestSchema,
   executionResultSchema,
   type ExecutionRequest,
@@ -17,6 +19,8 @@ describe('@brq/execution-engine package exports', () => {
     const request: ExecutionRequest = createExecutionRequestFixture();
     const resultTypeCheck: ExecutionResult | undefined = undefined;
     expect(createExecutionEngine).toBeTypeOf('function');
+    expect(deriveExecutionIdentity).toBeTypeOf('function');
+    expect(executionIdentitySchema).toBeDefined();
     expect(executionRequestSchema.safeParse(request).success).toBe(true);
     expect(executionResultSchema).toBeDefined();
     expect(EXECUTION_ENGINE_VERSION).toBe('1.0.0');

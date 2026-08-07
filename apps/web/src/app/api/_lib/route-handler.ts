@@ -9,6 +9,7 @@ import { errorResponse } from './responses';
 export interface RouteOperationResult {
   readonly response: Response;
   readonly executionId?: string;
+  readonly jobId?: string;
 }
 
 interface RouteHandlerOptions<Context> {
@@ -60,6 +61,7 @@ export function createRouteHandler<Context>(
         statusCode: outcome.response.status,
         durationMs: duration(startedAt, now()),
         ...(outcome.executionId === undefined ? {} : { executionId: outcome.executionId }),
+        ...(outcome.jobId === undefined ? {} : { jobId: outcome.jobId }),
       });
       return outcome.response;
     } catch (caught) {
@@ -80,6 +82,7 @@ export function createRouteHandler<Context>(
         statusCode: response.status,
         durationMs: duration(startedAt, now()),
         ...(error.executionId === undefined ? {} : { executionId: error.executionId }),
+        ...(error.jobId === undefined ? {} : { jobId: error.jobId }),
         error: { code: error.code },
       });
       return response;

@@ -2,9 +2,9 @@
 
 ## Estado atual
 
-Sprint 17 — Execution Repository & Persistence implementada e validada localmente, aguardando
-aprovação humana. A Sprint não possui commit. O bug conhecido de Structured Outputs do Developer
-Agent permanece como hotfix separado e não foi alterado. Nenhum item da Sprint 18 foi iniciado.
+Sprint 18 — Asynchronous Execution Queue implementada e validada localmente com Node.js 24.19.0.
+A Sprint não possui commit. O bug conhecido de Structured Outputs do Developer Agent permanece
+como hotfix separado e não foi alterado. Nenhum item da Sprint 19 foi iniciado.
 
 ## Fundação técnica
 
@@ -23,12 +23,17 @@ Agent permanece como hotfix separado e não foi alterado. Nenhum item da Sprint 
 - QA Agent como terceira fachada concreta, responsável somente por especificação de qualidade declarativa e rastreável;
 - Orchestrator como coordenador central do workflow fixo Product Owner → Developer → QA, sem Execution Engine, retry ou persistência;
 - Execution Engine como única fronteira de produção do Orchestrator, com identidade determinística e ciclo local sem persistência ou retry;
-- HTTP API como adapter Next.js sobre o Execution Engine, com composition root lazy no host;
+- HTTP API como adapter Next.js sobre o Execution Dispatcher e os read models do Execution
+  Repository, com composition root lazy no host;
 - Frontend MVP como Presentation Adapter HTTP-only sobre a API pública;
 - Observability como decorator best-effort da API pública do Execution Engine, com reducer síncrono
   em memória e projeção durável pelo Execution Repository;
 - Execution Repository como agregado persistente separado, com port assíncrono, adapters em
   memória e Prisma e read models minimizados;
+- Job Queue como port substituível e adapter FIFO local em memória, sem retry, requeue ou
+  concorrência;
+- Execution Worker como único consumidor sequencial, dependente apenas das APIs públicas da fila,
+  do Engine e do Execution Repository;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -238,6 +243,8 @@ Agent permanece como hotfix separado e não foi alterado. Nenhum item da Sprint 
   conteúdo sensível;
 - ADR-027 registra o agregado `ExecutionRecord` separado, o refinamento limitado do ADR-012, a
   composição persistente externa ao Engine, o modelo Prisma normalizado e as consultas duráveis;
+- ADR-028 registra a fila FIFO local e substituível, o Worker sequencial, a reserva de identidade
+  pelo Engine, a metadata normalizada do job, o contrato HTTP assíncrono e a ausência de retry;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -718,16 +725,69 @@ Agent permanece como hotfix separado e não foi alterado. Nenhum item da Sprint 
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 18
   foi iniciado.
 
+## Implementação da Sprint 18
+
+- workspaces `@brq/job-queue` e `@brq/execution-worker` criados em `core/job-queue` e
+  `core/execution-worker`, com contratos, schemas Zod, erros sanitizados, logging allowlisted e
+  resultados profundamente imutáveis;
+- `JobQueue` permanece um port substituível; o adapter `InMemoryJobQueue` implementa FIFO,
+  cancelamento, shutdown, eventos, métricas e retenção privada do payload somente enquanto o job
+  está ativo;
+- máquina de estados fixa `QUEUED → RUNNING → SUCCESS | FAILED | CANCELLED`, além de
+  `QUEUED → CANCELLED`, com `attempt: 1` e sem transição de retorno, retry, requeue, backoff ou
+  scheduler;
+- eventos imutáveis `job.created`, `job.started`, `job.finished`, `job.failed` e `job.cancelled`
+  carregam apenas IDs, status, timestamps, duração e código sanitizado;
+- o Execution Engine expõe `deriveExecutionIdentity(request)` como operação pública, pura e sem
+  efeitos; `execute()` reutiliza o mesmo algoritmo e API, fila, Worker e Frontend não calculam
+  `executionId`;
+- o dispatcher deriva um `jobId` determinístico um-para-um, cria o registro durável `QUEUED` antes
+  do enqueue e compensa uma recusa da fila persistindo `CANCELLED`;
+- um único Execution Worker consome os jobs sequencialmente, chama apenas
+  `ExecutionEngine.execute()` e nunca acessa agentes ou Orchestrator diretamente;
+- cancelamento e shutdown usam `AbortController` próprio do Worker; o signal HTTP termina na
+  aceitação e jobs terminais nunca são reenfileirados;
+- `ExecutionRecordRepository` recebe operações de lifecycle e lookup de job; a migration
+  `20260807180000_job_queue` adiciona a relação normalizada um-para-um `ExecutionJob`, contendo
+  somente `jobId`, status e timestamps;
+- `POST /api/executions` evolui para `202 Accepted` com `executionId`, `jobId` e `QUEUED`, enquanto
+  `GET /api/jobs/[id]` consulta a metadata persistida e devolve apenas o lifecycle minimizado;
+- o Frontend envia o POST uma única vez, mostra `Fila → Executando → Finalizado`, consulta o job
+  sequencialmente e abre `/executions/[executionId]` somente em `SUCCESS`;
+- o composition root do host mantém singletons locais da fila, do dispatcher e do Worker e entrega
+  ao Worker o Engine já observado e persistente;
+- o payload `ExecutionRequest` nunca é persistido pelo repository ou pelo Worker e é apagado da
+  fila em qualquer estado terminal; prompts, respostas, knowledge, specifications, artifacts e
+  segredos permanecem proibidos;
+- ADR-028 e `knowledge/42-JOB_QUEUE_FLOW.md` documentam Queue Lifecycle, Worker, HTTP Async Flow,
+  Job State Machine e Execution Dispatch;
+- testes de queue, FIFO, cancelamento, duplicidade, shutdown, Worker, repository, API, polling,
+  Frontend e runtime foram adicionados; 1.001 testes foram aprovados no total, sendo 871 em 132
+  arquivos da suíte raiz e 130 em 28 arquivos da aplicação web;
+- cobertura da suíte raiz: 93,46% statements, 85,65% branches, 98,68% functions e 94,09% lines;
+- cobertura da aplicação web: 95,04% statements, 87,50% branches, 91,77% functions e 96,39% lines;
+- cobertura de `core/job-queue`: 95,30% statements, 93,51% branches, 100% functions e 96,90%
+  lines; cobertura de `core/execution-worker`: 95,48% statements, 90,51% branches, 96,87%
+  functions e 96,47% lines;
+- format, format check, lint, typecheck, testes, coverage, Prisma validate, aplicação da migration,
+  build de produção e `git diff --check` foram aprovados com Node.js 24.19.0;
+- a fila é single-process e não durável: restart perde payloads ativos, múltiplas instâncias possuem
+  filas independentes e records podem ficar stale porque recovery permanece proibido; records e
+  eventos terminais permanecem em memória pela vida do adapter porque retenção também está fora do
+  escopo;
+- o hotfix de Structured Outputs do Developer Agent permanece separado; nenhuma chamada real à
+  OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 19 foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
 - geração ou execução de código e testes por agentes;
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
-- retry funcional, workflows dinâmicos e concorrência;
+- retry funcional, requeue, recovery, workflows dinâmicos e concorrência;
 - dashboard completo, artifacts completos e logs no frontend;
 - persistência de conteúdo funcional dos agentes;
 - revisão humana integrada ao fluxo;
 - autenticação e autorização;
-- persistência distribuída e observabilidade distribuída;
+- filas externas, workers distribuídos, persistência distribuída e observabilidade distribuída;
 - deploy e configuração de Vercel.

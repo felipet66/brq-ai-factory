@@ -7,13 +7,14 @@ import { LoadingState } from './loading-state';
 afterEach(cleanup);
 
 describe('execution states', () => {
-  it('renders loading without exposing internal details', () => {
-    render(<LoadingState observability={null} />);
+  it('renders the queued state without exposing internal details', () => {
+    render(<LoadingState job={null} />);
 
-    expect(screen.getByRole('heading', { name: 'Executing workflow' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Workflow queued' })).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByText(/Product Owner, Developer and QA/)).toBeInTheDocument();
-    expect(screen.getAllByText('Pending')).toHaveLength(4);
+    expect(screen.getByText(/waiting for the local execution worker/i)).toBeInTheDocument();
+    expect(screen.getByText('Na fila')).toBeInTheDocument();
+    expect(screen.getAllByText('Pendente')).toHaveLength(2);
   });
 
   it('announces escaped error text', () => {

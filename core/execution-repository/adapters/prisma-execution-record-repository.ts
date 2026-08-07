@@ -5,8 +5,11 @@ import type { DatabaseClient } from '@brq/prisma/client';
 import type {
   ExecutionRecord,
   ExecutionRecordCreatedInput,
+  ExecutionRecordJobRunningInput,
+  ExecutionRecordJobTerminalInput,
   ExecutionRecordListQuery,
   ExecutionRecordPage,
+  ExecutionRecordQueuedInput,
   ExecutionRecordRepository,
   ExecutionRecordRunningInput,
 } from '../contracts';
@@ -14,13 +17,19 @@ import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from '../e
 import { immutableClone } from '../immutability';
 import {
   createExecutionRecord,
+  createQueuedExecutionRecord,
+  projectJobRunningExecutionRecord,
+  projectJobTerminalExecutionRecord,
   projectObservedExecutionRecord,
   projectRunningExecutionRecord,
   projectTerminalExecutionRecord,
 } from '../mapper';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordJobRunningInputSchema,
+  executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
+  executionRecordQueuedInputSchema,
   executionRecordRunningInputSchema,
   executionRecordSchema,
 } from '../schemas';
@@ -40,6 +49,14 @@ interface RawHashes {
   lineageHash: string | null;
   provenanceHash: string | null;
   executionHash: string | null;
+}
+
+interface RawJob {
+  jobId: string;
+  status: string;
+  queuedAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
 }
 
 interface RawMetrics {
@@ -157,6 +174,7 @@ interface RawExecutionRecord {
   failureCode: string | null;
   failureSourceCode: string | null;
   hashes: RawHashes | null;
+  job: RawJob | null;
   lifecycleEvents: RawLifecycle[];
   observation: RawObservation | null;
   lineageOutput: RawLineageOutput | null;
@@ -166,6 +184,7 @@ interface RawExecutionRecord {
 
 const aggregateInclude = {
   hashes: true,
+  job: true,
   lifecycleEvents: { orderBy: { sequence: 'asc' as const } },
   observation: {
     include: {
@@ -297,6 +316,16 @@ function mapRecord(value: unknown): ExecutionRecord {
       startedAt: iso(raw.startedAt),
       finishedAt: iso(raw.finishedAt),
       durationMs: raw.durationMs,
+      job:
+        raw.job === null
+          ? null
+          : {
+              jobId: raw.job.jobId,
+              status: raw.job.status,
+              queuedAt: raw.job.queuedAt.toISOString(),
+              startedAt: iso(raw.job.startedAt),
+              finishedAt: iso(raw.job.finishedAt),
+            },
       metadata: {
         engineVersion: raw.engineVersion,
         contractVersion: raw.contractVersion,
@@ -531,6 +560,124 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
     });
   }
 
+  async createQueued(input: ExecutionRecordQueuedInput): Promise<ExecutionRecord> {
+    const parsed = executionRecordQueuedInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Entrada de enfileiramento inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const skeleton = createQueuedExecutionRecord('pending-storage-id', parsed.data);
+      const record = await this.client.executionRecord.create({
+        data: {
+          workflowId: skeleton.workflowId,
+          executionId: skeleton.executionId,
+          requestId: skeleton.requestId,
+          traceId: skeleton.traceId,
+          projectName: skeleton.projectName,
+          status: skeleton.status,
+          createdAt: new Date(skeleton.createdAt),
+          engineVersion: skeleton.metadata.engineVersion,
+          contractVersion: skeleton.metadata.contractVersion,
+          attempt: skeleton.metadata.attempt,
+          hashes: { create: { ...skeleton.hashes } },
+          job: {
+            create: {
+              jobId: skeleton.job!.jobId,
+              status: skeleton.job!.status,
+              queuedAt: new Date(skeleton.job!.queuedAt),
+            },
+          },
+          lifecycleEvents: {
+            create: skeleton.lifecycle.map((event) => ({
+              sequence: event.sequence,
+              event: event.event,
+              state: event.state,
+              occurredAt: new Date(event.occurredAt),
+              durationMs: event.durationMs,
+            })),
+          },
+        },
+        include: aggregateInclude,
+      });
+      return mapRecord(record);
+    });
+  }
+
+  async markJobRunning(input: ExecutionRecordJobRunningInput): Promise<ExecutionRecord> {
+    const parsed = executionRecordJobRunningInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Entrada de início do job inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.client.executionRecord.findFirst({
+        where: { job: { is: { jobId: parsed.data.jobId } } },
+        include: aggregateInclude,
+      });
+      if (current === null) {
+        throw new ExecutionRepositoryError('Job de execução não encontrado.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      const projected = projectJobRunningExecutionRecord(mapRecord(current), parsed.data);
+      await this.client.$transaction([
+        this.client.executionJob.update({
+          where: { jobId: parsed.data.jobId, status: 'QUEUED' },
+          data: { status: projected.job!.status, startedAt: new Date(projected.job!.startedAt!) },
+        }),
+        this.client.executionRecord.update({
+          where: { storageId: projected.storageId },
+          data: { revision: { increment: 1 } },
+        }),
+      ]);
+      return (await this.findByJobId(parsed.data.jobId))!;
+    });
+  }
+
+  async markJobTerminal(input: ExecutionRecordJobTerminalInput): Promise<ExecutionRecord> {
+    const parsed = executionRecordJobTerminalInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Entrada terminal do job inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.findByJobId(parsed.data.jobId);
+      if (current === null) {
+        throw new ExecutionRepositoryError('Job de execução não encontrado.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      if (
+        current.job?.status === parsed.data.status &&
+        current.job.finishedAt === parsed.data.finishedAt
+      ) {
+        return current;
+      }
+      const projected = projectJobTerminalExecutionRecord(current, parsed.data);
+      await this.client.$transaction([
+        this.client.executionJob.update({
+          where: { jobId: parsed.data.jobId, status: current.job!.status },
+          data: {
+            status: projected.job!.status,
+            finishedAt: new Date(projected.job!.finishedAt!),
+          },
+        }),
+        this.client.executionRecord.update({
+          where: { storageId: projected.storageId },
+          data: { revision: { increment: 1 } },
+        }),
+      ]);
+      return (await this.findByJobId(parsed.data.jobId))!;
+    });
+  }
+
   async markRunning(input: ExecutionRecordRunningInput): Promise<ExecutionRecord> {
     const parsed = executionRecordRunningInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -671,6 +818,16 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
             startedAt: projected.startedAt === null ? null : new Date(projected.startedAt),
             finishedAt: new Date(projected.finishedAt!),
             durationMs: projected.durationMs,
+            ...(projected.job === null
+              ? {}
+              : {
+                  job: {
+                    update: {
+                      status: projected.job.status,
+                      finishedAt: new Date(projected.job.finishedAt!),
+                    },
+                  },
+                }),
             engineVersion: projected.metadata.engineVersion,
             contractVersion: projected.metadata.contractVersion,
             attempt: projected.metadata.attempt,
@@ -755,6 +912,16 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
     return run(async () => {
       const record = await this.client.executionRecord.findUnique({
         where: { executionId },
+        include: aggregateInclude,
+      });
+      return record === null ? null : mapRecord(record);
+    });
+  }
+
+  async findByJobId(jobId: string): Promise<ExecutionRecord | null> {
+    return run(async () => {
+      const record = await this.client.executionRecord.findFirst({
+        where: { job: { is: { jobId } } },
         include: aggregateInclude,
       });
       return record === null ? null : mapRecord(record);

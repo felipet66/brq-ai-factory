@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createExecutionRecordFixture } from './testing/execution-record-fixtures';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordJobSchema,
+  executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
   executionRecordSchema,
 } from './schemas';
@@ -61,5 +63,37 @@ describe('execution record schemas', () => {
         createdBefore: '2026-08-07T00:00:00.000Z',
       }).success,
     ).toBe(false);
+  });
+
+  it('validates the independent queued, running and terminal job lifecycle', () => {
+    const queued = {
+      jobId: `job-${'a'.repeat(32)}`,
+      status: 'QUEUED',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      startedAt: null,
+      finishedAt: null,
+    } as const;
+    expect(executionRecordJobSchema.safeParse(queued).success).toBe(true);
+    expect(
+      executionRecordJobSchema.safeParse({
+        ...queued,
+        status: 'RUNNING',
+        startedAt: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      executionRecordJobSchema.safeParse({
+        ...queued,
+        status: 'FAILED',
+        finishedAt: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      executionRecordJobTerminalInputSchema.safeParse({
+        jobId: queued.jobId,
+        status: 'SUCCESS',
+        finishedAt: '2026-08-07T12:00:00.010Z',
+      }).success,
+    ).toBe(true);
   });
 });

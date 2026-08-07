@@ -19,6 +19,15 @@ function displayDuration(durationMs: number | null): string {
   return durationMs === null ? 'Not available' : `${durationMs} ms`;
 }
 
+function hasInspectableDetail(item: ExecutionHistoryItem): item is ExecutionHistoryItem & {
+  readonly executionId: string;
+} {
+  return (
+    item.executionId !== null &&
+    (item.status === 'SUCCESS' || item.status === 'FAILED' || item.status === 'CANCELLED')
+  );
+}
+
 export function ExecutionHistoryList({
   items,
   hasNextPage,
@@ -51,12 +60,14 @@ export function ExecutionHistoryList({
             {items.map((item) => (
               <tr key={`${item.workflowId}:${item.executionId ?? 'pending'}`}>
                 <td>
-                  {item.executionId === null ? (
-                    <span>Pending assignment</span>
-                  ) : (
+                  {hasInspectableDetail(item) ? (
                     <Link className={styles.executionLink} href={`/executions/${item.executionId}`}>
                       <code>{item.executionId}</code>
                     </Link>
+                  ) : item.executionId === null ? (
+                    <span>Pending assignment</span>
+                  ) : (
+                    <code>{item.executionId}</code>
                   )}
                 </td>
                 <td>

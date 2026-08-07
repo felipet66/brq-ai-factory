@@ -12,6 +12,7 @@ import type { z } from 'zod';
 import type {
   executionFailureSchema,
   executionHashesSchema,
+  executionIdentitySchema,
   executionMetadataSchema,
   executionMetricsSchema,
   executionRequestSchema,
@@ -29,6 +30,7 @@ type DeepReadonly<T> = T extends (...arguments_: never[]) => unknown
       : T;
 
 export type ExecutionRequest = DeepReadonly<z.infer<typeof executionRequestSchema>>;
+export type ExecutionIdentity = DeepReadonly<z.infer<typeof executionIdentitySchema>>;
 export type ExecutionState = DeepReadonly<z.infer<typeof executionStateSchema>>;
 export type ExecutionTimelineEvent = DeepReadonly<z.infer<typeof executionTimelineEventSchema>>;
 export type ExecutionMetadata = DeepReadonly<z.infer<typeof executionMetadataSchema>>;

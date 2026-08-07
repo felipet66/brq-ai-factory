@@ -14,6 +14,12 @@ import {
 } from '@brq/execution-repository';
 import { PrismaExecutionRecordRepository } from '@brq/execution-repository/prisma';
 import {
+  createExecutionDispatcher,
+  createExecutionWorker,
+  type ExecutionDispatcher,
+  type ExecutionWorker,
+} from '@brq/execution-worker';
+import {
   createKnowledgeLoader,
   KNOWLEDGE_MANIFEST,
   type KnowledgeSource,
@@ -27,6 +33,7 @@ import {
   type ExecutionHistoryRecorder,
 } from '@brq/observability';
 import { createOrchestrator } from '@brq/orchestrator';
+import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
 import { createProductOwnerAgent, loadProductOwnerPromptAssets } from '@brq/product-owner-agent';
 import { createPromptBuilder } from '@brq/prompt-builder';
 import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
@@ -45,6 +52,45 @@ export interface ApplicationRuntimeOptions {
   readonly executionRepository?: ExecutionRecordRepository;
   readonly logger?: Logger;
   readonly now?: () => number;
+}
+
+export interface ApplicationQueueRuntime {
+  readonly queue: JobQueue;
+  readonly worker: ExecutionWorker;
+  readonly dispatcher: ExecutionDispatcher;
+}
+
+export interface ApplicationQueueRuntimeOptions {
+  readonly engine: ExecutionEngine;
+  readonly repository: ExecutionRecordRepository;
+  readonly queue?: JobQueue;
+  readonly logger?: Logger;
+  readonly now?: () => number;
+}
+
+export function createApplicationQueueRuntime(
+  options: ApplicationQueueRuntimeOptions,
+): ApplicationQueueRuntime {
+  const queue =
+    options.queue ??
+    createInMemoryJobQueue({
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+      ...(options.now === undefined ? {} : { now: options.now }),
+    });
+  const worker = createExecutionWorker({
+    queue,
+    engine: options.engine,
+    repository: options.repository,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+  });
+  const dispatcher = createExecutionDispatcher({
+    queue,
+    repository: options.repository,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+  worker.start();
+  return Object.freeze({ queue, worker, dispatcher });
 }
 
 function validateKnowledgeRoot(rootPath: string): string {
@@ -149,8 +195,11 @@ export async function createApplicationRuntime(
 
 interface ApplicationRuntimeState {
   runtime: Promise<ExecutionEngine> | undefined;
+  queueRuntime: Promise<ApplicationQueueRuntime> | undefined;
   readonly executionHistory: ExecutionHistoryRecorder;
+  readonly logger: Logger;
   executionRepository: ExecutionRecordRepository | undefined;
+  jobQueue: JobQueue | undefined;
   prismaClient: DatabaseClient | undefined;
 }
 
@@ -159,8 +208,11 @@ const runtimeGlobal = globalThis as typeof globalThis & {
 };
 const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
   runtime: undefined,
+  queueRuntime: undefined,
   executionHistory: createInMemoryExecutionHistory(),
+  logger: createLogger(),
   executionRepository: undefined,
+  jobQueue: undefined,
   prismaClient: undefined,
 });
 
@@ -169,9 +221,36 @@ export function getExecutionEngine(): Promise<ExecutionEngine> {
     createApplicationRuntime({
       executionHistory: runtimeState.executionHistory,
       executionRepository,
+      logger: runtimeState.logger,
     }),
   );
   return runtimeState.runtime;
+}
+
+export function getJobQueue(): JobQueue {
+  runtimeState.jobQueue ??= createInMemoryJobQueue({ logger: runtimeState.logger });
+  return runtimeState.jobQueue;
+}
+
+export function getExecutionWorker(): Promise<ExecutionWorker> {
+  return getApplicationQueueRuntime().then((runtime) => runtime.worker);
+}
+
+export function getExecutionDispatcher(): Promise<ExecutionDispatcher> {
+  return getApplicationQueueRuntime().then((runtime) => runtime.dispatcher);
+}
+
+function getApplicationQueueRuntime(): Promise<ApplicationQueueRuntime> {
+  runtimeState.queueRuntime ??= Promise.all([getExecutionEngine(), getExecutionRepository()]).then(
+    ([engine, repository]) =>
+      createApplicationQueueRuntime({
+        engine,
+        repository,
+        queue: getJobQueue(),
+        logger: runtimeState.logger,
+      }),
+  );
+  return runtimeState.queueRuntime;
 }
 
 export async function getExecutionRepository(): Promise<ExecutionRecordRepository> {

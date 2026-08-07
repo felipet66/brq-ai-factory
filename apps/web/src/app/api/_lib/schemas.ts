@@ -1,9 +1,10 @@
-import { executionRequestSchema, executionResultSchema } from '@brq/execution-engine';
+import { executionRequestSchema } from '@brq/execution-engine';
 import {
   executionRecordListQuerySchema,
   executionRecordStatusSchema,
 } from '@brq/execution-repository';
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
+import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
 import { semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
 
@@ -34,6 +35,7 @@ export const executionHttpRequestSchema = z
   });
 
 export const executionIdPathSchema = z.string().regex(/^execution-[a-f0-9]{32}$/);
+export const jobIdPathSchema = jobIdSchema;
 export const executionTimelineIdPathSchema = z.union([
   executionIdPathSchema,
   z
@@ -86,10 +88,38 @@ export const healthResponseSchema = z
   })
   .strict();
 
-export const executionResponseSchema = z
+export const executionAcceptedDataSchema = z
+  .object({
+    executionId: executionIdPathSchema,
+    jobId: jobIdSchema,
+    status: z.literal('QUEUED'),
+  })
+  .strict();
+
+export const executionAcceptedResponseSchema = z
   .object({
     success: z.literal(true),
-    data: executionResultSchema,
+    data: executionAcceptedDataSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const jobLookupDataSchema = z
+  .object({
+    jobId: jobIdSchema,
+    executionId: executionIdPathSchema,
+    status: jobStatusSchema,
+    queuedAt: z.string().datetime({ offset: true }),
+    startedAt: z.string().datetime({ offset: true }).nullable(),
+    finishedAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+
+export const jobLookupResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: jobLookupDataSchema,
     metadata: apiResponseMetadataSchema,
     errors: z.tuple([]),
   })

@@ -2,6 +2,7 @@ import {
   EXECUTION_CONTRACT_VERSION,
   EXECUTION_ENGINE_VERSION,
   ExecutionEngineError,
+  deriveExecutionIdentity,
   executionRequestSchema,
   type ExecutionEngine,
   type ExecutionOptions,
@@ -28,6 +29,7 @@ function assertOptions(options: CreatePersistentExecutionEngineOptions): void {
   if (
     typeof options.engine?.execute !== 'function' ||
     typeof options.repository?.create !== 'function' ||
+    typeof options.repository?.findByWorkflowId !== 'function' ||
     typeof options.repository?.markRunning !== 'function' ||
     typeof options.repository?.complete !== 'function' ||
     typeof options.history?.flush !== 'function' ||
@@ -69,22 +71,42 @@ export function createPersistentExecutionEngine(
         return options.engine.execute(rawRequest, executionOptions);
       }
       const request = parsed.data;
-      await options.repository.create({
-        workflowId: request.workflowId,
-        requestId: request.requestId ?? null,
-        traceId: request.traceId ?? null,
-        projectName: request.demand.title,
-        createdAt: isoNow(now),
-        metadata: {
-          engineVersion: EXECUTION_ENGINE_VERSION,
-          contractVersion: EXECUTION_CONTRACT_VERSION,
-          attempt: 1,
-        },
-      });
-      logRepositoryOperation(logger, 'info', 'execution.repository.created', {
-        workflowId: request.workflowId,
-        status: 'CREATED',
-      });
+      const existing = await options.repository.findByWorkflowId(request.workflowId);
+      if (existing === null) {
+        await options.repository.create({
+          workflowId: request.workflowId,
+          requestId: request.requestId ?? null,
+          traceId: request.traceId ?? null,
+          projectName: request.demand.title,
+          createdAt: isoNow(now),
+          metadata: {
+            engineVersion: EXECUTION_ENGINE_VERSION,
+            contractVersion: EXECUTION_CONTRACT_VERSION,
+            attempt: 1,
+          },
+        });
+        logRepositoryOperation(logger, 'info', 'execution.repository.created', {
+          workflowId: request.workflowId,
+          status: 'CREATED',
+        });
+      } else {
+        const identity = deriveExecutionIdentity(request);
+        if (
+          existing.status !== 'CREATED' ||
+          existing.executionId !== identity.executionId ||
+          existing.job?.status !== 'RUNNING'
+        ) {
+          throw new ExecutionRepositoryError('Registro preexistente não pertence ao job ativo.', {
+            code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+          });
+        }
+        logRepositoryOperation(logger, 'info', 'execution.repository.job.reused', {
+          workflowId: request.workflowId,
+          executionId: identity.executionId,
+          jobId: existing.job.jobId,
+          status: existing.job.status,
+        });
+      }
 
       if (!executionOptions?.signal?.aborted) {
         await options.repository.markRunning({

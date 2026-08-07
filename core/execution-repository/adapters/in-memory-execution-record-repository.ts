@@ -3,8 +3,11 @@ import type { ExecutionObservabilitySnapshot } from '@brq/observability';
 import type {
   ExecutionRecord,
   ExecutionRecordCreatedInput,
+  ExecutionRecordJobRunningInput,
+  ExecutionRecordJobTerminalInput,
   ExecutionRecordListQuery,
   ExecutionRecordPage,
+  ExecutionRecordQueuedInput,
   ExecutionRecordRepository,
   ExecutionRecordRunningInput,
 } from '../contracts';
@@ -12,13 +15,19 @@ import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from '../e
 import { immutableClone } from '../immutability';
 import {
   createExecutionRecord,
+  createQueuedExecutionRecord,
+  projectJobRunningExecutionRecord,
+  projectJobTerminalExecutionRecord,
   projectObservedExecutionRecord,
   projectRunningExecutionRecord,
   projectTerminalExecutionRecord,
 } from '../mapper';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordJobRunningInputSchema,
+  executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
+  executionRecordQueuedInputSchema,
   executionRecordRunningInputSchema,
 } from '../schemas';
 import type { ExecutionResult } from '@brq/execution-engine';
@@ -60,6 +69,7 @@ function parseRunning(input: ExecutionRecordRunningInput) {
 export function createInMemoryExecutionRecordRepository(): ExecutionRecordRepository {
   const records = new Map<string, ExecutionRecord>();
   const executionIds = new Map<string, string>();
+  const jobIds = new Map<string, string>();
   let sequence = 0;
 
   const store = (record: ExecutionRecord): ExecutionRecord => {
@@ -74,9 +84,13 @@ export function createInMemoryExecutionRecordRepository(): ExecutionRecordReposi
     if (previous?.executionId !== null && previous?.executionId !== undefined) {
       executionIds.delete(previous.executionId);
     }
+    if (previous?.job !== null && previous?.job !== undefined) {
+      jobIds.delete(previous.job.jobId);
+    }
     const immutable = immutableClone(record);
     records.set(record.workflowId, immutable);
     if (record.executionId !== null) executionIds.set(record.executionId, record.workflowId);
+    if (record.job !== null) jobIds.set(record.job.jobId, record.workflowId);
     return immutableClone(immutable);
   };
 
@@ -90,6 +104,72 @@ export function createInMemoryExecutionRecordRepository(): ExecutionRecordReposi
       return store(
         createExecutionRecord(`execution-record-${String(sequence).padStart(6, '0')}`, validInput),
       );
+    },
+
+    async createQueued(input: ExecutionRecordQueuedInput): Promise<ExecutionRecord> {
+      const parsed = executionRecordQueuedInputSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ExecutionRepositoryError('Entrada de enfileiramento inválida.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+          cause: parsed.error,
+        });
+      }
+      if (
+        records.has(parsed.data.workflowId) ||
+        executionIds.has(parsed.data.executionId) ||
+        jobIds.has(parsed.data.jobId)
+      ) {
+        throw conflict('Já existe um registro para o job, workflow ou execução informado.');
+      }
+      sequence += 1;
+      return store(
+        createQueuedExecutionRecord(
+          `execution-record-${String(sequence).padStart(6, '0')}`,
+          parsed.data,
+        ),
+      );
+    },
+
+    async markJobRunning(input: ExecutionRecordJobRunningInput): Promise<ExecutionRecord> {
+      const parsed = executionRecordJobRunningInputSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ExecutionRepositoryError('Entrada de início do job inválida.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+          cause: parsed.error,
+        });
+      }
+      const workflowId = jobIds.get(parsed.data.jobId);
+      if (workflowId === undefined) throw notFound(parsed.data.jobId);
+      const record = records.get(workflowId)!;
+      try {
+        return store(projectJobRunningExecutionRecord(record, parsed.data));
+      } catch (error) {
+        throw conflict(error instanceof Error ? error.message : 'Transição de job inválida.');
+      }
+    },
+
+    async markJobTerminal(input: ExecutionRecordJobTerminalInput): Promise<ExecutionRecord> {
+      const parsed = executionRecordJobTerminalInputSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ExecutionRepositoryError('Entrada terminal do job inválida.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+          cause: parsed.error,
+        });
+      }
+      const workflowId = jobIds.get(parsed.data.jobId);
+      if (workflowId === undefined) throw notFound(parsed.data.jobId);
+      const record = records.get(workflowId)!;
+      if (
+        record.job?.status === parsed.data.status &&
+        record.job.finishedAt === parsed.data.finishedAt
+      ) {
+        return immutableClone(record);
+      }
+      try {
+        return store(projectJobTerminalExecutionRecord(record, parsed.data));
+      } catch (error) {
+        throw conflict(error instanceof Error ? error.message : 'Transição de job inválida.');
+      }
     },
 
     async markRunning(input: ExecutionRecordRunningInput): Promise<ExecutionRecord> {
@@ -143,6 +223,11 @@ export function createInMemoryExecutionRecordRepository(): ExecutionRecordReposi
 
     async findByExecutionId(executionId: string): Promise<ExecutionRecord | null> {
       const workflowId = executionIds.get(executionId);
+      return workflowId === undefined ? null : immutableClone(records.get(workflowId)!);
+    },
+
+    async findByJobId(jobId: string): Promise<ExecutionRecord | null> {
+      const workflowId = jobIds.get(jobId);
       return workflowId === undefined ? null : immutableClone(records.get(workflowId)!);
     },
 

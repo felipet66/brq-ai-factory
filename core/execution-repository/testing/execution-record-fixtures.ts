@@ -17,6 +17,7 @@ import {
 } from '../mapper';
 
 export const EXECUTION_RECORD_FIXTURE_ID = `execution-${'a'.repeat(32)}`;
+export const EXECUTION_JOB_FIXTURE_ID = `job-${'a'.repeat(32)}`;
 export const EXECUTION_RECORD_FIXTURE_WORKFLOW_ID = 'workflow-001';
 
 export function createExecutionRequestFixture(

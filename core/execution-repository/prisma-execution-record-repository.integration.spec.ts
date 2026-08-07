@@ -12,6 +12,8 @@ import {
 import { PrismaExecutionRecordRepository } from './adapters/prisma-execution-record-repository';
 import { EXECUTION_REPOSITORY_ERROR_CODES } from './errors';
 import {
+  EXECUTION_JOB_FIXTURE_ID,
+  EXECUTION_RECORD_FIXTURE_ID,
   createExecutionObservationFixture,
   createExecutionResultFixture,
 } from './testing/execution-record-fixtures';
@@ -25,6 +27,54 @@ describe('Prisma execution record repository', () => {
 
   afterEach(async () => {
     await context.cleanup();
+  });
+
+  it('round-trips normalized job metadata across repository instances', async () => {
+    const repository = new PrismaExecutionRecordRepository(context.client);
+    await repository.createQueued({
+      workflowId: 'workflow-001',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: 'request-001',
+      traceId: null,
+      projectName: 'Queued project',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markJobRunning({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      startedAt: '2026-08-07T12:00:00.005Z',
+    });
+    await repository.markRunning({
+      workflowId: 'workflow-001',
+      startedAt: '2026-08-07T12:00:00.010Z',
+    });
+    await repository.complete(
+      'workflow-001',
+      createExecutionResultFixture(),
+      createExecutionObservationFixture(),
+    );
+    await repository.markJobTerminal({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      status: 'FAILED',
+      finishedAt: '2026-08-07T12:00:00.060Z',
+    });
+
+    const restarted = new PrismaExecutionRecordRepository(context.client);
+    const restored = await restarted.findByJobId(EXECUTION_JOB_FIXTURE_ID);
+    expect(restored).toMatchObject({
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      status: 'FAILED',
+      job: {
+        jobId: EXECUTION_JOB_FIXTURE_ID,
+        status: 'FAILED',
+        queuedAt: '2026-08-07T12:00:00.000Z',
+        startedAt: '2026-08-07T12:00:00.005Z',
+        finishedAt: '2026-08-07T12:00:00.060Z',
+      },
+    });
+    expect(await context.client.executionJob.count()).toBe(1);
+    expect(JSON.stringify(restored)).not.toContain('Allow customers');
   });
 
   it('round-trips a normalized terminal aggregate across repository instances', async () => {

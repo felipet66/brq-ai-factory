@@ -1,4 +1,5 @@
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
+import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
 import { isoDateTimeSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
 
@@ -35,6 +36,56 @@ export const executionRecordMetadataSchema = z
     attempt: z.literal(1),
   })
   .strict();
+
+export const executionRecordJobSchema = z
+  .object({
+    jobId: jobIdSchema,
+    status: jobStatusSchema,
+    queuedAt: isoDateTimeSchema,
+    startedAt: isoDateTimeSchema.nullable(),
+    finishedAt: isoDateTimeSchema.nullable(),
+  })
+  .strict()
+  .superRefine((job, context) => {
+    if (job.startedAt !== null && Date.parse(job.startedAt) < Date.parse(job.queuedAt)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['startedAt'],
+        message: 'O início do job não pode anteceder seu enfileiramento.',
+      });
+    }
+    if (
+      job.finishedAt !== null &&
+      Date.parse(job.finishedAt) < Date.parse(job.startedAt ?? job.queuedAt)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['finishedAt'],
+        message: 'O término do job não pode anteceder seu início.',
+      });
+    }
+    if (job.status === 'QUEUED' && (job.startedAt !== null || job.finishedAt !== null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: 'Um job QUEUED não pode possuir início ou término.',
+      });
+    }
+    if (job.status === 'RUNNING' && (job.startedAt === null || job.finishedAt !== null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: 'Um job RUNNING exige início e não pode possuir término.',
+      });
+    }
+    if (['SUCCESS', 'FAILED', 'CANCELLED'].includes(job.status) && job.finishedAt === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['finishedAt'],
+        message: 'Um job terminal exige finishedAt.',
+      });
+    }
+  });
 
 export const persistedLineageHandoffSchema = z
   .object({
@@ -124,6 +175,7 @@ const executionRecordBaseShape = {
   startedAt: isoDateTimeSchema.nullable(),
   finishedAt: isoDateTimeSchema.nullable(),
   durationMs: z.number().int().nonnegative().nullable(),
+  job: executionRecordJobSchema.nullable(),
   metadata: executionRecordMetadataSchema,
   hashes: executionRecordHashesSchema,
   failure: executionRecordFailureSchema.nullable(),
@@ -174,6 +226,20 @@ export const executionRecordSchema = z
         });
       }
     }
+    if (record.job !== null && record.executionId === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['job'],
+        message: 'Um registro enfileirado exige executionId reservado.',
+      });
+    }
+    if (terminal && record.job !== null && record.job.status !== record.status) {
+      context.addIssue({
+        code: 'custom',
+        path: ['job', 'status'],
+        message: 'O status terminal do job deve acompanhar a execução.',
+      });
+    }
   });
 
 export const executionRecordCreatedInputSchema = z
@@ -191,6 +257,30 @@ export const executionRecordRunningInputSchema = z
   .object({
     workflowId: executionRecordSchema.shape.workflowId,
     startedAt: isoDateTimeSchema,
+  })
+  .strict();
+
+export const executionRecordQueuedInputSchema = executionRecordCreatedInputSchema
+  .extend({
+    executionId: executionRecordSchema.shape.executionId.unwrap(),
+    jobId: jobIdSchema,
+    queuedAt: isoDateTimeSchema,
+  })
+  .omit({ createdAt: true })
+  .strict();
+
+export const executionRecordJobRunningInputSchema = z
+  .object({
+    jobId: jobIdSchema,
+    startedAt: isoDateTimeSchema,
+  })
+  .strict();
+
+export const executionRecordJobTerminalInputSchema = z
+  .object({
+    jobId: jobIdSchema,
+    status: terminalExecutionRecordStatusSchema,
+    finishedAt: isoDateTimeSchema,
   })
   .strict();
 

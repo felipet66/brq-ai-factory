@@ -2,40 +2,29 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeWorkflow } from '@/api/execution-client';
-import type { ExecutionSummary } from '@/api/execution-contracts';
+import type { ExecutionJobStatus, ExecutionJobView } from '@/api/execution-contracts';
 
 import { ExecutionExperience } from './execution-experience';
 
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: pushMock }) }));
 vi.mock('@/api/execution-client', () => ({ executeWorkflow: vi.fn() }));
 
 const executeWorkflowMock = vi.mocked(executeWorkflow);
+const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
 
-function executionSummary(): ExecutionSummary {
+function job(status: ExecutionJobStatus, started = status !== 'QUEUED'): ExecutionJobView {
   return {
-    executionId: `execution-${'a'.repeat(32)}`,
-    status: 'SUCCESS',
-    durationMs: 25,
-    readiness: 'READY',
-    hashes: {
-      executionRequestHash: '1'.repeat(64),
-      workflowRequestHash: '2'.repeat(64),
-      workflowHash: '3'.repeat(64),
-      lineageHash: '4'.repeat(64),
-      provenanceHash: '5'.repeat(64),
-      executionHash: '6'.repeat(64),
-    },
-    lineage: { outputCount: 3, verifiedHandoffs: 3 },
-    provenance: {
-      stages: [
-        {
-          stage: 'QA',
-          agentVersion: '1.0.0',
-          outcome: 'GENERATED',
-          readiness: 'READY',
-        },
-      ],
-    },
-    observability: null,
+    executionId: EXECUTION_ID,
+    jobId: `job-${'b'.repeat(32)}`,
+    status,
+    queuedAt: '2026-08-07T18:00:00.000Z',
+    startedAt: started ? '2026-08-07T18:00:01.000Z' : null,
+    finishedAt:
+      status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELLED'
+        ? '2026-08-07T18:00:02.000Z'
+        : null,
   };
 }
 
@@ -63,122 +52,78 @@ function clientError(message: string): Error {
   return error;
 }
 
-describe('ExecutionExperience', () => {
+describe('ExecutionExperience asynchronous flow', () => {
   afterEach(cleanup);
 
   beforeEach(() => {
     executeWorkflowMock.mockReset();
+    pushMock.mockReset();
   });
 
-  it('transitions from idle through loading to a successful response', async () => {
-    const pending = deferred<ExecutionSummary>();
-    executeWorkflowMock.mockReturnValueOnce(pending.promise);
+  it('renders queue and running updates, then navigates on success', async () => {
+    const pending = deferred<ExecutionJobView>();
+    let publish: ((update: ExecutionJobView) => void) | undefined;
+    executeWorkflowMock.mockImplementationOnce((_input, options) => {
+      publish = options?.onJobUpdate;
+      return pending.promise;
+    });
     render(<ExecutionExperience />);
 
     expect(screen.getByText(/Ready to coordinate/)).toBeInTheDocument();
     fillAndSubmit();
 
-    expect(screen.getByRole('status')).toHaveTextContent('Executing workflow');
+    expect(screen.getByRole('heading', { name: 'Workflow queued' })).toBeInTheDocument();
+    expect(screen.getByText('Fila')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeDisabled();
     expect(executeWorkflowMock).toHaveBeenCalledWith(
       {
         projectName: 'Customer Portal',
         objective: 'Let customers track their orders.',
       },
-      { signal: expect.any(AbortSignal), onObservability: expect.any(Function) },
+      { signal: expect.any(AbortSignal), onJobUpdate: expect.any(Function) },
     );
 
-    pending.resolve(executionSummary());
-    expect(await screen.findByRole('heading', { name: 'Execution result' })).toBeInTheDocument();
-    expect(screen.getByText('SUCCESS')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Workflow complete. Status SUCCESS.');
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    act(() => publish?.(job('QUEUED', false)));
+    expect(screen.getByRole('status')).toHaveTextContent('Workflow queued.');
+
+    act(() => publish?.(job('RUNNING')));
+    expect(screen.getByRole('heading', { name: 'Executing workflow' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Workflow running.');
+    expect(screen.getByText('Em andamento')).toBeInTheDocument();
+
+    await act(async () => pending.resolve(job('SUCCESS')));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/executions/${EXECUTION_ID}`));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Workflow complete. Opening execution details.',
+    );
   });
 
-  it('renders live backend timeline updates without replacing the loading state', async () => {
-    const pending = deferred<ExecutionSummary>();
-    let publish:
-      ((observability: Exclude<ExecutionSummary['observability'], null>) => void) | undefined;
-    executeWorkflowMock.mockImplementationOnce((_input, options) => {
-      publish = options?.onObservability;
-      return pending.promise;
+  it.each([
+    ['FAILED', 'The workflow finished with a failure.'],
+    ['CANCELLED', 'The workflow was cancelled.'],
+  ] as const)('shows %s as an error and does not navigate', async (status, message) => {
+    executeWorkflowMock.mockImplementationOnce(async (_input, options) => {
+      options?.onJobUpdate?.(job('RUNNING'));
+      return job(status);
     });
     render(<ExecutionExperience />);
 
     fillAndSubmit();
-    expect(
-      screen.getByText('Waiting for execution metadata. The workflow continues normally.'),
-    ).toBeInTheDocument();
 
-    act(() => {
-      publish?.({
-        revision: 3,
-        status: 'RUNNING',
-        stages: [
-          { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 2 },
-          {
-            stageId: 'PRODUCT_OWNER',
-            stageName: 'Product Owner',
-            status: 'RUNNING',
-            durationMs: null,
-          },
-          { stageId: 'DEVELOPER', stageName: 'Developer', status: 'PENDING', durationMs: null },
-          { stageId: 'QA', stageName: 'QA', status: 'PENDING', durationMs: null },
-        ],
-        stageMetrics: [],
-        summary: null,
-      });
-    });
-
-    expect(await screen.findByText('In progress')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Executing workflow. Product Owner is in progress.',
-    );
-    expect(screen.queryByText(/Waiting for execution metadata/)).not.toBeInTheDocument();
-
-    pending.resolve(executionSummary());
-    await screen.findByRole('heading', { name: 'Execution result' });
-    expect(screen.getByRole('status')).toHaveTextContent('Workflow complete. Status SUCCESS.');
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.getAllByText(status === 'FAILED' ? 'Falhou' : 'Cancelado')).toHaveLength(2);
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeEnabled();
   });
 
-  it('renders a safe error state when the client rejects', async () => {
+  it('renders a safe client error without navigating', async () => {
     executeWorkflowMock.mockRejectedValueOnce(clientError('The API is unavailable.'));
     render(<ExecutionExperience />);
 
     fillAndSubmit();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The API is unavailable.');
-    expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeEnabled();
-  });
-
-  it('preserves terminal timeline metadata when the workflow transport fails', async () => {
-    executeWorkflowMock.mockImplementationOnce(async (_input, options) => {
-      options?.onObservability?.({
-        revision: 5,
-        status: 'FAILED',
-        stages: [
-          { stageId: 'KNOWLEDGE', stageName: 'Knowledge', status: 'SUCCESS', durationMs: 2 },
-          {
-            stageId: 'PRODUCT_OWNER',
-            stageName: 'Product Owner',
-            status: 'FAILED',
-            durationMs: 4,
-          },
-          { stageId: 'DEVELOPER', stageName: 'Developer', status: 'SKIPPED', durationMs: null },
-          { stageId: 'QA', stageName: 'QA', status: 'SKIPPED', durationMs: null },
-        ],
-        stageMetrics: [],
-        summary: null,
-      });
-      throw clientError('The workflow failed.');
-    });
-    render(<ExecutionExperience />);
-
-    fillAndSubmit();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('The workflow failed.');
-    expect(screen.getByText('Failed')).toBeInTheDocument();
-    expect(screen.getAllByText('Skipped')).toHaveLength(2);
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it('does not expose messages from unexpected errors', async () => {
@@ -193,8 +138,8 @@ describe('ExecutionExperience', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('internal secret');
   });
 
-  it('blocks duplicate submissions while a request is active', () => {
-    const pending = deferred<ExecutionSummary>();
+  it('blocks duplicate submissions while polling', () => {
+    const pending = deferred<ExecutionJobView>();
     executeWorkflowMock.mockReturnValueOnce(pending.promise);
     render(<ExecutionExperience />);
 
@@ -206,8 +151,8 @@ describe('ExecutionExperience', () => {
     expect(executeWorkflowMock).toHaveBeenCalledOnce();
   });
 
-  it('aborts the active HTTP request when unmounted', async () => {
-    const pending = deferred<ExecutionSummary>();
+  it('aborts polling when unmounted and ignores later completion', async () => {
+    const pending = deferred<ExecutionJobView>();
     let capturedSignal: AbortSignal | undefined;
     executeWorkflowMock.mockImplementationOnce((_input, options) => {
       capturedSignal = options?.signal;
@@ -220,7 +165,8 @@ describe('ExecutionExperience', () => {
     unmount();
     expect(capturedSignal?.aborted).toBe(true);
 
-    pending.resolve(executionSummary());
+    pending.resolve(job('SUCCESS'));
     await waitFor(() => expect(executeWorkflowMock).toHaveBeenCalledOnce());
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

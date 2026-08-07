@@ -22,6 +22,7 @@ describe('HTTP adapter dependency boundary', () => {
 
     expect(source).not.toMatch(/@brq\/(product-owner-agent|developer-agent|qa-agent)/);
     expect(source).not.toMatch(/@brq\/prisma/);
+    expect(source).not.toMatch(/\b(getExecutionEngine|createExecutionEngine)\b/);
     expect(source).not.toMatch(
       /@brq\/(orchestrator|ai-provider|knowledge-loader|prompt-builder|agent-runner|response-validator|artifact-generator)/,
     );

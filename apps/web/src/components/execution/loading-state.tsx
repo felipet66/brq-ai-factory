@@ -1,19 +1,24 @@
-import type { ExecutionSummary } from '@/api/execution-contracts';
+import type { ExecutionJobView } from '@/api/execution-contracts';
 
-import { ExecutionTimeline } from './execution-timeline';
+import { ExecutionJobProgress } from './execution-job-progress';
 
 interface LoadingStateProps {
-  readonly observability: ExecutionSummary['observability'];
+  readonly job: ExecutionJobView | null;
 }
 
-export function LoadingState({ observability }: LoadingStateProps) {
+export function LoadingState({ job }: LoadingStateProps) {
+  const running = job?.status === 'RUNNING';
   return (
     <div className="execution-state execution-state--loading">
       <div>
-        <h2>Executing workflow</h2>
-        <p>Product Owner, Developer and QA are working in sequence.</p>
+        <h2>{running ? 'Executing workflow' : 'Workflow queued'}</h2>
+        <p>
+          {running
+            ? 'Product Owner, Developer and QA are working in sequence.'
+            : 'The request is waiting for the local execution worker.'}
+        </p>
       </div>
-      <ExecutionTimeline loading observability={observability} />
+      <ExecutionJobProgress job={job} />
     </div>
   );
 }
