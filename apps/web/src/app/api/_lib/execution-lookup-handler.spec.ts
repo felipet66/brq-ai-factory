@@ -30,7 +30,13 @@ function executionRecord(): ExecutionRecord {
     startedAt: '2026-08-07T10:00:00.000Z',
     finishedAt: '2026-08-07T10:00:00.250Z',
     durationMs: 250,
-    job: null,
+    job: {
+      jobId: `job-${'b'.repeat(32)}`,
+      status: 'SUCCESS',
+      queuedAt: '2026-08-07T09:59:59.000Z',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: '2026-08-07T10:00:00.250Z',
+    },
     metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
     hashes: {
       executionRequestHash: HASH,
@@ -144,6 +150,13 @@ describe('execution lookup HTTP adapter', () => {
       projectName: 'Portal do cliente',
       status: 'SUCCESS',
       readiness: 'READY',
+      job: {
+        jobId: `job-${'b'.repeat(32)}`,
+        status: 'SUCCESS',
+        queuedAt: '2026-08-07T09:59:59.000Z',
+        startedAt: '2026-08-07T10:00:00.000Z',
+        finishedAt: '2026-08-07T10:00:00.250Z',
+      },
       metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
       lineage: {
         handoffs: [

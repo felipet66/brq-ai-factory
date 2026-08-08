@@ -47,6 +47,13 @@ function detailData(overrides: Record<string, unknown> = {}) {
     createdAt: '2026-08-07T09:59:59.999Z',
     requestId: 'request-123e4567-e89b-12d3-a456-426614174000',
     metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    job: {
+      jobId: `job-${'b'.repeat(32)}`,
+      status: 'SUCCESS',
+      queuedAt: '2026-08-07T09:59:59.000Z',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: '2026-08-07T10:00:00.250Z',
+    },
     hashes: {
       executionRequestHash: HASH,
       workflowRequestHash: HASH,
@@ -110,7 +117,35 @@ function timelineData(overrides: Record<string, unknown> = {}) {
     requestId: 'request-123e4567-e89b-12d3-a456-426614174000',
     status: 'SUCCESS',
     updatedAt: '2026-08-07T10:00:00.250Z',
-    events: [{ raw: 'not projected' }],
+    events: [
+      {
+        sequence: 1,
+        type: 'execution.started',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'RUNNING',
+        startedAt: '2026-08-07T10:00:00.000Z',
+        finishedAt: null,
+        durationMs: null,
+        requestId: 'request-001',
+        executionId: EXECUTION_ID,
+        errorCode: null,
+        privateValue: 'must not cross the presentation boundary',
+      },
+      {
+        sequence: 2,
+        type: 'execution.finished',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'SUCCESS',
+        startedAt: '2026-08-07T10:00:00.000Z',
+        finishedAt: '2026-08-07T10:00:00.250Z',
+        durationMs: 250,
+        requestId: 'request-001',
+        executionId: EXECUTION_ID,
+        errorCode: null,
+      },
+    ],
     stages: [
       ['KNOWLEDGE', 'Knowledge'],
       ['PRODUCT_OWNER', 'Product Owner'],
@@ -233,7 +268,15 @@ describe('execution history HTTP client', () => {
       specification: 'PRODUCT_OWNER_SPECIFICATION',
       verified: true,
     });
+    expect(detail.job).toEqual({
+      jobId: `job-${'b'.repeat(32)}`,
+      status: 'SUCCESS',
+      queuedAt: '2026-08-07T09:59:59.000Z',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: '2026-08-07T10:00:00.250Z',
+    });
     expect(Object.isFrozen(detail)).toBe(true);
+    expect(Object.isFrozen(detail.job)).toBe(true);
     expect(Object.isFrozen(detail.provenance?.stages[0]?.hashes.artifactHashes)).toBe(true);
   });
 
@@ -251,7 +294,7 @@ describe('execution history HTTP client', () => {
     expect(fetchImplementation).toHaveBeenCalledOnce();
   });
 
-  it('loads the persisted timeline and projects only presentation metadata', async () => {
+  it('loads the persisted timeline and preserves sanitized events and correlation metadata', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>(async () =>
       jsonResponse(successEnvelope(timelineData(), EXECUTION_ID)),
     );
@@ -262,10 +305,21 @@ describe('execution history HTTP client', () => {
       `/api/executions/${EXECUTION_ID}/timeline`,
       expect.objectContaining({ method: 'GET', cache: 'no-store' }),
     );
-    expect(timeline).not.toHaveProperty('events');
+    expect(timeline).toMatchObject({
+      observabilityVersion: '1.0.0',
+      executionId: EXECUTION_ID,
+      workflowId: 'workflow-001',
+      requestId: 'request-123e4567-e89b-12d3-a456-426614174000',
+    });
+    expect(timeline.events).toHaveLength(2);
+    expect(timeline.events[0]).not.toHaveProperty('privateValue');
     expect(timeline.stages).toHaveLength(4);
     expect(timeline.stageMetrics).toHaveLength(3);
     expect(timeline.summary?.totalTokens).toBe(90);
+    expect(timeline.summary?.readinessFinal).toBe('READY');
+    expect(timeline.summary?.hashes.executionHash).toBe(HASH);
+    expect(Object.isFrozen(timeline.events)).toBe(true);
+    expect(Object.isFrozen(timeline.events[0])).toBe(true);
     expect(Object.isFrozen(timeline.stages)).toBe(true);
   });
 

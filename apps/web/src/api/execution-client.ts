@@ -8,7 +8,7 @@ import {
 import type { ExecutionJobStatus, ExecutionJobView } from './execution-contracts';
 
 const EXECUTIONS_ENDPOINT = '/api/executions';
-const JOB_POLL_INTERVAL_MS = 750;
+export const EXECUTION_POLL_INTERVAL_MS = 750;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REQUEST_ID_PATTERN = /^request-[0-9a-f-]{36}$/;
 
@@ -106,11 +106,11 @@ const errorEnvelopeSchema = z
   })
   .strict();
 
-type ExecutionInput = z.input<typeof executionInputSchema>;
+export type ExecutionInput = z.input<typeof executionInputSchema>;
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type TechnicalIdFactory = () => string;
 
-interface ExecutionClientOptions {
+export interface ExecutionClientOptions {
   readonly signal?: AbortSignal;
   readonly profile?: FrontendExecutionProfile;
   readonly idFactory?: TechnicalIdFactory;
@@ -122,6 +122,7 @@ interface ExecutionClientOptions {
 type ExecutionClientErrorCode =
   | 'INVALID_INPUT'
   | 'INVALID_CONFIGURATION'
+  | 'INVALID_JOB_ID'
   | 'REQUEST_ABORTED'
   | 'NETWORK_ERROR'
   | 'API_ERROR'
@@ -311,7 +312,7 @@ function isTerminal(status: ExecutionJobStatus): boolean {
 function effectivePollInterval(value: number | undefined): number {
   return value !== undefined && Number.isSafeInteger(value) && value >= 0 && value <= 60_000
     ? value
-    : JOB_POLL_INTERVAL_MS;
+    : EXECUTION_POLL_INTERVAL_MS;
 }
 
 function waitForNextPoll(durationMs: number, signal?: AbortSignal): Promise<void> {
@@ -355,7 +356,11 @@ function validateCorrelation(
   }
 }
 
-export async function executeWorkflow(
+/**
+ * Creates an asynchronous execution and returns as soon as the backend accepts its job.
+ * Polling is intentionally left to the caller so live experiences can own their lifecycle.
+ */
+export async function enqueueExecution(
   input: ExecutionInput,
   options: ExecutionClientOptions = {},
 ): Promise<ExecutionJobView> {
@@ -402,39 +407,67 @@ export async function executeWorkflow(
   }
   validateCorrelation(accepted);
 
-  let current = projectJob(accepted.data);
+  return projectJob(accepted.data);
+}
+
+/** Loads one immutable job snapshot without retrying or scheduling another request. */
+export async function getJob(
+  jobId: string,
+  options: ExecutionClientOptions = {},
+): Promise<ExecutionJobView> {
+  if (!jobIdSchema.safeParse(jobId).success) {
+    throw new ExecutionClientError('O identificador do job é inválido.', {
+      code: 'INVALID_JOB_ID',
+    });
+  }
+
+  const fetchImplementation = options.fetchImplementation ?? globalThis.fetch;
+  const jobResponse = await fetchResponse(
+    fetchImplementation,
+    `/api/jobs/${encodeURIComponent(jobId)}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    },
+    options.signal,
+  );
+  const jobEnvelope = await parseHttpResponse(jobResponse, jobLookupSchema);
+  if (jobResponse.status !== 200) {
+    throw new ExecutionClientError('A resposta do serviço de execução é inválida.', {
+      code: 'INVALID_RESPONSE',
+      status: jobResponse.status,
+    });
+  }
+  validateCorrelation(jobEnvelope);
+  if (jobEnvelope.data.jobId !== jobId) {
+    throw new ExecutionClientError('A resposta do serviço de execução é inválida.', {
+      code: 'INVALID_RESPONSE',
+      status: jobResponse.status,
+    });
+  }
+
+  return projectJob(jobEnvelope.data);
+}
+
+/** Backwards-compatible convenience workflow composed from the two single-call operations. */
+export async function executeWorkflow(
+  input: ExecutionInput,
+  options: ExecutionClientOptions = {},
+): Promise<ExecutionJobView> {
+  let current = await enqueueExecution(input, options);
+
   notifyJobUpdate(options.onJobUpdate, current);
 
   while (!isTerminal(current.status)) {
     await waitForNextPoll(effectivePollInterval(options.pollIntervalMs), options.signal);
-    const jobResponse = await fetchResponse(
-      fetchImplementation,
-      `/api/jobs/${encodeURIComponent(current.jobId)}`,
-      {
-        method: 'GET',
-        cache: 'no-store',
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
-      options.signal,
-    );
-    const jobEnvelope = await parseHttpResponse(jobResponse, jobLookupSchema);
-    if (jobResponse.status !== 200) {
+    const next = await getJob(current.jobId, options);
+    if (next.executionId !== current.executionId) {
       throw new ExecutionClientError('A resposta do serviço de execução é inválida.', {
         code: 'INVALID_RESPONSE',
-        status: jobResponse.status,
       });
     }
-    validateCorrelation(jobEnvelope);
-    if (
-      jobEnvelope.data.jobId !== current.jobId ||
-      jobEnvelope.data.executionId !== current.executionId
-    ) {
-      throw new ExecutionClientError('A resposta do serviço de execução é inválida.', {
-        code: 'INVALID_RESPONSE',
-        status: jobResponse.status,
-      });
-    }
-    current = projectJob(jobEnvelope.data);
+    current = next;
     notifyJobUpdate(options.onJobUpdate, current);
   }
 

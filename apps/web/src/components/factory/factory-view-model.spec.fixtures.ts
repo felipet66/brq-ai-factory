@@ -1,0 +1,362 @@
+import type {
+  FactoryExecutionSource,
+  FactoryObservabilityEvent,
+  FactoryTimelineSource,
+} from './factory-view-model';
+
+export const FACTORY_EXECUTION_ID = `execution-${'a'.repeat(32)}`;
+export const FACTORY_WORKFLOW_ID = 'workflow-factory-001';
+export const FACTORY_JOB_ID = 'job-factory-001';
+
+const plainHash = (character: string): string => character.repeat(64);
+const contentHash = (character: string): string => `sha256:${plainHash(character)}`;
+
+export const FACTORY_HASHES = Object.freeze({
+  executionRequest: plainHash('1'),
+  workflowRequest: plainHash('2'),
+  productOwnerSpecification: contentHash('3'),
+  technicalSpecification: contentHash('4'),
+  qaSpecification: contentHash('5'),
+  productOwnerArtifact: plainHash('6'),
+  developerArtifact: plainHash('7'),
+  qaArtifact: plainHash('8'),
+  common: plainHash('9'),
+});
+
+const TIMESTAMPS = Object.freeze({
+  queued: '2026-08-08T09:59:59.500Z',
+  jobStarted: '2026-08-08T09:59:59.900Z',
+  executionStarted: '2026-08-08T10:00:00.000Z',
+  knowledgeFinished: '2026-08-08T10:00:00.010Z',
+  productOwnerFinished: '2026-08-08T10:00:00.100Z',
+  developerFinished: '2026-08-08T10:00:00.200Z',
+  qaFinished: '2026-08-08T10:00:00.250Z',
+});
+
+function event(
+  sequence: number,
+  values: Omit<FactoryObservabilityEvent, 'sequence' | 'executionId' | 'requestId' | 'errorCode'>,
+): FactoryObservabilityEvent {
+  return {
+    sequence,
+    executionId: FACTORY_EXECUTION_ID,
+    requestId: 'request-factory-001',
+    errorCode: null,
+    ...values,
+  };
+}
+
+export function factoryExecutionFixture(
+  overrides: Partial<FactoryExecutionSource> = {},
+): FactoryExecutionSource {
+  return {
+    executionId: FACTORY_EXECUTION_ID,
+    workflowId: FACTORY_WORKFLOW_ID,
+    projectName: 'Factory Control Room',
+    status: 'SUCCESS',
+    readiness: 'READY',
+    createdAt: '2026-08-08T09:59:59.000Z',
+    startedAt: TIMESTAMPS.executionStarted,
+    finishedAt: TIMESTAMPS.qaFinished,
+    durationMs: 250,
+    requestId: 'request-factory-001',
+    metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    job: {
+      jobId: FACTORY_JOB_ID,
+      status: 'SUCCESS',
+      queuedAt: TIMESTAMPS.queued,
+      startedAt: TIMESTAMPS.jobStarted,
+      finishedAt: TIMESTAMPS.qaFinished,
+    },
+    hashes: {
+      executionRequestHash: FACTORY_HASHES.executionRequest,
+      workflowRequestHash: FACTORY_HASHES.workflowRequest,
+      workflowHash: FACTORY_HASHES.common,
+      lineageHash: FACTORY_HASHES.common,
+      provenanceHash: FACTORY_HASHES.common,
+      executionHash: FACTORY_HASHES.common,
+    },
+    lineage: {
+      outputs: {
+        productOwnerSpecificationHash: FACTORY_HASHES.productOwnerSpecification,
+        technicalSpecificationHash: FACTORY_HASHES.technicalSpecification,
+        qaSpecificationHash: FACTORY_HASHES.qaSpecification,
+      },
+      handoffs: [
+        {
+          from: 'PRODUCT_OWNER',
+          to: 'DEVELOPER',
+          specification: 'PRODUCT_OWNER_SPECIFICATION',
+          verified: true,
+        },
+        {
+          from: 'DEVELOPER',
+          to: 'QA',
+          specification: 'TECHNICAL_SPECIFICATION',
+          verified: true,
+        },
+        {
+          from: 'PRODUCT_OWNER',
+          to: 'QA',
+          specification: 'PRODUCT_OWNER_SPECIFICATION',
+          verified: true,
+        },
+      ],
+    },
+    provenance: {
+      stages: [
+        {
+          stage: 'PRODUCT_OWNER',
+          agentVersion: '1.0.1',
+          outcome: 'GENERATED',
+          readiness: 'READY',
+          hashes: {
+            assetBundleHash: FACTORY_HASHES.common,
+            knowledgeContextHash: FACTORY_HASHES.common,
+            promptHash: FACTORY_HASHES.common,
+            responseHash: FACTORY_HASHES.common,
+            validationHash: FACTORY_HASHES.common,
+            generationHash: FACTORY_HASHES.common,
+            artifactHashes: [FACTORY_HASHES.productOwnerArtifact],
+          },
+        },
+        {
+          stage: 'DEVELOPER',
+          agentVersion: '1.0.1',
+          outcome: 'GENERATED',
+          readiness: 'READY',
+          hashes: {
+            assetBundleHash: FACTORY_HASHES.common,
+            knowledgeContextHash: FACTORY_HASHES.common,
+            promptHash: FACTORY_HASHES.common,
+            responseHash: FACTORY_HASHES.common,
+            validationHash: FACTORY_HASHES.common,
+            generationHash: FACTORY_HASHES.common,
+            artifactHashes: [FACTORY_HASHES.developerArtifact],
+          },
+        },
+        {
+          stage: 'QA',
+          agentVersion: '1.0.0',
+          outcome: 'GENERATED',
+          readiness: 'READY',
+          hashes: {
+            assetBundleHash: FACTORY_HASHES.common,
+            knowledgeContextHash: FACTORY_HASHES.common,
+            promptHash: FACTORY_HASHES.common,
+            responseHash: FACTORY_HASHES.common,
+            validationHash: FACTORY_HASHES.common,
+            generationHash: FACTORY_HASHES.common,
+            artifactHashes: [FACTORY_HASHES.qaArtifact],
+          },
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+export function factoryTimelineFixture(
+  overrides: Partial<FactoryTimelineSource> = {},
+): FactoryTimelineSource {
+  return {
+    observabilityVersion: '1.0.0',
+    revision: 10,
+    executionId: FACTORY_EXECUTION_ID,
+    workflowId: FACTORY_WORKFLOW_ID,
+    requestId: 'request-factory-001',
+    status: 'SUCCESS',
+    updatedAt: TIMESTAMPS.qaFinished,
+    events: [
+      event(1, {
+        type: 'execution.started',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'RUNNING',
+        startedAt: TIMESTAMPS.executionStarted,
+        finishedAt: null,
+        durationMs: null,
+      }),
+      event(2, {
+        type: 'stage.started',
+        stageId: 'KNOWLEDGE',
+        stageName: 'Knowledge',
+        status: 'RUNNING',
+        startedAt: TIMESTAMPS.executionStarted,
+        finishedAt: null,
+        durationMs: null,
+      }),
+      event(3, {
+        type: 'stage.finished',
+        stageId: 'KNOWLEDGE',
+        stageName: 'Knowledge',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.executionStarted,
+        finishedAt: TIMESTAMPS.knowledgeFinished,
+        durationMs: 10,
+      }),
+      event(4, {
+        type: 'stage.started',
+        stageId: 'PRODUCT_OWNER',
+        stageName: 'Product Owner',
+        status: 'RUNNING',
+        startedAt: TIMESTAMPS.knowledgeFinished,
+        finishedAt: null,
+        durationMs: null,
+      }),
+      event(5, {
+        type: 'stage.finished',
+        stageId: 'PRODUCT_OWNER',
+        stageName: 'Product Owner',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.knowledgeFinished,
+        finishedAt: TIMESTAMPS.productOwnerFinished,
+        durationMs: 90,
+      }),
+      event(6, {
+        type: 'stage.started',
+        stageId: 'DEVELOPER',
+        stageName: 'Developer',
+        status: 'RUNNING',
+        startedAt: TIMESTAMPS.productOwnerFinished,
+        finishedAt: null,
+        durationMs: null,
+      }),
+      event(7, {
+        type: 'stage.finished',
+        stageId: 'DEVELOPER',
+        stageName: 'Developer',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.productOwnerFinished,
+        finishedAt: TIMESTAMPS.developerFinished,
+        durationMs: 100,
+      }),
+      event(8, {
+        type: 'stage.started',
+        stageId: 'QA',
+        stageName: 'QA',
+        status: 'RUNNING',
+        startedAt: TIMESTAMPS.developerFinished,
+        finishedAt: null,
+        durationMs: null,
+      }),
+      event(9, {
+        type: 'stage.finished',
+        stageId: 'QA',
+        stageName: 'QA',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.developerFinished,
+        finishedAt: TIMESTAMPS.qaFinished,
+        durationMs: 50,
+      }),
+      event(10, {
+        type: 'execution.finished',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.executionStarted,
+        finishedAt: TIMESTAMPS.qaFinished,
+        durationMs: 250,
+      }),
+    ],
+    stages: [
+      {
+        stageId: 'KNOWLEDGE',
+        stageName: 'Knowledge',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.executionStarted,
+        finishedAt: TIMESTAMPS.knowledgeFinished,
+        durationMs: 10,
+        requestId: 'request-factory-001',
+        executionId: FACTORY_EXECUTION_ID,
+      },
+      {
+        stageId: 'PRODUCT_OWNER',
+        stageName: 'Product Owner',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.knowledgeFinished,
+        finishedAt: TIMESTAMPS.productOwnerFinished,
+        durationMs: 90,
+        requestId: 'request-factory-001',
+        executionId: FACTORY_EXECUTION_ID,
+      },
+      {
+        stageId: 'DEVELOPER',
+        stageName: 'Developer',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.productOwnerFinished,
+        finishedAt: TIMESTAMPS.developerFinished,
+        durationMs: 100,
+        requestId: 'request-factory-001',
+        executionId: FACTORY_EXECUTION_ID,
+      },
+      {
+        stageId: 'QA',
+        stageName: 'QA',
+        status: 'SUCCESS',
+        startedAt: TIMESTAMPS.developerFinished,
+        finishedAt: TIMESTAMPS.qaFinished,
+        durationMs: 50,
+        requestId: 'request-factory-001',
+        executionId: FACTORY_EXECUTION_ID,
+      },
+    ],
+    stageMetrics: [
+      {
+        stageId: 'PRODUCT_OWNER',
+        durationMs: 90,
+        promptBytes: 1200,
+        completionBytes: 600,
+        inputTokens: 300,
+        outputTokens: 150,
+        totalTokens: 450,
+        providerLatencyMs: 75,
+        validationDurationMs: 8,
+        artifactGenerationDurationMs: 7,
+      },
+      {
+        stageId: 'DEVELOPER',
+        durationMs: 100,
+        promptBytes: 1800,
+        completionBytes: 900,
+        inputTokens: 450,
+        outputTokens: 225,
+        totalTokens: 675,
+        providerLatencyMs: 80,
+        validationDurationMs: 10,
+        artifactGenerationDurationMs: 10,
+      },
+      {
+        stageId: 'QA',
+        durationMs: 50,
+        promptBytes: 1600,
+        completionBytes: 800,
+        inputTokens: 400,
+        outputTokens: 200,
+        totalTokens: 600,
+        providerLatencyMs: 40,
+        validationDurationMs: 5,
+        artifactGenerationDurationMs: 5,
+      },
+    ],
+    summary: {
+      executionId: FACTORY_EXECUTION_ID,
+      workflowStatus: 'SUCCESS',
+      readinessFinal: 'READY',
+      totalDurationMs: 250,
+      totalTokens: 1725,
+      totalCostEstimate: { amount: 0.021, currency: 'USD', rateCardVersion: '1.0.0' },
+      executedStages: ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'],
+      skippedStages: [],
+      hashes: {
+        executionRequestHash: FACTORY_HASHES.executionRequest,
+        workflowRequestHash: FACTORY_HASHES.workflowRequest,
+        workflowHash: FACTORY_HASHES.common,
+        lineageHash: FACTORY_HASHES.common,
+        provenanceHash: FACTORY_HASHES.common,
+        executionHash: FACTORY_HASHES.common,
+      },
+    },
+    ...overrides,
+  };
+}

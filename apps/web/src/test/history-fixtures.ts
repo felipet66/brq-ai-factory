@@ -36,6 +36,13 @@ export function historyDetail(
     createdAt: '2026-08-07T09:59:59.999Z',
     requestId: 'request-001',
     metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    job: {
+      jobId: `job-${'b'.repeat(32)}`,
+      status: 'SUCCESS',
+      queuedAt: '2026-08-07T09:59:59.000Z',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: '2026-08-07T10:00:00.250Z',
+    },
     hashes: {
       executionRequestHash: HASH,
       workflowRequestHash: HASH,
@@ -86,9 +93,41 @@ export function historyTimeline(
   overrides: Partial<ExecutionHistoryTimeline> = {},
 ): ExecutionHistoryTimeline {
   return {
+    observabilityVersion: '1.0.0',
     revision: 9,
+    executionId: HISTORY_EXECUTION_ID,
+    workflowId: 'workflow-001',
+    requestId: 'request-001',
     status: 'SUCCESS',
     updatedAt: '2026-08-07T10:00:00.250Z',
+    events: [
+      {
+        sequence: 1,
+        type: 'execution.started',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'RUNNING',
+        startedAt: '2026-08-07T10:00:00.000Z',
+        finishedAt: null,
+        durationMs: null,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
+        errorCode: null,
+      },
+      {
+        sequence: 2,
+        type: 'execution.finished',
+        stageId: 'EXECUTION',
+        stageName: 'Execution',
+        status: 'SUCCESS',
+        startedAt: '2026-08-07T10:00:00.000Z',
+        finishedAt: '2026-08-07T10:00:00.250Z',
+        durationMs: 250,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
+        errorCode: null,
+      },
+    ],
     stages: [
       {
         stageId: 'KNOWLEDGE',
@@ -97,6 +136,8 @@ export function historyTimeline(
         startedAt: '2026-08-07T10:00:00.000Z',
         finishedAt: '2026-08-07T10:00:00.010Z',
         durationMs: 10,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
       },
       {
         stageId: 'PRODUCT_OWNER',
@@ -105,6 +146,8 @@ export function historyTimeline(
         startedAt: '2026-08-07T10:00:00.010Z',
         finishedAt: '2026-08-07T10:00:00.100Z',
         durationMs: 90,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
       },
       {
         stageId: 'DEVELOPER',
@@ -113,6 +156,8 @@ export function historyTimeline(
         startedAt: '2026-08-07T10:00:00.100Z',
         finishedAt: '2026-08-07T10:00:00.200Z',
         durationMs: 100,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
       },
       {
         stageId: 'QA',
@@ -121,6 +166,8 @@ export function historyTimeline(
         startedAt: '2026-08-07T10:00:00.200Z',
         finishedAt: '2026-08-07T10:00:00.250Z',
         durationMs: 50,
+        requestId: 'request-001',
+        executionId: HISTORY_EXECUTION_ID,
       },
     ],
     stageMetrics: ['PRODUCT_OWNER', 'DEVELOPER', 'QA'].map((stageId) => ({
@@ -136,10 +183,22 @@ export function historyTimeline(
       artifactGenerationDurationMs: 1,
     })),
     summary: {
+      executionId: HISTORY_EXECUTION_ID,
+      workflowStatus: 'SUCCESS',
+      readinessFinal: 'READY',
+      totalDurationMs: 250,
       totalTokens: 90,
       totalCostEstimate: { amount: 0.001, currency: 'USD', rateCardVersion: '1.0.0' },
       executedStages: ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'],
       skippedStages: [],
+      hashes: {
+        executionRequestHash: HASH,
+        workflowRequestHash: HASH,
+        workflowHash: HASH,
+        lineageHash: HASH,
+        provenanceHash: HASH,
+        executionHash: HASH,
+      },
     },
     ...overrides,
   };

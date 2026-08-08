@@ -14,7 +14,9 @@ const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const KNOWLEDGE_HASH_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 const executionIdSchema = z.string().regex(EXECUTION_ID_PATTERN);
+const jobIdSchema = z.string().regex(/^job-[a-f0-9]{32}$/);
 const executionStatusSchema = z.enum(['CREATED', 'RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']);
+const jobStatusSchema = z.enum(['QUEUED', 'RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']);
 const terminalStatusSchema = z.enum(['RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']);
 const stageStatusSchema = z.enum([
   'PENDING',
@@ -27,6 +29,22 @@ const stageStatusSchema = z.enum([
 const stageIdSchema = z.enum(['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA']);
 const agentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
 const workflowStageSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const observabilityStageIdSchema = z.enum([
+  'EXECUTION',
+  'KNOWLEDGE',
+  'PRODUCT_OWNER',
+  'DEVELOPER',
+  'QA',
+  'WORKFLOW',
+]);
+const observabilityEventTypeSchema = z.enum([
+  'execution.started',
+  'execution.finished',
+  'execution.failed',
+  'stage.started',
+  'stage.finished',
+  'stage.failed',
+]);
 const nullableDateTimeSchema = z.string().datetime({ offset: true }).nullable();
 const nullableMetricSchema = z.number().int().nonnegative().nullable();
 const nullableHashSchema = z.string().regex(HASH_PATTERN).nullable();
@@ -149,6 +167,16 @@ const rawHistoryDetailSchema = rawHistoryItemSchema.extend({
       attempt: z.number().int().positive(),
     })
     .strict(),
+  job: z
+    .object({
+      jobId: jobIdSchema,
+      status: jobStatusSchema,
+      queuedAt: z.string().datetime({ offset: true }),
+      startedAt: nullableDateTimeSchema,
+      finishedAt: nullableDateTimeSchema,
+    })
+    .strict()
+    .nullable(),
   hashes: rawHashesSchema,
   lineage: rawLineageSchema.nullable(),
   provenance: rawProvenanceSchema.nullable(),
@@ -162,6 +190,24 @@ const rawTimelineStageSchema = z
     startedAt: nullableDateTimeSchema,
     finishedAt: nullableDateTimeSchema,
     durationMs: nullableMetricSchema,
+    requestId: z.string().min(1).max(128).nullable(),
+    executionId: executionIdSchema,
+  })
+  .passthrough();
+
+const rawTimelineEventSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    type: observabilityEventTypeSchema,
+    stageId: observabilityStageIdSchema,
+    stageName: z.string().min(1).max(64),
+    status: stageStatusSchema,
+    startedAt: nullableDateTimeSchema,
+    finishedAt: nullableDateTimeSchema,
+    durationMs: nullableMetricSchema,
+    requestId: z.string().min(1).max(128).nullable(),
+    executionId: executionIdSchema,
+    errorCode: z.string().min(1).max(128).nullable(),
   })
   .passthrough();
 
@@ -182,6 +228,10 @@ const rawStageMetricsSchema = z
 
 const rawTimelineSummarySchema = z
   .object({
+    executionId: executionIdSchema,
+    workflowStatus: z.enum(['SUCCESS', 'FAILED', 'CANCELLED']),
+    readinessFinal: z.string().min(1).max(64).nullable(),
+    totalDurationMs: z.number().int().nonnegative(),
     totalTokens: z.number().int().nonnegative(),
     totalCostEstimate: z
       .object({
@@ -193,20 +243,52 @@ const rawTimelineSummarySchema = z
       .nullable(),
     executedStages: z.array(stageIdSchema).max(4),
     skippedStages: z.array(stageIdSchema).max(4),
+    hashes: rawHashesSchema,
   })
   .passthrough();
 
 const rawTimelineSchema = z
   .object({
+    observabilityVersion: semanticVersionSchema,
     executionId: executionIdSchema,
+    workflowId: z.string().min(1).max(128),
+    requestId: z.string().min(1).max(128).nullable(),
     revision: z.number().int().nonnegative(),
     status: terminalStatusSchema,
     updatedAt: z.string().datetime({ offset: true }),
+    events: z.array(rawTimelineEventSchema).max(64),
     stages: z.array(rawTimelineStageSchema).length(4),
     stageMetrics: z.array(rawStageMetricsSchema).length(3),
     summary: rawTimelineSummarySchema.nullable(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((timeline, context) => {
+    timeline.events.forEach((event, index) => {
+      if (event.executionId !== timeline.executionId || event.sequence !== index + 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['events', index],
+          message: 'The timeline event correlation is invalid.',
+        });
+      }
+    });
+    timeline.stages.forEach((stage, index) => {
+      if (stage.executionId !== timeline.executionId) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'executionId'],
+          message: 'The timeline stage correlation is invalid.',
+        });
+      }
+    });
+    if (timeline.summary !== null && timeline.summary.executionId !== timeline.executionId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['summary', 'executionId'],
+        message: 'The timeline summary correlation is invalid.',
+      });
+    }
+  });
 
 const responseMetadataSchema = z
   .object({
@@ -429,6 +511,7 @@ function projectDetail(raw: z.output<typeof rawHistoryDetailSchema>): ExecutionH
     createdAt: raw.createdAt,
     requestId: raw.requestId,
     metadata: Object.freeze({ ...raw.metadata }),
+    job: raw.job === null ? null : Object.freeze({ ...raw.job }),
     hashes: Object.freeze({ ...raw.hashes }),
     lineage,
     provenance,
@@ -440,6 +523,10 @@ function projectTimeline(raw: z.output<typeof rawTimelineSchema>): ExecutionHist
     raw.summary === null
       ? null
       : Object.freeze({
+          executionId: raw.summary.executionId,
+          workflowStatus: raw.summary.workflowStatus,
+          readinessFinal: raw.summary.readinessFinal,
+          totalDurationMs: raw.summary.totalDurationMs,
           totalTokens: raw.summary.totalTokens,
           totalCostEstimate:
             raw.summary.totalCostEstimate === null
@@ -447,11 +534,33 @@ function projectTimeline(raw: z.output<typeof rawTimelineSchema>): ExecutionHist
               : Object.freeze({ ...raw.summary.totalCostEstimate }),
           executedStages: Object.freeze([...raw.summary.executedStages]),
           skippedStages: Object.freeze([...raw.summary.skippedStages]),
+          hashes: Object.freeze({ ...raw.summary.hashes }),
         });
   return Object.freeze({
+    observabilityVersion: raw.observabilityVersion,
     revision: raw.revision,
+    executionId: raw.executionId,
+    workflowId: raw.workflowId,
+    requestId: raw.requestId,
     status: raw.status,
     updatedAt: raw.updatedAt,
+    events: Object.freeze(
+      raw.events.map((event) =>
+        Object.freeze({
+          sequence: event.sequence,
+          type: event.type,
+          stageId: event.stageId,
+          stageName: event.stageName,
+          status: event.status,
+          startedAt: event.startedAt,
+          finishedAt: event.finishedAt,
+          durationMs: event.durationMs,
+          requestId: event.requestId,
+          executionId: event.executionId,
+          errorCode: event.errorCode,
+        }),
+      ),
+    ),
     stages: Object.freeze(
       raw.stages.map((stage) =>
         Object.freeze({
@@ -461,6 +570,8 @@ function projectTimeline(raw: z.output<typeof rawTimelineSchema>): ExecutionHist
           startedAt: stage.startedAt,
           finishedAt: stage.finishedAt,
           durationMs: stage.durationMs,
+          requestId: stage.requestId,
+          executionId: stage.executionId,
         }),
       ),
     ),

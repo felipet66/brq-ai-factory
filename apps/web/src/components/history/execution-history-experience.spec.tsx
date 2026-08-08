@@ -45,10 +45,12 @@ describe('ExecutionHistoryExperience', () => {
     expect(screen.getByText('Customer Portal')).toBeInTheDocument();
     expect(screen.getByText('READY')).toBeInTheDocument();
     expect(screen.getByText('250 ms')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: HISTORY_EXECUTION_ID })).toHaveAttribute(
-      'href',
-      `/executions/${HISTORY_EXECUTION_ID}`,
-    );
+    expect(
+      screen.getByRole('link', { name: `Open Factory View for ${HISTORY_EXECUTION_ID}` }),
+    ).toHaveAttribute('href', `/executions/${HISTORY_EXECUTION_ID}/factory`);
+    expect(
+      screen.getByRole('link', { name: `Open Technical Detail for ${HISTORY_EXECUTION_ID}` }),
+    ).toHaveAttribute('href', `/executions/${HISTORY_EXECUTION_ID}`);
   });
 
   it('loads the next page from the opaque backend cursor', async () => {

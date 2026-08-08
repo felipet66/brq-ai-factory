@@ -47,7 +47,8 @@ brq-ai-factory/
 │   │   ├── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
 │   │   ├── ADR-028-JOB-QUEUE-BOUNDARY.md
 │   │   ├── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
-│   │   └── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
+│   │   ├── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
+│   │   └── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -93,7 +94,8 @@ brq-ai-factory/
 │   ├── 41-EXECUTION_REPOSITORY_FLOW.md
 │   ├── 42-JOB_QUEUE_FLOW.md
 │   ├── 43-AUTHENTICATION_FLOW.md
-│   └── 44-PROMPT_PLAYGROUND_FLOW.md
+│   ├── 44-PROMPT_PLAYGROUND_FLOW.md
+│   └── 45-FACTORY_VISUALIZATION_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -367,15 +369,15 @@ componentes internos do workflow.
 
 ## Frontend MVP
 
-O formulário recebe Project Name e Objective e envia uma única vez `POST /api/executions`. Na
-Sprint 18, o client HTTP recebe o contrato de aceitação do job e consulta sequencialmente
-`GET /api/jobs/[id]`, mantendo no máximo uma leitura em andamento. Polling consulta estado; nunca
-repete o POST nem representa retry do workflow.
+O formulário recebe Project Name e Objective e envia uma única vez `POST /api/executions`. O
+client HTTP recebe o contrato de aceitação do job e mantém no máximo uma leitura em andamento.
+Polling consulta estado; nunca repete o POST nem representa retry do workflow.
 
-A apresentação mostra `Fila → Executando → Finalizado`, encerra polling em qualquer estado
-terminal, aborto ou unmount e, em `SUCCESS`, abre automaticamente `/executions/[executionId]`.
-Falhas e cancelamentos não disparam nova execução. O histórico e o detalhe continuam consumindo
-somente read models HTTP minimizados.
+A Sprint 21 navega para `/executions/[executionId]/factory` assim que o backend aceita o job. A
+Factory consulta o job enquanto ele permanece enfileirado, troca para a Timeline durante a
+execução e atualiza o detalhe uma vez ao observar um estado terminal. Falhas e cancelamentos não
+disparam nova execução. O histórico, o detalhe técnico e a Factory continuam consumindo somente
+read models HTTP minimizados.
 
 Clients HTTP internos continuam sendo os únicos pontos que chamam `fetch`. O Frontend não importa
 Engine, Worker, fila, repository, Orchestrator, agentes, runtime ou internals da API e não renderiza
@@ -396,6 +398,26 @@ e validação manual. Nenhum componente React importa agentes ou workspaces do n
 de inspeção é persistido no browser.
 
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
+
+## Factory Visualization
+
+A Sprint 21 adiciona `/executions/[id]/factory`, uma sala de controle autenticada e read-only para
+acompanhar Knowledge e a linha Product Owner → Developer → QA. `FactoryViewModel` é a única
+fronteira consumida pelos componentes React e deriva deterministicamente de Job, Execution Detail,
+Timeline, Stage Metrics, Lineage e Provenance públicos.
+
+A visualização apresenta somente estados comprovados: `WAITING`, `WORKING`, `COMPLETED`, `FAILED`,
+`CANCELLED`, `SKIPPED` ou `NOT_OBSERVED`. Ela não simula conversa, raciocínio ou fases live de
+validação e geração de artifacts. Handoffs identificam quando foram observados, sem afirmar um
+timestamp autoritativo; artifact cards usam somente hashes reais, porque filename e tipo não
+integram o read model atual.
+
+O polling é phase-aware, sequencial e somente leitura. A Factory não cria endpoint agregado,
+workspace, dependência, evento, persistência ou acesso ao runtime de IA. Ownership continua sendo
+aplicado pela API e pelo Execution Repository.
+
+[Fluxo visual da Factory](knowledge/45-FACTORY_VISUALIZATION_FLOW.md) ·
+[ADR-031](knowledge/ADR/ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md)
 
 ## Execution History & Observability
 

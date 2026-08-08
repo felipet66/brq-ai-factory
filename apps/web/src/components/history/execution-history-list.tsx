@@ -19,13 +19,8 @@ function displayDuration(durationMs: number | null): string {
   return durationMs === null ? 'Not available' : `${durationMs} ms`;
 }
 
-function hasInspectableDetail(item: ExecutionHistoryItem): item is ExecutionHistoryItem & {
-  readonly executionId: string;
-} {
-  return (
-    item.executionId !== null &&
-    (item.status === 'SUCCESS' || item.status === 'FAILED' || item.status === 'CANCELLED')
-  );
+function hasTechnicalDetail(item: ExecutionHistoryItem): boolean {
+  return item.status === 'SUCCESS' || item.status === 'FAILED' || item.status === 'CANCELLED';
 }
 
 export function ExecutionHistoryList({
@@ -60,14 +55,30 @@ export function ExecutionHistoryList({
             {items.map((item) => (
               <tr key={`${item.workflowId}:${item.executionId ?? 'pending'}`}>
                 <td>
-                  {hasInspectableDetail(item) ? (
-                    <Link className={styles.executionLink} href={`/executions/${item.executionId}`}>
-                      <code>{item.executionId}</code>
-                    </Link>
-                  ) : item.executionId === null ? (
+                  {item.executionId === null ? (
                     <span>Pending assignment</span>
                   ) : (
-                    <code>{item.executionId}</code>
+                    <div className={styles.executionIdentity}>
+                      <code>{item.executionId}</code>
+                      <div className={styles.viewLinks}>
+                        <Link
+                          className={styles.executionLink}
+                          href={`/executions/${item.executionId}/factory`}
+                          aria-label={`Open Factory View for ${item.executionId}`}
+                        >
+                          Factory View
+                        </Link>
+                        {hasTechnicalDetail(item) ? (
+                          <Link
+                            className={styles.secondaryLink}
+                            href={`/executions/${item.executionId}`}
+                            aria-label={`Open Technical Detail for ${item.executionId}`}
+                          >
+                            Technical Detail
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
                   )}
                 </td>
                 <td>

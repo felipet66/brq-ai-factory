@@ -66,6 +66,14 @@ export interface ExecutionHistoryProvenance {
   }[];
 }
 
+export interface ExecutionHistoryJob {
+  readonly jobId: string;
+  readonly status: 'QUEUED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  readonly queuedAt: string;
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+}
+
 export interface ExecutionHistoryDetail extends ExecutionHistoryItem {
   readonly executionId: string;
   readonly createdAt: string;
@@ -75,15 +83,41 @@ export interface ExecutionHistoryDetail extends ExecutionHistoryItem {
     readonly contractVersion: string;
     readonly attempt: number;
   };
+  readonly job: ExecutionHistoryJob | null;
   readonly hashes: ExecutionHistoryHashes;
   readonly lineage: ExecutionHistoryLineage | null;
   readonly provenance: ExecutionHistoryProvenance | null;
 }
 
+export interface ExecutionHistoryTimelineEvent {
+  readonly sequence: number;
+  readonly type:
+    | 'execution.started'
+    | 'execution.finished'
+    | 'execution.failed'
+    | 'stage.started'
+    | 'stage.finished'
+    | 'stage.failed';
+  readonly stageId: 'EXECUTION' | 'KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA' | 'WORKFLOW';
+  readonly stageName: string;
+  readonly status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+  readonly durationMs: number | null;
+  readonly requestId: string | null;
+  readonly executionId: string;
+  readonly errorCode: string | null;
+}
+
 export interface ExecutionHistoryTimeline {
+  readonly observabilityVersion: string;
   readonly revision: number;
+  readonly executionId: string;
+  readonly workflowId: string;
+  readonly requestId: string | null;
   readonly status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
   readonly updatedAt: string;
+  readonly events: readonly ExecutionHistoryTimelineEvent[];
   readonly stages: readonly {
     readonly stageId: 'KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
     readonly stageName: string;
@@ -91,6 +125,8 @@ export interface ExecutionHistoryTimeline {
     readonly startedAt: string | null;
     readonly finishedAt: string | null;
     readonly durationMs: number | null;
+    readonly requestId: string | null;
+    readonly executionId: string;
   }[];
   readonly stageMetrics: readonly {
     readonly stageId: 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
@@ -105,6 +141,10 @@ export interface ExecutionHistoryTimeline {
     readonly artifactGenerationDurationMs: number | null;
   }[];
   readonly summary: {
+    readonly executionId: string;
+    readonly workflowStatus: 'SUCCESS' | 'FAILED' | 'CANCELLED';
+    readonly readinessFinal: string | null;
+    readonly totalDurationMs: number;
     readonly totalTokens: number;
     readonly totalCostEstimate: {
       readonly amount: number;
@@ -113,6 +153,7 @@ export interface ExecutionHistoryTimeline {
     } | null;
     readonly executedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
     readonly skippedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
+    readonly hashes: ExecutionHistoryHashes;
   } | null;
 }
 

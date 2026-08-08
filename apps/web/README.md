@@ -15,9 +15,19 @@ O workspace hospeda o Frontend, o adapter HTTP e o composition root da aplicaç�
 
 `src/app/page.tsx` compõe a página como Server Component. A subárvore interativa usa estado local e
 delega toda comunicação a clients HTTP internos. O formulário envia o POST uma única vez, recebe
-`executionId` e `jobId` e consulta `GET /api/jobs/[id]` sequencialmente. A apresentação mostra
-`Fila → Executando → Finalizado`; `SUCCESS` navega para `/executions/[executionId]`, enquanto
-`FAILED` e `CANCELLED` encerram o polling sem novo dispatch.
+`executionId` e `jobId` e navega imediatamente para `/executions/[executionId]/factory`; nenhum
+estado terminal dispara novo dispatch.
+
+A Factory é uma rota autenticada dedicada e mantém `/executions/[id]` como detalhe técnico. Seu
+controller consulta somente `GET /api/jobs/[id]` enquanto o job estiver enfileirado, somente
+`GET /api/executions/[id]/timeline` durante a execução e atualiza o detalhe uma vez ao chegar a um
+estado terminal. `GET /api/executions/[id]` projeta a metadata minimizada do job já persistido para
+permitir deep links sem endpoint agregado ou query adicional.
+
+Componentes da Factory consomem exclusivamente o `FactoryViewModel` frontend, derivado de dados
+públicos reais. Não existem conversa entre agentes, fases live de validação ou artifact generation,
+filenames inferidos ou timestamp autoritativo de handoff. O activity feed usa somente metadata de
+job e eventos tipados da Timeline.
 
 `src/server/runtime.ts` é o composition root lazy da aplicação. Ele monta apenas factories
 públicas e fornece o Engine persistente/observado, o `ExecutionRecordRepository`, o
@@ -49,5 +59,5 @@ permanecem exclusivamente sob responsabilidade do backend.
 
 Consulte `knowledge/38-HTTP_API_FLOW.md`, `knowledge/39-FRONTEND_FLOW.md`,
 `knowledge/41-EXECUTION_REPOSITORY_FLOW.md`, `knowledge/42-JOB_QUEUE_FLOW.md`,
-`knowledge/44-PROMPT_PLAYGROUND_FLOW.md` e os ADRs 024, 025, 027, 028 e 030 para contratos, status
-e fronteiras.
+`knowledge/44-PROMPT_PLAYGROUND_FLOW.md`, `knowledge/45-FACTORY_VISUALIZATION_FLOW.md` e os ADRs 024,
+025, 027, 028, 030 e 031 para contratos, status e fronteiras.

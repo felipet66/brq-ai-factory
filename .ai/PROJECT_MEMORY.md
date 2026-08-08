@@ -2,10 +2,10 @@
 
 ## Estado atual
 
-Sprint 20 — Prompt Playground & Agent Debugger implementada localmente após aprovação arquitetural.
-O Playground é exclusivo para `ADMIN`, usa um runtime de inspeção separado e não executa agentes
-nem acessa AI Provider/OpenAI. O hotfix separado de Structured Outputs do Developer Agent
-permanece isolado. Nenhum item da Sprint 21 foi iniciado.
+Sprint 21 — Live Agent Workspace & Factory Visualization implementada localmente após aprovação
+arquitetural. A Factory é uma projeção visual read-only dos read models públicos e não executa
+agentes nem acessa AI Provider/OpenAI. O hotfix separado de Structured Outputs do Developer Agent
+permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 
 ## Fundação técnica
 
@@ -916,6 +916,52 @@ permanece isolado. Nenhum item da Sprint 21 foi iniciado.
   policy não foram modificados; a única integração nos agentes foi a exportação das projeções
   puras já existentes;
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 21
+  foi iniciado.
+
+## Implementação da Sprint 21
+
+- `/executions/[id]/factory` foi criada como rota autenticada dedicada e mantém
+  `/executions/[id]` como inspeção técnica separada;
+- `FactoryViewModel` é a única fronteira consumida pela apresentação e é produzido por um mapper
+  frontend puro, determinístico, imutável e allowlisted;
+- a sala de controle usa somente Job, Execution Detail, Timeline, Stage Metrics, Lineage e
+  Provenance públicos; componentes React não importam workspaces `@brq/*`, runtime server-side ou
+  assets dos agentes;
+- Knowledge é um estágio de sistema e a linha principal preserva Product Owner → Developer → QA,
+  com estados `WAITING`, `WORKING`, `COMPLETED`, `FAILED`, `CANCELLED`, `SKIPPED` e
+  `NOT_OBSERVED` derivados somente dos estados públicos;
+- nenhuma fase live `VALIDATING` ou `GENERATING_ARTIFACTS` foi criada, pois os eventos existentes
+  não comprovam essas transições; durações correspondentes permanecem métricas retrospectivas;
+- o activity feed usa dicionário fixo sobre timestamps de job e eventos tipados, sem converter
+  prompts, specifications, respostas, Knowledge ou conteúdo do usuário em mensagens;
+- handoffs principais Product Owner → Developer e Developer → QA usam transições reais e lineage;
+  o handoff suplementar Product Owner → QA aparece no detalhe do QA;
+- como não existe `handoffAt`, a interface identifica somente instante observado e sua base, sem
+  apresentá-lo como timestamp autoritativo;
+- cards de artifacts exibem somente agente, índice, outcome e hashes reais de provenance;
+  filename, tipo, media type e conteúdo não são inferidos ou hardcoded;
+- o read model de detalhe recebeu somente a projeção aditiva e minimizada da metadata de job já
+  persistida; nenhum endpoint agregado, migration, repository ou regra de domínio foi criado;
+- depois do aceite do POST, o frontend navega imediatamente à Factory; o polling é phase-aware,
+  sequencial e somente leitura: job na fila, Timeline durante a execução e refresh único do detalhe
+  no estado terminal;
+- a Factory respeita ownership existente: USER lê somente suas execuções, ADMIN possui leitura
+  global e lookup cross-owner de USER permanece `404`;
+- animações são sutis, estado nunca depende somente de cor e `prefers-reduced-motion` remove os
+  movimentos; o layout preserva a ordem semântica no desktop e no mobile;
+- a revisão visual final validou a linha de produção ativa, handoffs, seleção do painel de QA e
+  ausência de overflow horizontal em 1200x900 e 390x844; a navegação mobile foi refinada para
+  preservar as três views em uma única linha;
+- ADR-031 e `knowledge/45-FACTORY_VISUALIZATION_FLOW.md` documentam arquitetura, mapping,
+  handoffs, activity, polling, segurança, componentes e limitações reais;
+- a validação final com Node 24.19.0 aprovou 1.296 testes em 208 arquivos; cobertura do núcleo em
+  93,64% statements, 86,05% branches, 98,55% functions e 94,32% lines, e do host web em 94,13%
+  statements, 86,89% branches, 95,40% functions e 95,53% lines;
+- a suíte web usa execução determinística por arquivo para impedir contenção e falsos timeouts sob
+  instrumentação V8, sem relaxar os timeouts ou as asserções existentes;
+- nenhum agent, prompt asset, schema público, output contract, Business Validation, budget ou
+  runtime de IA foi alterado; nenhuma dependência ou workspace foi adicionado;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 22
   foi iniciado.
 
 ## Fora do escopo confirmado

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
-import { executeWorkflow } from '@/api/execution-client';
+import { enqueueExecution } from '@/api/execution-client';
 import type { ExecutionJobView } from '@/api/execution-contracts';
 
 import { ErrorState } from './error-state';
@@ -16,8 +16,6 @@ type ExecutionViewState =
   | { readonly status: 'error'; readonly message: string; readonly job: ExecutionJobView | null };
 
 const FALLBACK_ERROR_MESSAGE = 'The execution service could not process this request.';
-const FAILED_MESSAGE = 'The workflow finished with a failure.';
-const CANCELLED_MESSAGE = 'The workflow was cancelled.';
 
 function safeErrorMessage(error: unknown): string {
   if (!(error instanceof Error) || error.name !== 'ExecutionClientError') {
@@ -30,10 +28,8 @@ function safeErrorMessage(error: unknown): string {
 function statusAnnouncement(state: ExecutionViewState): string {
   if (state.status === 'idle') return 'Ready to start a workflow.';
   if (state.status === 'error') return '';
-  if (state.job === null || state.job.status === 'QUEUED') return 'Workflow queued.';
-  if (state.job.status === 'RUNNING') return 'Workflow running.';
-  if (state.job.status === 'SUCCESS') return 'Workflow complete. Opening execution details.';
-  return '';
+  if (state.job === null) return 'Submitting workflow.';
+  return 'Workflow queued. Opening Factory View.';
 }
 
 export function ExecutionExperience() {
@@ -60,29 +56,14 @@ export function ExecutionExperience() {
     setState({ status: 'active', job: null });
 
     try {
-      const job = await executeWorkflow(values, {
+      const job = await enqueueExecution(values, {
         signal: controller.signal,
-        onJobUpdate: (update) => {
-          if (controller.signal.aborted) return;
-          latestJob.current = update;
-          setState((current) =>
-            current.status === 'active' ? { status: 'active', job: update } : current,
-          );
-        },
       });
       if (controller.signal.aborted) return;
 
       latestJob.current = job;
-      if (job.status === 'SUCCESS') {
-        setState({ status: 'active', job });
-        router.push(`/executions/${encodeURIComponent(job.executionId)}`);
-        return;
-      }
-      setState({
-        status: 'error',
-        message: job.status === 'CANCELLED' ? CANCELLED_MESSAGE : FAILED_MESSAGE,
-        job,
-      });
+      setState({ status: 'active', job });
+      router.push(`/executions/${encodeURIComponent(job.executionId)}/factory`);
     } catch (error) {
       if (!controller.signal.aborted) {
         setState({

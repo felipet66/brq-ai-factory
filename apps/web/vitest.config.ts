@@ -13,6 +13,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    fileParallelism: false,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
     coverage: {
@@ -27,6 +28,8 @@ export default defineConfig({
         'src/api/**/*.ts',
         'src/components/auth/**/*.tsx',
         'src/components/execution/**/*.tsx',
+        'src/components/factory/**/*.ts',
+        'src/components/factory/**/*.tsx',
         'src/components/history/**/*.tsx',
         'src/components/playground/**/*.tsx',
         'src/server/ai-factory-runtime-configuration.ts',

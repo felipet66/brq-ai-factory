@@ -176,9 +176,14 @@ export function ExecutionHistoryDetail({ execution }: ExecutionHistoryDetailProp
         </section>
       </div>
 
-      <Link className={styles.backLink} href="/executions">
-        Back to execution history
-      </Link>
+      <nav className={styles.detailNavigation} aria-label="Execution views">
+        <Link className={styles.factoryLink} href={`/executions/${execution.executionId}/factory`}>
+          Open Factory View
+        </Link>
+        <Link className={styles.backLink} href="/executions">
+          Back to execution history
+        </Link>
+      </nav>
     </>
   );
 }

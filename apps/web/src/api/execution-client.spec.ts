@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ExecutionClientError, executeWorkflow } from './execution-client';
+import {
+  EXECUTION_POLL_INTERVAL_MS,
+  ExecutionClientError,
+  enqueueExecution,
+  executeWorkflow,
+  getJob,
+} from './execution-client';
 import type { ExecutionJobStatus } from './execution-contracts';
 
 const FIXED_UUID = '123e4567-e89b-42d3-a456-426614174000';
@@ -86,6 +92,55 @@ afterEach(() => {
 });
 
 describe('asynchronous execution HTTP client', () => {
+  it('exposes the canonical polling cadence and accepts an execution without polling', async () => {
+    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(acceptedEnvelope(), 202),
+    );
+
+    const accepted = await enqueueExecution(INPUT, options(fetchImplementation));
+
+    expect(EXECUTION_POLL_INTERVAL_MS).toBe(750);
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      '/api/executions',
+      expect.objectContaining({ method: 'POST', cache: 'no-store' }),
+    );
+    expect(accepted).toEqual({
+      executionId: EXECUTION_ID,
+      jobId: JOB_ID,
+      status: 'QUEUED',
+      queuedAt: null,
+      startedAt: null,
+      finishedAt: null,
+    });
+    expect(Object.isFrozen(accepted)).toBe(true);
+  });
+
+  it('loads exactly one correlated job snapshot without scheduling polling', async () => {
+    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(jobEnvelope('RUNNING')),
+    );
+
+    const job = await getJob(JOB_ID, { fetchImplementation });
+
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(fetchImplementation).toHaveBeenCalledWith(`/api/jobs/${JOB_ID}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    expect(job).toMatchObject({ jobId: JOB_ID, executionId: EXECUTION_ID, status: 'RUNNING' });
+    expect(Object.isFrozen(job)).toBe(true);
+  });
+
+  it('rejects an invalid job identifier before issuing a lookup request', async () => {
+    const fetchImplementation = vi.fn<FetchImplementation>();
+
+    await expect(getJob('../private', { fetchImplementation })).rejects.toMatchObject({
+      code: 'INVALID_JOB_ID',
+    });
+    expect(fetchImplementation).not.toHaveBeenCalled();
+  });
+
   it('posts once, polls sequentially and exposes only immutable job view models', async () => {
     const responses = [
       jsonResponse(acceptedEnvelope(), 202),

@@ -271,6 +271,16 @@ const executionHistoryProvenanceSchema = z
   })
   .strict();
 
+const executionHistoryJobSchema = z
+  .object({
+    jobId: jobIdSchema,
+    status: jobStatusSchema,
+    queuedAt: z.string().datetime({ offset: true }),
+    startedAt: nullableDateTimeSchema,
+    finishedAt: nullableDateTimeSchema,
+  })
+  .strict();
+
 export const executionHistoryDetailSchema = executionHistoryItemSchema
   .extend({
     executionId: executionIdPathSchema,
@@ -283,6 +293,7 @@ export const executionHistoryDetailSchema = executionHistoryItemSchema
         attempt: z.number().int().positive(),
       })
       .strict(),
+    job: executionHistoryJobSchema.nullable(),
     hashes: executionHistoryHashesSchema,
     lineage: executionHistoryLineageSchema.nullable(),
     provenance: executionHistoryProvenanceSchema.nullable(),

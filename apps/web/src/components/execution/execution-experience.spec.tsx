@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { executeWorkflow } from '@/api/execution-client';
+import { enqueueExecution } from '@/api/execution-client';
 import type { ExecutionJobStatus, ExecutionJobView } from '@/api/execution-contracts';
 
 import { ExecutionExperience } from './execution-experience';
@@ -9,9 +9,9 @@ import { ExecutionExperience } from './execution-experience';
 const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: pushMock }) }));
-vi.mock('@/api/execution-client', () => ({ executeWorkflow: vi.fn() }));
+vi.mock('@/api/execution-client', () => ({ enqueueExecution: vi.fn() }));
 
-const executeWorkflowMock = vi.mocked(executeWorkflow);
+const enqueueExecutionMock = vi.mocked(enqueueExecution);
 const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
 
 function job(status: ExecutionJobStatus, started = status !== 'QUEUED'): ExecutionJobView {
@@ -56,17 +56,13 @@ describe('ExecutionExperience asynchronous flow', () => {
   afterEach(cleanup);
 
   beforeEach(() => {
-    executeWorkflowMock.mockReset();
+    enqueueExecutionMock.mockReset();
     pushMock.mockReset();
   });
 
-  it('renders queue and running updates, then navigates on success', async () => {
+  it('enqueues once and navigates immediately to the live Factory View', async () => {
     const pending = deferred<ExecutionJobView>();
-    let publish: ((update: ExecutionJobView) => void) | undefined;
-    executeWorkflowMock.mockImplementationOnce((_input, options) => {
-      publish = options?.onJobUpdate;
-      return pending.promise;
-    });
+    enqueueExecutionMock.mockReturnValueOnce(pending.promise);
     render(<ExecutionExperience />);
 
     expect(screen.getByText(/Ready to coordinate/)).toBeInTheDocument();
@@ -75,49 +71,23 @@ describe('ExecutionExperience asynchronous flow', () => {
     expect(screen.getByRole('heading', { name: 'Workflow queued' })).toBeInTheDocument();
     expect(screen.getByText('Fila')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeDisabled();
-    expect(executeWorkflowMock).toHaveBeenCalledWith(
+    expect(enqueueExecutionMock).toHaveBeenCalledWith(
       {
         projectName: 'Customer Portal',
         objective: 'Let customers track their orders.',
       },
-      { signal: expect.any(AbortSignal), onJobUpdate: expect.any(Function) },
+      { signal: expect.any(AbortSignal) },
     );
 
-    act(() => publish?.(job('QUEUED', false)));
-    expect(screen.getByRole('status')).toHaveTextContent('Workflow queued.');
-
-    act(() => publish?.(job('RUNNING')));
-    expect(screen.getByRole('heading', { name: 'Executing workflow' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Workflow running.');
-    expect(screen.getByText('Em andamento')).toBeInTheDocument();
-
-    await act(async () => pending.resolve(job('SUCCESS')));
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/executions/${EXECUTION_ID}`));
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Workflow complete. Opening execution details.',
+    pending.resolve(job('QUEUED', false));
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith(`/executions/${EXECUTION_ID}/factory`),
     );
-  });
-
-  it.each([
-    ['FAILED', 'The workflow finished with a failure.'],
-    ['CANCELLED', 'The workflow was cancelled.'],
-  ] as const)('shows %s as an error and does not navigate', async (status, message) => {
-    executeWorkflowMock.mockImplementationOnce(async (_input, options) => {
-      options?.onJobUpdate?.(job('RUNNING'));
-      return job(status);
-    });
-    render(<ExecutionExperience />);
-
-    fillAndSubmit();
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(message);
-    expect(screen.getAllByText(status === 'FAILED' ? 'Falhou' : 'Cancelado')).toHaveLength(2);
-    expect(pushMock).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeEnabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Workflow queued. Opening Factory View.');
   });
 
   it('renders a safe client error without navigating', async () => {
-    executeWorkflowMock.mockRejectedValueOnce(clientError('The API is unavailable.'));
+    enqueueExecutionMock.mockRejectedValueOnce(clientError('The API is unavailable.'));
     render(<ExecutionExperience />);
 
     fillAndSubmit();
@@ -127,7 +97,7 @@ describe('ExecutionExperience asynchronous flow', () => {
   });
 
   it('does not expose messages from unexpected errors', async () => {
-    executeWorkflowMock.mockRejectedValueOnce(new Error('internal secret and stack context'));
+    enqueueExecutionMock.mockRejectedValueOnce(new Error('internal secret and stack context'));
     render(<ExecutionExperience />);
 
     fillAndSubmit();
@@ -138,9 +108,9 @@ describe('ExecutionExperience asynchronous flow', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('internal secret');
   });
 
-  it('blocks duplicate submissions while polling', () => {
+  it('blocks duplicate submissions while the enqueue request is pending', () => {
     const pending = deferred<ExecutionJobView>();
-    executeWorkflowMock.mockReturnValueOnce(pending.promise);
+    enqueueExecutionMock.mockReturnValueOnce(pending.promise);
     render(<ExecutionExperience />);
 
     fillAndSubmit();
@@ -148,13 +118,13 @@ describe('ExecutionExperience asynchronous flow', () => {
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
 
-    expect(executeWorkflowMock).toHaveBeenCalledOnce();
+    expect(enqueueExecutionMock).toHaveBeenCalledOnce();
   });
 
-  it('aborts polling when unmounted and ignores later completion', async () => {
+  it('aborts the enqueue request when unmounted and ignores later acceptance', async () => {
     const pending = deferred<ExecutionJobView>();
     let capturedSignal: AbortSignal | undefined;
-    executeWorkflowMock.mockImplementationOnce((_input, options) => {
+    enqueueExecutionMock.mockImplementationOnce((_input, options) => {
       capturedSignal = options?.signal;
       return pending.promise;
     });
@@ -165,8 +135,8 @@ describe('ExecutionExperience asynchronous flow', () => {
     unmount();
     expect(capturedSignal?.aborted).toBe(true);
 
-    pending.resolve(job('SUCCESS'));
-    await waitFor(() => expect(executeWorkflowMock).toHaveBeenCalledOnce());
+    pending.resolve(job('QUEUED', false));
+    await waitFor(() => expect(enqueueExecutionMock).toHaveBeenCalledOnce());
     expect(pushMock).not.toHaveBeenCalled();
   });
 });

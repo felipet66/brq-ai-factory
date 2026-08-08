@@ -49,27 +49,35 @@ describe('execution history presentation components', () => {
     expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled();
   });
 
-  it('does not link a reserved asynchronous execution before terminal detail exists', () => {
-    const active = {
-      ...historyPage().items[0]!,
-      executionId: `execution-${'b'.repeat(32)}`,
-      status: 'CREATED' as const,
-      startedAt: null,
-      finishedAt: null,
-      durationMs: null,
-    };
-    render(
-      <ExecutionHistoryList
-        items={[active]}
-        hasNextPage={false}
-        loadingNextPage={false}
-        onNextPage={vi.fn()}
-      />,
-    );
+  it.each(['CREATED', 'RUNNING'] as const)(
+    'links a %s asynchronous execution to Factory View without exposing technical detail',
+    (status) => {
+      const active = {
+        ...historyPage().items[0]!,
+        executionId: `execution-${'b'.repeat(32)}`,
+        status,
+        startedAt: null,
+        finishedAt: null,
+        durationMs: null,
+      };
+      render(
+        <ExecutionHistoryList
+          items={[active]}
+          hasNextPage={false}
+          loadingNextPage={false}
+          onNextPage={vi.fn()}
+        />,
+      );
 
-    expect(screen.getByText(active.executionId)).toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-  });
+      expect(screen.getByText(active.executionId)).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: `Open Factory View for ${active.executionId}` }),
+      ).toHaveAttribute('href', `/executions/${active.executionId}/factory`);
+      expect(
+        screen.queryByRole('link', { name: `Open Technical Detail for ${active.executionId}` }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it('renders nullable detail metadata honestly', () => {
     render(
@@ -93,6 +101,10 @@ describe('execution history presentation components', () => {
     expect(screen.getByRole('link', { name: 'Back to execution history' })).toHaveAttribute(
       'href',
       '/executions',
+    );
+    expect(screen.getByRole('link', { name: 'Open Factory View' })).toHaveAttribute(
+      'href',
+      `/executions/${historyDetail().executionId}/factory`,
     );
   });
 

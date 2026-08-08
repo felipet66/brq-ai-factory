@@ -26,6 +26,7 @@ export function toExecutionHistoryDetail(record: ExecutionRecord) {
     createdAt: record.createdAt,
     requestId: record.requestId,
     metadata: record.metadata,
+    job: record.job,
     hashes: record.hashes,
     lineage:
       record.lineage === null
