@@ -23,8 +23,12 @@ describe('FactoryWorkspace', () => {
     expect(screen.getByRole('region', { name: 'AI Software Factory control room' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Factory progress' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Knowledge system preflight' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Factory Floor' })).toBeVisible();
     expect(screen.getByRole('list', { name: 'Agent production line' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: /station,/ })).toHaveLength(3);
+    expect(screen.getByRole('img', { name: 'Product Owner visual state: SUCCESS' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Developer visual state: SUCCESS' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'QA visual state: SUCCESS' })).toBeVisible();
     expect(screen.getByRole('group', { name: /PRODUCT_OWNER to DEVELOPER handoff/ })).toBeVisible();
     expect(screen.getByRole('group', { name: /DEVELOPER to QA handoff/ })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Live activity' })).toBeVisible();
@@ -113,6 +117,9 @@ describe('FactoryWorkspace', () => {
 
     expect(screen.getByRole('button', { name: /Developer station, WORKING/ })).toBeVisible();
     expect(screen.getByRole('button', { name: /QA station, WAITING/ })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Product Owner visual state: HANDOFF' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Developer visual state: WORKING' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'QA visual state: WAITING' })).toBeVisible();
     expect(screen.getByText(/last verified factory state remains visible/i)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Reload live data' }));
     expect(reload).toHaveBeenCalledOnce();
@@ -185,6 +192,8 @@ describe('FactoryWorkspace', () => {
 
     expect(screen.getByRole('button', { name: /Developer station, FAILED/ })).toBeVisible();
     expect(screen.getByRole('button', { name: /QA station, SKIPPED/ })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'Developer visual state: ERROR' })).toBeVisible();
+    expect(screen.getByRole('img', { name: 'QA visual state: SKIPPED' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: /Developer station, FAILED/ }));
     expect(screen.getByText('VALIDATION_REJECTED')).toBeVisible();
     expect(screen.queryByText(/analyzing|thinking|reasoning/i)).not.toBeInTheDocument();

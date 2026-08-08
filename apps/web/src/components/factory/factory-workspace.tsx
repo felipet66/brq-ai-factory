@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AgentConnection } from './agent-connection';
 import { AgentDetailPanel } from './agent-detail-panel';
 import { AgentStation } from './agent-station';
+import { resolveAgentVisualState, type AgentVisualPresentation } from './agent-visual-state';
 import { ExecutionHeader } from './execution-header';
 import { FactoryActivityFeed } from './factory-activity-feed';
 import { FactoryProgress } from './factory-progress';
@@ -38,6 +39,7 @@ export function FactoryWorkspace({
 
   const selectedAgent = model.agents.find((agent) => agent.id === selectedId) ?? model.agents[0];
   const primaryHandoffs = model.handoffs.filter((handoff) => handoff.kind === 'PRIMARY');
+  const visualPresentations = model.agents.map((agent) => resolveAgentVisualState(model, agent));
 
   function selectAgent(agentId: FactoryAgentId): void {
     manualSelection.current = true;
@@ -72,22 +74,32 @@ export function FactoryWorkspace({
       <FactoryProgress progress={model.progress} agents={model.agents} />
       <KnowledgeStage knowledge={model.knowledge} />
 
-      <ol className={styles.factoryFloor} aria-label="Agent production line">
-        {model.agents.map((agent, index) => (
-          <AgentSequence
-            key={agent.id}
-            agent={agent}
-            index={index}
-            selected={selectedAgent.id === agent.id}
-            buttonRef={(element) => {
-              stationRefs.current[index] = element;
-            }}
-            onSelect={() => selectAgent(agent.id)}
-            onNavigate={(direction) => navigateFrom(index, direction)}
-            {...(index < primaryHandoffs.length ? { handoff: primaryHandoffs[index]! } : {})}
-          />
-        ))}
-      </ol>
+      <section className={styles.factoryFloorShell} aria-labelledby="factory-floor-heading">
+        <div className={styles.factoryFloorHeading}>
+          <span>
+            <small>Live production line</small>
+            <h2 id="factory-floor-heading">Factory Floor</h2>
+          </span>
+          <span className={styles.evidenceNotice}>Observable execution evidence only</span>
+        </div>
+        <ol className={styles.factoryFloor} aria-label="Agent production line">
+          {model.agents.map((agent, index) => (
+            <AgentSequence
+              key={agent.id}
+              agent={agent}
+              presentation={visualPresentations[index]!}
+              index={index}
+              selected={selectedAgent.id === agent.id}
+              buttonRef={(element) => {
+                stationRefs.current[index] = element;
+              }}
+              onSelect={() => selectAgent(agent.id)}
+              onNavigate={(direction) => navigateFrom(index, direction)}
+              {...(index < primaryHandoffs.length ? { handoff: primaryHandoffs[index]! } : {})}
+            />
+          ))}
+        </ol>
+      </section>
 
       <div className={styles.operationsGrid}>
         <FactoryActivityFeed activity={model.activity} />
@@ -119,6 +131,7 @@ export function FactoryWorkspace({
 
 interface AgentSequenceProps {
   readonly agent: FactoryViewModel['agents'][number];
+  readonly presentation: AgentVisualPresentation;
   readonly index: number;
   readonly selected: boolean;
   readonly buttonRef: (element: HTMLButtonElement | null) => void;

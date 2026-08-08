@@ -76,6 +76,27 @@ Knowledge usa o mesmo status público, mas é um estágio de sistema. Não exist
 `VALIDATING` ou `GENERATING_ARTIFACTS`: os eventos atuais não comprovam essas transições. Métricas
 retrospectivas de validação e artifact generation continuam disponíveis quando registradas.
 
+### Visual asset projection
+
+A Factory Floor aplica uma segunda projeção, exclusivamente visual, sobre os estados autoritativos
+do `FactoryViewModel`. Ela seleciona um asset versionado por papel sem criar novos eventos, atrasar
+transições ou alterar o status técnico exibido:
+
+| Evidência pública                                                      | Estado visual                                | Asset                           |
+| ---------------------------------------------------------------------- | -------------------------------------------- | ------------------------------- |
+| execução ainda não iniciada                                            | `IDLE`                                       | `01-idle.png`                   |
+| estágio futuro durante execução                                        | `WAITING`                                    | `05-waiting.png`                |
+| estágio `WORKING`                                                      | `WORKING`                                    | `03-working.png`                |
+| source concluído e handoff primário `OBSERVED` para target trabalhando | `HANDOFF`                                    | `04-handoff.png`                |
+| estágio `COMPLETED` fora de handoff ativo                              | `SUCCESS`                                    | `06-success.png`                |
+| estágio `FAILED`                                                       | `ERROR`                                      | `07-error.png`                  |
+| `CANCELLED`, `SKIPPED` ou `NOT_OBSERVED`                               | apresentação específica e texto autoritativo | `07-error.png` ou `01-idle.png` |
+
+`02-analyzing.png` permanece deliberadamente reservado. O contrato observacional atual não oferece
+evidência suficiente para distinguir análise de trabalho, e a UI não utiliza timers para simular
+essa granularidade. Developer e QA usam PNGs com fundo transparente preparados visualmente; essa
+normalização não participa de estados, contratos, hashes ou decisões do workflow.
+
 ## Software Factory Line
 
 ```mermaid
@@ -181,7 +202,9 @@ flowchart TB
     WORKSPACE --> HEADER["ExecutionHeader"]
     WORKSPACE --> PROGRESS["FactoryProgress"]
     WORKSPACE --> KNOWLEDGE["KnowledgeStage"]
-    WORKSPACE --> STATIONS["AgentStation × 3"]
+    WORKSPACE --> PROJECTOR["Pure visual-state projector"]
+    PROJECTOR --> STATIONS["AgentStation × 3"]
+    STATIONS --> AVATARS["Versioned role avatars"]
     STATIONS --> CONNECTIONS["AgentConnection"]
     STATIONS --> DETAILS["AgentDetailPanel"]
     DETAILS --> ARTIFACTS["ArtifactCard"]
@@ -195,10 +218,12 @@ independentes de animação e cor.
 
 ## Visual behavior
 
-- `WAITING`: estação estática em slate;
-- `WORKING`: energia amber e pulso discreto;
-- `COMPLETED`: confirmação teal;
-- `FAILED`: destaque vermelho sem flashing;
+- a linha PO → Developer → QA ocupa um único piso visual, com personagens como foco principal;
+- `WAITING`: personagem atenuado e estação estática em slate;
+- `WORKING`: personagem em atividade, energia amber e pulso discreto;
+- `HANDOFF`: pose específica no source somente enquanto o handoff `OBSERVED` possui target trabalhando;
+- `COMPLETED`: personagem de sucesso e confirmação teal;
+- `FAILED`: personagem de erro e destaque vermelho sem flashing;
 - `CANCELLED`, `SKIPPED` e `NOT_OBSERVED`: estados textuais distintos;
 - handoff `OBSERVED`: movimento unidirecional sutil enquanto houver trabalho real no target;
 - `prefers-reduced-motion`: remove pulse, deslocamentos e transições decorativas.
