@@ -3,6 +3,10 @@ import type { ExecutionDispatcher } from '@brq/execution-worker';
 import { jobRecordSchema } from '@brq/job-queue';
 import type { Logger } from '@brq/shared/logger/logger';
 
+import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
+import { assertSameOriginMutation } from '@/server/auth/csrf';
+
+import { createAuthenticatedRouteHandler } from './authenticated-route-handler';
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
@@ -16,15 +20,20 @@ import {
   rejectRequestBody,
 } from './request';
 import { executionAcceptedResponse, executionHistoryPageResponse } from './responses';
-import { createRouteHandler } from './route-handler';
 import { executionHttpRequestSchema } from './schemas';
 
 interface ExecutionsHandlerOptions {
-  readonly getExecutionDispatcher: () => Promise<ExecutionDispatcher>;
-  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
+  readonly authenticate: RequestAuthenticator;
+  readonly getExecutionDispatcher: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionDispatcher>;
+  readonly getExecutionRepository: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
+  readonly expectedOrigin?: string;
 }
 
 function invalidRequest(error: { issues: readonly { path: PropertyKey[] }[] }): HttpApiError {
@@ -37,15 +46,17 @@ function invalidRequest(error: { issues: readonly { path: PropertyKey[] }[] }): 
 }
 
 export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
-  return createRouteHandler<unknown>({
+  return createAuthenticatedRouteHandler<unknown>({
     endpoint: API_ENDPOINTS.EXECUTIONS,
     allowedMethods: ['GET', 'POST'],
     ...options,
-    async operation(request, _context, requestId) {
+    async operation(request, _context, requestId, principal) {
       if (request.method === 'GET') {
         rejectRequestBody(request);
         const query = readExecutionListQuery(request);
-        const repository = await resolveExecutionRepository(options.getExecutionRepository);
+        const repository = await resolveExecutionRepository(() =>
+          options.getExecutionRepository(principal),
+        );
         const page = await executeRepositoryQuery(() => repository.list(query));
         return {
           response: executionHistoryPageResponse(
@@ -58,12 +69,15 @@ export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
         };
       }
 
+      assertSameOriginMutation(request, options.expectedOrigin);
       rejectQueryParameters(request);
       const body = await readExecutionJson(request);
       const parsed = executionHttpRequestSchema.safeParse(body);
       if (!parsed.success) throw invalidRequest(parsed.error);
 
-      const dispatcher = await resolveExecutionDispatcher(options.getExecutionDispatcher);
+      const dispatcher = await resolveExecutionDispatcher(() =>
+        options.getExecutionDispatcher(principal),
+      );
       const job = await dispatchExecution(dispatcher, { ...parsed.data, requestId });
       const validJob = jobRecordSchema.safeParse(job);
       if (!validJob.success || validJob.data.status !== 'QUEUED') {

@@ -3,6 +3,8 @@ import type { JobRecord } from '@brq/job-queue';
 import type { ExecutionObservabilitySnapshot } from '@brq/observability';
 import type { z } from 'zod';
 
+import type { AuthenticatedUser } from '@/api/auth-contracts';
+
 import { HTTP_API_VERSION, type ApiErrorCode } from './constants';
 import type { ApiError } from './contracts';
 import {
@@ -15,6 +17,8 @@ import {
   executionTimelineResponseSchema,
   healthResponseSchema,
   jobLookupResponseSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
 } from './schemas';
 
 export function responseHeaders(requestId: string, allow?: readonly string[]): Headers {
@@ -39,11 +43,14 @@ function jsonResponse(
     readonly status: number;
     readonly requestId: string;
     readonly allow?: readonly string[];
+    readonly setCookies?: readonly string[];
   },
 ): Response {
+  const headers = responseHeaders(options.requestId, options.allow);
+  for (const cookie of options.setCookies ?? []) headers.append('set-cookie', cookie);
   return new Response(JSON.stringify(body), {
     status: options.status,
-    headers: responseHeaders(options.requestId, options.allow),
+    headers,
   });
 }
 
@@ -78,6 +85,30 @@ export function executionAcceptedResponse(job: JobRecord, requestId: string): Re
     errors: [],
   });
   return jsonResponse(body, { status: 202, requestId });
+}
+
+export function loginSuccessResponse(
+  user: AuthenticatedUser,
+  requestId: string,
+  setCookies: readonly string[],
+): Response {
+  const body = loginResponseSchema.parse({
+    success: true,
+    data: { user },
+    metadata: { requestId, apiVersion: HTTP_API_VERSION },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId, setCookies });
+}
+
+export function logoutSuccessResponse(requestId: string, setCookies: readonly string[]): Response {
+  const body = logoutResponseSchema.parse({
+    success: true,
+    data: { loggedOut: true },
+    metadata: { requestId, apiVersion: HTTP_API_VERSION },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId, setCookies });
 }
 
 export function jobLookupResponse(

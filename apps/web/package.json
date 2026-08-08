@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "auth:seed": "node --import tsx seed-auth-users.mjs",
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
@@ -12,6 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@better-auth/prisma-adapter": "1.6.26",
     "@brq/agent-runner": "0.1.0",
     "@brq/ai-provider": "0.1.0",
     "@brq/artifact-generator": "0.1.0",
@@ -23,12 +25,14 @@
     "@brq/knowledge-loader": "0.1.0",
     "@brq/observability": "0.1.0",
     "@brq/orchestrator": "0.1.0",
-    "@brq/product-owner-agent": "0.1.0",
     "@brq/prisma": "0.1.0",
+    "@brq/product-owner-agent": "0.1.0",
     "@brq/prompt-builder": "0.1.0",
     "@brq/qa-agent": "0.1.0",
     "@brq/response-validator": "0.1.0",
     "@brq/shared": "0.1.0",
+    "@node-rs/argon2": "2.0.2",
+    "better-auth": "1.6.26",
     "next": "^16.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -41,11 +45,12 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitest/coverage-v8": "^4.1.10",
     "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.10",
     "jsdom": "^30.0.1",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.11",
     "vitest": "^4.1.10"
   }
 }

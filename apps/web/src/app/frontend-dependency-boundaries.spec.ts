@@ -26,13 +26,10 @@ describe('Frontend dependency boundary', () => {
     ...productionFiles(apiRoot),
     ...productionFiles(componentsRoot),
     ...productionFiles(configRoot),
-    path.resolve(process.cwd(), 'src/app/page.tsx'),
   ];
   const componentFiles = productionFiles(componentsRoot);
-  const frontendSource = sourceOf([
-    path.resolve(process.cwd(), 'src/app/page.tsx'),
-    ...componentFiles,
-  ]);
+  const homePage = path.resolve(process.cwd(), 'src/app/page.tsx');
+  const frontendSource = sourceOf([homePage, ...componentFiles]);
   const browserSource = sourceOf(browserFiles);
 
   it('depends only on the HTTP client projection', () => {
@@ -76,5 +73,25 @@ describe('Frontend dependency boundary', () => {
     expect(clientEntries.map((filename) => path.basename(filename))).toEqual([
       'execution-experience.tsx',
     ]);
+  });
+
+  it('keeps authentication at the server page boundary', () => {
+    const protectedPages = [
+      homePage,
+      path.resolve(process.cwd(), 'src/app/executions/page.tsx'),
+      path.resolve(process.cwd(), 'src/app/executions/[id]/page.tsx'),
+      path.resolve(process.cwd(), 'src/app/profile/page.tsx'),
+    ];
+
+    for (const filename of protectedPages) {
+      const source = readFileSync(filename, 'utf8');
+      expect(source).toContain("from '@/server/auth/session'");
+      expect(source).toContain('requireAuthenticatedUser()');
+      expect(source).not.toMatch(/from ['"]@brq\//);
+      expect(source).not.toMatch(/from ['"]@\/app\/api\//);
+      expect(source).not.toMatch(/from ['"][^'"]*(?:core|agents|prisma)\//);
+      expect(source).not.toMatch(/\bfetch\s*\(/);
+      expect(source).not.toContain('dangerouslySetInnerHTML');
+    }
   });
 });

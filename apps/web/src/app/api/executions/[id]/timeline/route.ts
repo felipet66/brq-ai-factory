@@ -1,10 +1,14 @@
-import { getExecutionRepository } from '@/server/runtime';
+import { authenticateRequest } from '@/server/auth/session';
+import { getExecutionRepositoryForRead } from '@/server/runtime';
 
 import { createExecutionTimelineHandler } from '../../../_lib/execution-timeline-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createExecutionTimelineHandler({ getExecutionRepository });
+const handler = createExecutionTimelineHandler({
+  authenticate: authenticateRequest,
+  getExecutionRepository: getExecutionRepositoryForRead,
+});
 
 export const GET = handler;
 export const POST = handler;

@@ -18,11 +18,44 @@ import {
   createExecutionResultFixture,
 } from './testing/execution-record-fixtures';
 
+const OWNER_USER_ID = 'user-execution-owner';
+const OTHER_USER_ID = 'user-other-owner';
+
+function ownerRepository(context: DatabaseTestContext, userId = OWNER_USER_ID) {
+  return new PrismaExecutionRecordRepository(context.client, { access: 'OWNER', userId });
+}
+
+function internalRepository(context: DatabaseTestContext) {
+  return new PrismaExecutionRecordRepository(context.client, { access: 'INTERNAL' });
+}
+
+function globalReadRepository(context: DatabaseTestContext) {
+  return new PrismaExecutionRecordRepository(context.client, { access: 'GLOBAL_READ_ONLY' });
+}
+
 describe('Prisma execution record repository', () => {
   let context: DatabaseTestContext;
 
   beforeEach(async () => {
     context = await createDatabaseTestContext();
+    await context.client.user.createMany({
+      data: [
+        {
+          id: OWNER_USER_ID,
+          email: 'owner@example.com',
+          name: 'Execution Owner',
+          role: 'USER',
+          updatedAt: new Date('2026-08-07T12:00:00.000Z'),
+        },
+        {
+          id: OTHER_USER_ID,
+          email: 'other@example.com',
+          name: 'Other Owner',
+          role: 'USER',
+          updatedAt: new Date('2026-08-07T12:00:00.000Z'),
+        },
+      ],
+    });
   });
 
   afterEach(async () => {
@@ -30,7 +63,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('round-trips normalized job metadata across repository instances', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     await repository.createQueued({
       workflowId: 'workflow-001',
       executionId: EXECUTION_RECORD_FIXTURE_ID,
@@ -60,7 +93,7 @@ describe('Prisma execution record repository', () => {
       finishedAt: '2026-08-07T12:00:00.060Z',
     });
 
-    const restarted = new PrismaExecutionRecordRepository(context.client);
+    const restarted = ownerRepository(context);
     const restored = await restarted.findByJobId(EXECUTION_JOB_FIXTURE_ID);
     expect(restored).toMatchObject({
       executionId: EXECUTION_RECORD_FIXTURE_ID,
@@ -78,7 +111,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('round-trips a normalized terminal aggregate across repository instances', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     await repository.create({
       workflowId: 'workflow-001',
       requestId: 'request-001',
@@ -98,7 +131,7 @@ describe('Prisma execution record repository', () => {
       createExecutionObservationFixture(),
     );
 
-    const restartedRepository = new PrismaExecutionRecordRepository(context.client);
+    const restartedRepository = ownerRepository(context);
     const restored = await restartedRepository.findByExecutionId(completed.executionId!);
     const page = await restartedRepository.list({
       status: 'FAILED',
@@ -119,7 +152,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('normalizes complete lineage and provenance without persisting specifications or artifacts', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     const request = createObservabilityRequest();
     const result = await createSuccessfulExecutionResult(request);
     const history = createInMemoryExecutionHistory({ now: () => Date.parse(result.finishedAt) });
@@ -162,7 +195,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('persists observation revisions by replacing normalized children atomically', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     await repository.create({
       workflowId: 'workflow-001',
       requestId: null,
@@ -192,7 +225,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('rolls back a conflicting terminal write without partial lifecycle data', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     for (const workflowId of ['workflow-001', 'workflow-002']) {
       await repository.create({
         workflowId,
@@ -228,7 +261,7 @@ describe('Prisma execution record repository', () => {
   });
 
   it('paginates in descending creation order using a stable cursor', async () => {
-    const repository = new PrismaExecutionRecordRepository(context.client);
+    const repository = ownerRepository(context);
     for (const [index, workflowId] of ['workflow-a', 'workflow-b', 'workflow-c'].entries()) {
       await repository.create({
         workflowId,
@@ -247,5 +280,152 @@ describe('Prisma execution record repository', () => {
     expect(first.nextCursor).toBe('workflow-b');
     expect(second.items.map((record) => record.workflowId)).toEqual(['workflow-a']);
     expect(second.nextCursor).toBeNull();
+  });
+
+  it('persists an opaque owner on the execution root without duplicating it on the job', async () => {
+    const repository = ownerRepository(context);
+    const record = await repository.createQueued({
+      workflowId: 'workflow-owned',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: null,
+      traceId: null,
+      projectName: 'Owned execution',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+
+    const persisted = await context.client.executionRecord.findUniqueOrThrow({
+      where: { workflowId: 'workflow-owned' },
+      select: { userId: true, job: true },
+    });
+
+    expect(persisted.userId).toBe(OWNER_USER_ID);
+    expect(persisted.job).not.toBeNull();
+    expect('userId' in persisted.job!).toBe(false);
+    expect(JSON.stringify(record)).not.toContain(OWNER_USER_ID);
+    await expect(
+      context.client.user.delete({ where: { id: OWNER_USER_ID } }),
+    ).rejects.toMatchObject({ code: 'P2003' });
+  });
+
+  it('isolates owner lookups, lifecycle mutations, lists and cursors', async () => {
+    const owner = ownerRepository(context);
+    const other = ownerRepository(context, OTHER_USER_ID);
+    const otherExecutionId = `execution-${'b'.repeat(32)}`;
+    const otherJobId = `job-${'b'.repeat(32)}`;
+
+    await owner.createQueued({
+      workflowId: 'workflow-owner',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: null,
+      traceId: null,
+      projectName: 'Owner project',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await other.createQueued({
+      workflowId: 'workflow-other',
+      executionId: otherExecutionId,
+      jobId: otherJobId,
+      requestId: null,
+      traceId: null,
+      projectName: 'Other project',
+      queuedAt: '2026-08-07T12:00:00.001Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+
+    await expect(owner.findByExecutionId(otherExecutionId)).resolves.toBeNull();
+    await expect(owner.findByJobId(otherJobId)).resolves.toBeNull();
+    await expect(owner.findByWorkflowId('workflow-other')).resolves.toBeNull();
+    await expect(
+      owner.markJobTerminal({
+        jobId: otherJobId,
+        status: 'CANCELLED',
+        finishedAt: '2026-08-07T12:00:00.010Z',
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND });
+    await expect(owner.list()).resolves.toMatchObject({
+      items: [{ workflowId: 'workflow-owner' }],
+    });
+    await expect(owner.list({ cursor: 'workflow-other' })).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+    });
+    await expect(other.findByExecutionId(otherExecutionId)).resolves.toMatchObject({
+      workflowId: 'workflow-other',
+    });
+  });
+
+  it('keeps creation owner-bound while exposing separate internal and global-read capabilities', async () => {
+    const owner = ownerRepository(context);
+    const internal = internalRepository(context);
+    const globalRead = globalReadRepository(context);
+    const input = {
+      workflowId: 'workflow-capability',
+      requestId: null,
+      traceId: null,
+      projectName: 'Capability project',
+      createdAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 as const },
+    };
+
+    await expect(internal.create(input)).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+    });
+    await expect(
+      internal.createQueued({
+        workflowId: input.workflowId,
+        requestId: input.requestId,
+        traceId: input.traceId,
+        projectName: input.projectName,
+        metadata: input.metadata,
+        executionId: EXECUTION_RECORD_FIXTURE_ID,
+        jobId: EXECUTION_JOB_FIXTURE_ID,
+        queuedAt: input.createdAt,
+      }),
+    ).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+    });
+    await owner.create(input);
+    await expect(internal.findByWorkflowId(input.workflowId)).resolves.toMatchObject({
+      status: 'CREATED',
+    });
+    await internal.markRunning({
+      workflowId: input.workflowId,
+      startedAt: '2026-08-07T12:00:00.010Z',
+    });
+    await expect(internal.findByExecutionId(EXECUTION_RECORD_FIXTURE_ID)).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+    });
+    await expect(internal.findByJobId(EXECUTION_JOB_FIXTURE_ID)).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+    });
+    await expect(internal.list()).rejects.toMatchObject({
+      code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+    });
+    await expect(globalRead.findByWorkflowId(input.workflowId)).resolves.toMatchObject({
+      status: 'RUNNING',
+    });
+    await expect(globalRead.list()).resolves.toMatchObject({
+      items: [{ workflowId: input.workflowId }],
+    });
+    await expect(
+      globalRead.create({ ...input, workflowId: 'workflow-global-create' }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION });
+    await expect(
+      globalRead.markRunning({
+        workflowId: input.workflowId,
+        startedAt: '2026-08-07T12:00:00.020Z',
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION });
+  });
+
+  it('rejects malformed opaque owner scopes at construction', () => {
+    expect(
+      () => new PrismaExecutionRecordRepository(context.client, { access: 'OWNER', userId: ' ' }),
+    ).toThrowError(
+      expect.objectContaining({ code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION }),
+    );
   });
 });

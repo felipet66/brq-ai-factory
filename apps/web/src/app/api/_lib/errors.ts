@@ -1,4 +1,5 @@
 import { API_ERROR_CODES, type ApiErrorCode } from './constants';
+import { AuthenticationError } from '@/server/auth/errors';
 
 export interface HttpApiErrorOptions {
   readonly code: ApiErrorCode;
@@ -29,6 +30,35 @@ export class HttpApiError extends Error {
 
 export function mapTechnicalError(error: unknown): HttpApiError {
   if (error instanceof HttpApiError) return error;
+
+  if (error instanceof AuthenticationError) {
+    switch (error.kind) {
+      case 'AUTHENTICATION_REQUIRED':
+        return new HttpApiError(error.message, {
+          code: API_ERROR_CODES.AUTHENTICATION_REQUIRED,
+          status: 401,
+          cause: error,
+        });
+      case 'AUTHORIZATION_DENIED':
+        return new HttpApiError(error.message, {
+          code: API_ERROR_CODES.AUTHORIZATION_DENIED,
+          status: 403,
+          cause: error,
+        });
+      case 'CSRF_REJECTED':
+        return new HttpApiError(error.message, {
+          code: API_ERROR_CODES.CSRF_REJECTED,
+          status: 403,
+          cause: error,
+        });
+      case 'AUTHENTICATION_UNAVAILABLE':
+        return new HttpApiError(error.message, {
+          code: API_ERROR_CODES.AUTHENTICATION_UNAVAILABLE,
+          status: 503,
+          cause: error,
+        });
+    }
+  }
 
   return new HttpApiError('Ocorreu um erro interno.', {
     code: API_ERROR_CODES.INTERNAL_ERROR,

@@ -1,10 +1,18 @@
-import { getExecutionDispatcher, getExecutionRepository } from '@/server/runtime';
+import { authenticateRequest } from '@/server/auth/session';
+import {
+  getExecutionDispatcherForPrincipal,
+  getExecutionRepositoryForRead,
+} from '@/server/runtime';
 
 import { createExecutionsHandler } from '../_lib/executions-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createExecutionsHandler({ getExecutionDispatcher, getExecutionRepository });
+const handler = createExecutionsHandler({
+  authenticate: authenticateRequest,
+  getExecutionDispatcher: getExecutionDispatcherForPrincipal,
+  getExecutionRepository: getExecutionRepositoryForRead,
+});
 
 export const GET = handler;
 export const POST = handler;

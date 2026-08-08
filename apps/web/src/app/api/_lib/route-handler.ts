@@ -12,12 +12,15 @@ export interface RouteOperationResult {
   readonly jobId?: string;
 }
 
-interface RouteHandlerOptions<Context> {
+export interface RouteHandlerBaseOptions {
   readonly endpoint: string;
   readonly allowedMethods: readonly string[];
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
+}
+
+interface RouteHandlerOptions<Context> extends RouteHandlerBaseOptions {
   readonly operation: (
     request: Request,
     context: Context,

@@ -3,6 +3,8 @@ import type { ExecutionDispatcher } from '@brq/execution-worker';
 import type { Logger } from '@brq/shared/logger/logger';
 import type { z } from 'zod';
 
+import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
+
 import type {
   apiErrorSchema,
   errorResponseSchema,
@@ -14,6 +16,9 @@ import type {
   executionTimelineResponseSchema,
   healthResponseSchema,
   jobLookupResponseSchema,
+  loginHttpRequestSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
 } from './schemas';
 
 export type ExecutionHttpRequest = z.infer<typeof executionHttpRequestSchema>;
@@ -26,12 +31,20 @@ export type ExecutionHistoryPageResponse = z.infer<typeof executionHistoryPageRe
 export type ExecutionHistoryDetailResponse = z.infer<typeof executionHistoryDetailResponseSchema>;
 export type ExecutionTimelineResponse = z.infer<typeof executionTimelineResponseSchema>;
 export type JobLookupResponse = z.infer<typeof jobLookupResponseSchema>;
+export type LoginHttpRequest = z.infer<typeof loginHttpRequestSchema>;
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
+export type LogoutResponse = z.infer<typeof logoutResponseSchema>;
 
 export type RequestIdFactory = () => string;
 
 export interface HttpAdapterDependencies {
-  readonly getExecutionDispatcher: () => Promise<ExecutionDispatcher>;
-  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
+  readonly authenticate: RequestAuthenticator;
+  readonly getExecutionDispatcher: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionDispatcher>;
+  readonly getExecutionRepository: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;

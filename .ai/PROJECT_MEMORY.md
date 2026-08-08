@@ -2,9 +2,10 @@
 
 ## Estado atual
 
-Sprint 18 — Asynchronous Execution Queue concluída, aprovada e commitada. O hotfix separado de
-Structured Outputs do Developer Agent adiciona diagnóstico seguro DEVELOPMENT-only e reprodução
-local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
+Sprint 19 — Authentication & Authorization concluída localmente após aprovação arquitetural.
+Better Auth foi mantido depois de reavaliação com Auth.js, e `/profile` integra a entrega. O hotfix
+separado de Structured Outputs do Developer Agent permanece isolado. Nenhum item da Sprint 20 foi
+iniciado e nenhuma chamada real à OpenAI integra esta Sprint.
 
 ## Fundação técnica
 
@@ -34,6 +35,10 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
   concorrência;
 - Execution Worker como único consumidor sequencial, dependente apenas das APIs públicas da fila,
   do Engine e do Execution Repository;
+- Better Auth como infraestrutura exclusiva do host Next.js para email/senha e sessões Prisma,
+  sem imports em workspaces funcionais ou de domínio;
+- autorização server-side com roles `ADMIN` e `USER`, ownership obrigatório de
+  `ExecutionRecord` e herança de owner por `ExecutionJob`;
 - ESLint, Prettier, Husky e lint-staged;
 - Vitest para testes unitários e smoke;
 - CI limitada a lint, typecheck, testes, Prisma validate e build;
@@ -47,6 +52,10 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 - logger JSON mínimo com redação de campos sensíveis;
 - nenhuma variável secreta exposta ao frontend.
 - configuração OpenAI validada de forma lazy e exclusivamente server-side.
+- sessões de autenticação persistidas por oito horas, sem renovação automática, usando cookie
+  host-only, `httpOnly`, `sameSite=lax` e `secure` em produção;
+- passwords protegidos por Argon2id e credenciais de seed recebidas somente por variáveis de
+  ambiente;
 
 ## Shared Layer
 
@@ -65,7 +74,8 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 ## Persistence Layer
 
 - `prisma` registrado como workspace interno `@brq/prisma`;
-- modelos Project, Execution, AgentExecution, Artifact, PromptVersion e Log;
+- modelos Project, Execution, AgentExecution, Artifact, PromptVersion e Log, além dos modelos
+  técnicos User, Session, Account e Verification exigidos pela autenticação;
 - migration `20260805013404_init_persistence`;
 - ports de repositories em `shared` e implementações concretas em `prisma`;
 - estados persistidos como strings e validados pelos schemas canônicos;
@@ -75,7 +85,10 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 - PromptVersion imutável, exceto por status, com hash SHA-256;
 - relações históricas com delete `Restrict` e correlações opcionais de Log com `SetNull`;
 - logs append-only com IDs de correlação;
-- nenhum seed ou hard delete no MVP;
+- nenhum hard delete no MVP; o seed local de autenticação é explícito e nunca possui senha
+  versionada;
+- `ExecutionRecord.userId` é obrigatório; `ExecutionJob` deriva ownership pela relação e não
+  duplica a coluna;
 - testes de integração aplicam migrations em bancos SQLite temporários isolados.
 
 ## AI Provider Layer
@@ -245,6 +258,9 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
   composição persistente externa ao Engine, o modelo Prisma normalizado e as consultas duráveis;
 - ADR-028 registra a fila FIFO local e substituível, o Worker sequencial, a reserva de identidade
   pelo Engine, a metadata normalizada do job, o contrato HTTP assíncrono e a ausência de retry;
+- ADR-029 registra Better Auth após reavaliação com Auth.js, a fronteira de identidade no host,
+  sessões Prisma revogáveis, Argon2id, roles `ADMIN` e `USER`, ownership e proteção de API e
+  Frontend;
 - build de produção utiliza Webpack porque o Turbopack tentou abrir uma porta interna não permitida no ambiente de execução;
 - desenvolvimento local permanece com o padrão Turbopack do Next.js.
 
@@ -820,6 +836,40 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 - format, format check, lint, typecheck, testes, coverage, Prisma validate, build de produção e
   `git diff --check` foram aprovados com Node.js 24.19.0.
 
+## Implementação da Sprint 19
+
+- Better Auth foi escolhido novamente depois de comparação explícita com Auth.js: Credentials do
+  Auth.js não persiste credenciais por padrão e exigiria código sensível adicional para combinar
+  email/senha com as database sessions revogáveis adotadas;
+- Better Auth e seu adapter Prisma ficam restritos a `apps/web`; nenhum workspace funcional ou de
+  domínio importa identidade, cookie, sessão ou role;
+- o schema adiciona User, Session, Account e Verification e torna `ExecutionRecord.userId`
+  obrigatório; `ExecutionJob` herda o mesmo owner por relação, sem duplicar `userId`;
+- registros históricos recebem um usuário técnico legado determinístico durante a migration, sem
+  criar uma conta autenticável;
+- passwords usam Argon2id com 19.456 KiB de memória, duas iterações e paralelismo 1; passwords e
+  hashes nunca integram logs, sessão, resposta HTTP ou estado React;
+- sessões Prisma possuem duração absoluta de oito horas, sem refresh automático; cookies são
+  `httpOnly`, `sameSite=lax`, host-only e `secure` em produção, com origem exata allowlisted;
+- `USER` cria e lê apenas os próprios registros; `ADMIN` cria como seu próprio owner e possui
+  leitura global explícita; lookup cross-owner de USER retorna `404` para reduzir enumeração;
+- o Execution Repository recebe capabilities `OWNER`, `GLOBAL_READ_ONLY` ou `INTERNAL`, mas não
+  interpreta roles ou sessões; a aplicação deriva a capability do principal autenticado;
+- login e logout usam envelopes HTTP próprios; endpoints de execução, histórico, timeline e job
+  passam a exigir sessão, enquanto o health check permanece público;
+- o Frontend adiciona `/login`, current user, logout, proteção server-side e `/profile`; a página de
+  perfil exibe somente ID, nome, email, role e timestamps seguros;
+- o seed local usa `admin@example.local` e `user@example.local`, exigindo
+  `BRQ_SEED_ADMIN_PASSWORD` e `BRQ_SEED_USER_PASSWORD`; nenhuma senha padrão é versionada;
+- `BETTER_AUTH_SECRET` e `BRQ_APP_ORIGIN` são configurações obrigatórias do host e falham de modo
+  fechado quando inválidas;
+- ADR-029 e `knowledge/43-AUTHENTICATION_FLOW.md` registram login, sessão, autorização, ownership,
+  API protegida e Frontend autenticado em seis diagramas Mermaid;
+- rate limiting, lockout, MFA, OAuth, SSO, password reset e administração completa de usuários
+  permanecem riscos ou itens futuros, não funcionalidades implícitas desta Sprint;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 20
+  foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
@@ -830,6 +880,7 @@ local sem provider; permanece sem commit. Nenhum item da Sprint 19 foi iniciado.
 - dashboard completo, artifacts completos e logs no frontend;
 - persistência de conteúdo funcional dos agentes;
 - revisão humana integrada ao fluxo;
-- autenticação e autorização;
+- OAuth, SSO, LDAP, MFA, Organizations, Teams, permission engine, API keys, rate limit, billing e
+  audit log completo;
 - filas externas, workers distribuídos, persistência distribuída e observabilidade distribuída;
 - deploy e configuração de Vercel.

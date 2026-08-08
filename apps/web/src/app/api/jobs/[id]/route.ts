@@ -1,10 +1,14 @@
-import { getExecutionRepository } from '@/server/runtime';
+import { authenticateRequest } from '@/server/auth/session';
+import { getExecutionRepositoryForRead } from '@/server/runtime';
 
 import { createJobLookupHandler } from '../../_lib/job-lookup-handler';
 
 export const runtime = 'nodejs';
 
-const handler = createJobLookupHandler({ getExecutionRepository });
+const handler = createJobLookupHandler({
+  authenticate: authenticateRequest,
+  getExecutionRepository: getExecutionRepositoryForRead,
+});
 
 export const GET = handler;
 export const POST = handler;

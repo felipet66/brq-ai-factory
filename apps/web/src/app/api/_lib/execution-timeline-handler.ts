@@ -1,13 +1,15 @@
 import type { ExecutionRecordRepository } from '@brq/execution-repository';
 import type { Logger } from '@brq/shared/logger/logger';
 
+import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
+
+import { createAuthenticatedRouteHandler } from './authenticated-route-handler';
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
 import { executeRepositoryQuery, resolveExecutionRepository } from './execution-repository';
 import { rejectQueryParameters } from './request';
 import { executionTimelineResponse } from './responses';
-import { createRouteHandler } from './route-handler';
 import { executionTimelineIdPathSchema } from './schemas';
 
 export interface ExecutionTimelineContext {
@@ -15,18 +17,21 @@ export interface ExecutionTimelineContext {
 }
 
 interface ExecutionTimelineHandlerOptions {
-  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
+  readonly authenticate: RequestAuthenticator;
+  readonly getExecutionRepository: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
 }
 
 export function createExecutionTimelineHandler(options: ExecutionTimelineHandlerOptions) {
-  return createRouteHandler<ExecutionTimelineContext>({
+  return createAuthenticatedRouteHandler<ExecutionTimelineContext>({
     endpoint: API_ENDPOINTS.EXECUTION_TIMELINE,
     allowedMethods: ['GET'],
     ...options,
-    async operation(request, context, requestId) {
+    async operation(request, context, requestId, principal) {
       rejectQueryParameters(request);
       const { id } = await context.params;
       if (!executionTimelineIdPathSchema.safeParse(id).success) {
@@ -36,7 +41,9 @@ export function createExecutionTimelineHandler(options: ExecutionTimelineHandler
           path: 'id',
         });
       }
-      const repository = await resolveExecutionRepository(options.getExecutionRepository);
+      const repository = await resolveExecutionRepository(() =>
+        options.getExecutionRepository(principal),
+      );
       const record = await executeRepositoryQuery(() =>
         id.startsWith('execution-')
           ? repository.findByExecutionId(id)

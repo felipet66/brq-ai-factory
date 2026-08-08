@@ -75,10 +75,7 @@ async function readBytes(request: Request, maxBytes: number): Promise<Uint8Array
   return bytes;
 }
 
-export async function readExecutionJson(
-  request: Request,
-  maxBytes = MAX_EXECUTION_PAYLOAD_BYTES,
-): Promise<unknown> {
+export async function readJsonBody(request: Request, maxBytes: number): Promise<unknown> {
   requireJsonContentType(request);
   requireIdentityEncoding(request);
   assertContentLength(request, maxBytes);
@@ -104,6 +101,13 @@ export async function readExecutionJson(
       cause: error,
     });
   }
+}
+
+export async function readExecutionJson(
+  request: Request,
+  maxBytes = MAX_EXECUTION_PAYLOAD_BYTES,
+): Promise<unknown> {
+  return readJsonBody(request, maxBytes);
 }
 
 export function rejectQueryParameters(request: Request): void {

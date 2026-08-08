@@ -42,6 +42,8 @@ import { createDevelopmentResponseValidator } from '@brq/response-validator/deve
 import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
+import type { AuthenticatedPrincipal } from './auth/contracts';
+
 export const AI_FACTORY_PROMPT_BUILDER_MAX_BYTES = 512 * 1024;
 
 export interface ApplicationRuntimeOptions {
@@ -61,6 +63,11 @@ export interface ApplicationQueueRuntime {
   readonly dispatcher: ExecutionDispatcher;
 }
 
+export interface ApplicationWorkerRuntime {
+  readonly queue: JobQueue;
+  readonly worker: ExecutionWorker;
+}
+
 export interface ApplicationQueueRuntimeOptions {
   readonly engine: ExecutionEngine;
   readonly repository: ExecutionRecordRepository;
@@ -69,9 +76,31 @@ export interface ApplicationQueueRuntimeOptions {
   readonly now?: () => number;
 }
 
+export interface PrincipalExecutionDispatcherOptions {
+  readonly principal: AuthenticatedPrincipal;
+  readonly client: DatabaseClient;
+  readonly queue: JobQueue;
+  readonly logger?: Logger;
+  readonly now?: () => number;
+}
+
 export function createApplicationQueueRuntime(
   options: ApplicationQueueRuntimeOptions,
 ): ApplicationQueueRuntime {
+  const runtime = composeApplicationWorkerRuntime(options);
+  const dispatcher = createExecutionDispatcher({
+    queue: runtime.queue,
+    repository: options.repository,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+  runtime.worker.start();
+  return Object.freeze({ ...runtime, dispatcher });
+}
+
+function composeApplicationWorkerRuntime(
+  options: ApplicationQueueRuntimeOptions,
+): ApplicationWorkerRuntime {
   const queue =
     options.queue ??
     createInMemoryJobQueue({
@@ -84,14 +113,15 @@ export function createApplicationQueueRuntime(
     repository: options.repository,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
-  const dispatcher = createExecutionDispatcher({
-    queue,
-    repository: options.repository,
-    ...(options.logger === undefined ? {} : { logger: options.logger }),
-    ...(options.now === undefined ? {} : { now: options.now }),
-  });
-  worker.start();
-  return Object.freeze({ queue, worker, dispatcher });
+  return Object.freeze({ queue, worker });
+}
+
+export function createApplicationWorkerRuntime(
+  options: ApplicationQueueRuntimeOptions,
+): ApplicationWorkerRuntime {
+  const runtime = composeApplicationWorkerRuntime(options);
+  runtime.worker.start();
+  return runtime;
 }
 
 function validateKnowledgeRoot(rootPath: string): string {
@@ -206,7 +236,7 @@ export async function createApplicationRuntime(
 
 interface ApplicationRuntimeState {
   runtime: Promise<ExecutionEngine> | undefined;
-  queueRuntime: Promise<ApplicationQueueRuntime> | undefined;
+  queueRuntime: Promise<ApplicationWorkerRuntime> | undefined;
   readonly executionHistory: ExecutionHistoryRecorder;
   readonly logger: Logger;
   executionRepository: ExecutionRecordRepository | undefined;
@@ -244,17 +274,40 @@ export function getJobQueue(): JobQueue {
 }
 
 export function getExecutionWorker(): Promise<ExecutionWorker> {
-  return getApplicationQueueRuntime().then((runtime) => runtime.worker);
+  return getApplicationWorkerRuntime().then((runtime) => runtime.worker);
 }
 
-export function getExecutionDispatcher(): Promise<ExecutionDispatcher> {
-  return getApplicationQueueRuntime().then((runtime) => runtime.dispatcher);
+export async function getExecutionDispatcherForPrincipal(
+  principal: AuthenticatedPrincipal,
+): Promise<ExecutionDispatcher> {
+  await getApplicationWorkerRuntime();
+  return createPrincipalExecutionDispatcher({
+    principal,
+    client: getDatabaseClient(),
+    queue: getJobQueue(),
+    logger: runtimeState.logger,
+  });
 }
 
-function getApplicationQueueRuntime(): Promise<ApplicationQueueRuntime> {
+export function createPrincipalExecutionDispatcher(
+  options: PrincipalExecutionDispatcherOptions,
+): ExecutionDispatcher {
+  const repository = new PrismaExecutionRecordRepository(options.client, {
+    access: 'OWNER',
+    userId: options.principal.userId,
+  });
+  return createExecutionDispatcher({
+    queue: options.queue,
+    repository,
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+}
+
+function getApplicationWorkerRuntime(): Promise<ApplicationWorkerRuntime> {
   runtimeState.queueRuntime ??= Promise.all([getExecutionEngine(), getExecutionRepository()]).then(
     ([engine, repository]) =>
-      createApplicationQueueRuntime({
+      createApplicationWorkerRuntime({
         engine,
         repository,
         queue: getJobQueue(),
@@ -266,12 +319,34 @@ function getApplicationQueueRuntime(): Promise<ApplicationQueueRuntime> {
 
 export async function getExecutionRepository(): Promise<ExecutionRecordRepository> {
   if (runtimeState.executionRepository === undefined) {
-    runtimeState.prismaClient ??= createPrismaClient();
-    runtimeState.executionRepository = new PrismaExecutionRecordRepository(
-      runtimeState.prismaClient,
-    );
+    runtimeState.executionRepository = new PrismaExecutionRecordRepository(getDatabaseClient(), {
+      access: 'INTERNAL',
+    });
   }
   return runtimeState.executionRepository;
+}
+
+export function getDatabaseClient(): DatabaseClient {
+  runtimeState.prismaClient ??= createPrismaClient();
+  return runtimeState.prismaClient;
+}
+
+export async function getExecutionRepositoryForRead(
+  principal: AuthenticatedPrincipal,
+): Promise<ExecutionRecordRepository> {
+  return createPrincipalExecutionRepositoryForRead(getDatabaseClient(), principal);
+}
+
+export function createPrincipalExecutionRepositoryForRead(
+  client: DatabaseClient,
+  principal: AuthenticatedPrincipal,
+): ExecutionRecordRepository {
+  return new PrismaExecutionRecordRepository(
+    client,
+    principal.role === 'ADMIN'
+      ? { access: 'GLOBAL_READ_ONLY' }
+      : { access: 'OWNER', userId: principal.userId },
+  );
 }
 
 export function getExecutionHistory(): ExecutionHistoryReader {

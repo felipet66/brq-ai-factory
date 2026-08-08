@@ -8,6 +8,8 @@ import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
 import { semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
 
+import { authenticatedUserSchema, loginCredentialsSchema } from '@/api/auth-contracts';
+
 import { API_ERROR_CODES } from './constants';
 
 export const executionHttpRequestSchema = z
@@ -100,6 +102,26 @@ export const executionAcceptedResponseSchema = z
   .object({
     success: z.literal(true),
     data: executionAcceptedDataSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const loginHttpRequestSchema = loginCredentialsSchema;
+
+export const loginResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: z.object({ user: authenticatedUserSchema }).strict(),
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const logoutResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: z.object({ loggedOut: z.literal(true) }).strict(),
     metadata: apiResponseMetadataSchema,
     errors: z.tuple([]),
   })

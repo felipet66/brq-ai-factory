@@ -34,6 +34,37 @@ import {
   executionRecordSchema,
 } from '../schemas';
 
+const EXECUTION_OWNER_ID_MAX_LENGTH = 128;
+
+export type PrismaExecutionRecordRepositoryAccess =
+  | { readonly access: 'OWNER'; readonly userId: string }
+  | { readonly access: 'INTERNAL' }
+  | { readonly access: 'GLOBAL_READ_ONLY' };
+
+function accessError(message: string): ExecutionRepositoryError {
+  return new ExecutionRepositoryError(message, {
+    code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION,
+  });
+}
+
+function parseAccess(
+  rawAccess: PrismaExecutionRecordRepositoryAccess,
+): PrismaExecutionRecordRepositoryAccess {
+  if (rawAccess?.access === 'INTERNAL' || rawAccess?.access === 'GLOBAL_READ_ONLY') {
+    return Object.freeze({ access: rawAccess.access });
+  }
+  if (
+    rawAccess?.access === 'OWNER' &&
+    typeof rawAccess.userId === 'string' &&
+    rawAccess.userId === rawAccess.userId.trim() &&
+    rawAccess.userId.length > 0 &&
+    rawAccess.userId.length <= EXECUTION_OWNER_ID_MAX_LENGTH
+  ) {
+    return Object.freeze({ access: 'OWNER', userId: rawAccess.userId });
+  }
+  throw accessError('Escopo de acesso do repositório de execução inválido.');
+}
+
 interface RawLifecycle {
   sequence: number;
   event: string;
@@ -443,7 +474,55 @@ function observationData(snapshot: ExecutionObservabilitySnapshot) {
 }
 
 export class PrismaExecutionRecordRepository implements ExecutionRecordRepository {
-  constructor(private readonly client: DatabaseClient) {}
+  private readonly repositoryAccess: PrismaExecutionRecordRepositoryAccess;
+
+  constructor(
+    private readonly client: DatabaseClient,
+    access: PrismaExecutionRecordRepositoryAccess,
+  ) {
+    this.repositoryAccess = parseAccess(access);
+  }
+
+  private ownerIdForCreation(): string {
+    if (this.repositoryAccess.access !== 'OWNER') {
+      throw accessError('Criação de execução exige um repositório ligado a um usuário.');
+    }
+    return this.repositoryAccess.userId;
+  }
+
+  private assertLifecycleAccess(): void {
+    if (this.repositoryAccess.access === 'GLOBAL_READ_ONLY') {
+      throw accessError('A capability global de leitura não permite alterar execuções.');
+    }
+  }
+
+  private publicReadWhere(): { readonly userId?: string } {
+    if (this.repositoryAccess.access === 'INTERNAL') {
+      throw accessError('A capability interna não permite consultas públicas de execução.');
+    }
+    return this.repositoryAccess.access === 'OWNER' ? { userId: this.repositoryAccess.userId } : {};
+  }
+
+  private lifecycleWhere(): { readonly userId?: string } {
+    this.assertLifecycleAccess();
+    return this.repositoryAccess.access === 'OWNER' ? { userId: this.repositoryAccess.userId } : {};
+  }
+
+  private async loadByJobIdForLifecycle(jobId: string): Promise<ExecutionRecord | null> {
+    const record = await this.client.executionRecord.findFirst({
+      where: { ...this.lifecycleWhere(), job: { is: { jobId } } },
+      include: aggregateInclude,
+    });
+    return record === null ? null : mapRecord(record);
+  }
+
+  private async loadByWorkflowIdForLifecycle(workflowId: string): Promise<ExecutionRecord | null> {
+    const record = await this.client.executionRecord.findFirst({
+      where: { ...this.lifecycleWhere(), workflowId },
+      include: aggregateInclude,
+    });
+    return record === null ? null : mapRecord(record);
+  }
 
   private async replaceObservation(
     client: DatabaseClient,
@@ -523,6 +602,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async create(input: ExecutionRecordCreatedInput): Promise<ExecutionRecord> {
+    const userId = this.ownerIdForCreation();
     const parsed = executionRecordCreatedInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Entrada de criação do registro inválida.', {
@@ -534,6 +614,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
       const skeleton = createExecutionRecord('pending-storage-id', parsed.data);
       const record = await this.client.executionRecord.create({
         data: {
+          userId,
           workflowId: skeleton.workflowId,
           requestId: skeleton.requestId,
           traceId: skeleton.traceId,
@@ -561,6 +642,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async createQueued(input: ExecutionRecordQueuedInput): Promise<ExecutionRecord> {
+    const userId = this.ownerIdForCreation();
     const parsed = executionRecordQueuedInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Entrada de enfileiramento inválida.', {
@@ -572,6 +654,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
       const skeleton = createQueuedExecutionRecord('pending-storage-id', parsed.data);
       const record = await this.client.executionRecord.create({
         data: {
+          userId,
           workflowId: skeleton.workflowId,
           executionId: skeleton.executionId,
           requestId: skeleton.requestId,
@@ -607,6 +690,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async markJobRunning(input: ExecutionRecordJobRunningInput): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
     const parsed = executionRecordJobRunningInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Entrada de início do job inválida.', {
@@ -615,16 +699,13 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
       });
     }
     return run(async () => {
-      const current = await this.client.executionRecord.findFirst({
-        where: { job: { is: { jobId: parsed.data.jobId } } },
-        include: aggregateInclude,
-      });
+      const current = await this.loadByJobIdForLifecycle(parsed.data.jobId);
       if (current === null) {
         throw new ExecutionRepositoryError('Job de execução não encontrado.', {
           code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
         });
       }
-      const projected = projectJobRunningExecutionRecord(mapRecord(current), parsed.data);
+      const projected = projectJobRunningExecutionRecord(current, parsed.data);
       await this.client.$transaction([
         this.client.executionJob.update({
           where: { jobId: parsed.data.jobId, status: 'QUEUED' },
@@ -635,11 +716,12 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
           data: { revision: { increment: 1 } },
         }),
       ]);
-      return (await this.findByJobId(parsed.data.jobId))!;
+      return (await this.loadByJobIdForLifecycle(parsed.data.jobId))!;
     });
   }
 
   async markJobTerminal(input: ExecutionRecordJobTerminalInput): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
     const parsed = executionRecordJobTerminalInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Entrada terminal do job inválida.', {
@@ -648,7 +730,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
       });
     }
     return run(async () => {
-      const current = await this.findByJobId(parsed.data.jobId);
+      const current = await this.loadByJobIdForLifecycle(parsed.data.jobId);
       if (current === null) {
         throw new ExecutionRepositoryError('Job de execução não encontrado.', {
           code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
@@ -674,11 +756,12 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
           data: { revision: { increment: 1 } },
         }),
       ]);
-      return (await this.findByJobId(parsed.data.jobId))!;
+      return (await this.loadByJobIdForLifecycle(parsed.data.jobId))!;
     });
   }
 
   async markRunning(input: ExecutionRecordRunningInput): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
     const parsed = executionRecordRunningInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Entrada de execução em andamento inválida.', {
@@ -687,8 +770,8 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
       });
     }
     return run(async () => {
-      const current = await this.client.executionRecord.findUnique({
-        where: { workflowId: parsed.data.workflowId },
+      const current = await this.client.executionRecord.findFirst({
+        where: { ...this.lifecycleWhere(), workflowId: parsed.data.workflowId },
         include: aggregateInclude,
       });
       if (current === null) {
@@ -724,9 +807,10 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
     workflowId: string,
     snapshot: ExecutionObservabilitySnapshot,
   ): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
     return run(async () => {
-      const record = await this.client.executionRecord.findUnique({
-        where: { workflowId },
+      const record = await this.client.executionRecord.findFirst({
+        where: { ...this.lifecycleWhere(), workflowId },
         include: aggregateInclude,
       });
       if (record === null) {
@@ -761,7 +845,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
           snapshot,
         );
       });
-      return (await this.findByWorkflowId(workflowId))!;
+      return (await this.loadByWorkflowIdForLifecycle(workflowId))!;
     });
   }
 
@@ -770,9 +854,10 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
     result: ExecutionResult,
     snapshot: ExecutionObservabilitySnapshot | null,
   ): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
     return run(async () => {
-      const record = await this.client.executionRecord.findUnique({
-        where: { workflowId },
+      const record = await this.client.executionRecord.findFirst({
+        where: { ...this.lifecycleWhere(), workflowId },
         include: aggregateInclude,
       });
       if (record === null) {
@@ -904,14 +989,15 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
           );
         }
       });
-      return (await this.findByWorkflowId(workflowId))!;
+      return (await this.loadByWorkflowIdForLifecycle(workflowId))!;
     });
   }
 
   async findByExecutionId(executionId: string): Promise<ExecutionRecord | null> {
+    const accessWhere = this.publicReadWhere();
     return run(async () => {
-      const record = await this.client.executionRecord.findUnique({
-        where: { executionId },
+      const record = await this.client.executionRecord.findFirst({
+        where: { ...accessWhere, executionId },
         include: aggregateInclude,
       });
       return record === null ? null : mapRecord(record);
@@ -919,9 +1005,10 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async findByJobId(jobId: string): Promise<ExecutionRecord | null> {
+    const accessWhere = this.publicReadWhere();
     return run(async () => {
       const record = await this.client.executionRecord.findFirst({
-        where: { job: { is: { jobId } } },
+        where: { ...accessWhere, job: { is: { jobId } } },
         include: aggregateInclude,
       });
       return record === null ? null : mapRecord(record);
@@ -929,9 +1016,13 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async findByWorkflowId(workflowId: string): Promise<ExecutionRecord | null> {
+    if (this.repositoryAccess.access === 'INTERNAL') {
+      return run(() => this.loadByWorkflowIdForLifecycle(workflowId));
+    }
+    const accessWhere = this.publicReadWhere();
     return run(async () => {
-      const record = await this.client.executionRecord.findUnique({
-        where: { workflowId },
+      const record = await this.client.executionRecord.findFirst({
+        where: { ...accessWhere, workflowId },
         include: aggregateInclude,
       });
       return record === null ? null : mapRecord(record);
@@ -939,6 +1030,7 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
   }
 
   async list(rawQuery: ExecutionRecordListQuery = {}): Promise<ExecutionRecordPage> {
+    const accessWhere = this.publicReadWhere();
     const parsed = executionRecordListQuerySchema.safeParse(rawQuery);
     if (!parsed.success) {
       throw new ExecutionRepositoryError('Filtros de execução inválidos.', {
@@ -948,8 +1040,20 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
     }
     const query = parsed.data;
     return run(async () => {
+      if (query.cursor !== undefined) {
+        const cursor = await this.client.executionRecord.findFirst({
+          where: { ...accessWhere, workflowId: query.cursor },
+          select: { workflowId: true },
+        });
+        if (cursor === null) {
+          throw new ExecutionRepositoryError('Cursor de execução inválido.', {
+            code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+          });
+        }
+      }
       const records = await this.client.executionRecord.findMany({
         where: {
+          ...accessWhere,
           ...(query.status === undefined ? {} : { status: query.status }),
           ...(query.readiness === undefined ? {} : { readiness: query.readiness }),
           ...(query.createdAfter === undefined && query.createdBefore === undefined

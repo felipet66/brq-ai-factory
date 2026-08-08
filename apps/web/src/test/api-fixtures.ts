@@ -6,8 +6,25 @@ import {
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 import { vi } from 'vitest';
 
+import type { AuthenticatedUser } from '@/api/auth-contracts';
+import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
+
 export const FIXED_REQUEST_ID = 'request-123e4567-e89b-12d3-a456-426614174000';
 export const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
+export const AUTHENTICATED_USER: AuthenticatedUser = Object.freeze({
+  id: 'user-test-owner',
+  name: 'Test Owner',
+  email: 'owner@example.test',
+  role: 'USER',
+  createdAt: '2026-08-07T09:00:00.000Z',
+  updatedAt: '2026-08-07T09:00:00.000Z',
+});
+export const AUTHENTICATED_PRINCIPAL: AuthenticatedPrincipal = Object.freeze({
+  userId: AUTHENTICATED_USER.id,
+  role: AUTHENTICATED_USER.role,
+  user: AUTHENTICATED_USER,
+});
+export const authenticateRequestFixture: RequestAuthenticator = async () => AUTHENTICATED_PRINCIPAL;
 
 export function executionBody(): Record<string, unknown> {
   return {
@@ -126,7 +143,11 @@ export function jsonRequest(
   return new Request(url, {
     method: 'POST',
     ...init,
-    headers: { 'content-type': 'application/json', ...init.headers },
+    headers: {
+      'content-type': 'application/json',
+      origin: 'http://localhost',
+      ...init.headers,
+    },
     body: JSON.stringify(body),
   });
 }

@@ -29,6 +29,7 @@
     "core/response-validator"
   ],
   "scripts": {
+    "auth:seed": "npm run auth:seed --workspace @brq-ai-factory/web",
     "dev": "npm run dev --workspace @brq-ai-factory/web",
     "build": "npm run build --workspace @brq-ai-factory/web",
     "start": "npm run start --workspace @brq-ai-factory/web",

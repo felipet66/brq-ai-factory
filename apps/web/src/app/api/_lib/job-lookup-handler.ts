@@ -1,6 +1,9 @@
 import type { ExecutionRecordRepository } from '@brq/execution-repository';
 import type { Logger } from '@brq/shared/logger/logger';
 
+import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
+
+import { createAuthenticatedRouteHandler } from './authenticated-route-handler';
 import { API_ENDPOINTS, API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError } from './errors';
@@ -8,7 +11,6 @@ import { executeRepositoryQuery, resolveExecutionRepository } from './execution-
 import { toJobLookupData } from './job-projection';
 import { rejectQueryParameters } from './request';
 import { jobLookupResponse } from './responses';
-import { createRouteHandler } from './route-handler';
 import { jobIdPathSchema } from './schemas';
 
 export interface JobLookupContext {
@@ -16,18 +18,21 @@ export interface JobLookupContext {
 }
 
 interface JobLookupHandlerOptions {
-  readonly getExecutionRepository: () => Promise<ExecutionRecordRepository>;
+  readonly authenticate: RequestAuthenticator;
+  readonly getExecutionRepository: (
+    principal: AuthenticatedPrincipal,
+  ) => Promise<ExecutionRecordRepository>;
   readonly logger?: Logger;
   readonly now?: () => number;
   readonly requestIdFactory?: RequestIdFactory;
 }
 
 export function createJobLookupHandler(options: JobLookupHandlerOptions) {
-  return createRouteHandler<JobLookupContext>({
+  return createAuthenticatedRouteHandler<JobLookupContext>({
     endpoint: API_ENDPOINTS.JOB_BY_ID,
     allowedMethods: ['GET'],
     ...options,
-    async operation(request, context, requestId) {
+    async operation(request, context, requestId, principal) {
       rejectQueryParameters(request);
       const { id } = await context.params;
       if (!jobIdPathSchema.safeParse(id).success) {
@@ -38,7 +43,9 @@ export function createJobLookupHandler(options: JobLookupHandlerOptions) {
         });
       }
 
-      const repository = await resolveExecutionRepository(options.getExecutionRepository);
+      const repository = await resolveExecutionRepository(() =>
+        options.getExecutionRepository(principal),
+      );
       const record = await executeRepositoryQuery(() => repository.findByJobId(id));
       if (record === null) {
         throw new HttpApiError('O job não foi encontrado.', {

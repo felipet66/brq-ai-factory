@@ -4,7 +4,12 @@ import type { ExecutionRecord, ExecutionRecordRepository } from '@brq/execution-
 import type { ExecutionObservabilitySnapshot, ExecutionStageMetrics } from '@brq/observability';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EXECUTION_ID, FIXED_REQUEST_ID, capturedLogger } from '@/test/api-fixtures';
+import {
+  EXECUTION_ID,
+  FIXED_REQUEST_ID,
+  authenticateRequestFixture,
+  capturedLogger,
+} from '@/test/api-fixtures';
 
 import { createExecutionTimelineHandler } from './execution-timeline-handler';
 
@@ -131,6 +136,7 @@ describe('execution timeline HTTP adapter', () => {
     const repository = fakeRepository();
     const { logger, records } = capturedLogger();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger,
       now: () => 50,
@@ -149,7 +155,7 @@ describe('execution timeline HTTP adapter', () => {
       data: SNAPSHOT,
       metadata: {
         requestId: FIXED_REQUEST_ID,
-        apiVersion: '2.0.0',
+        apiVersion: '3.0.0',
         executionId: EXECUTION_ID,
       },
       errors: [],
@@ -181,6 +187,7 @@ describe('execution timeline HTTP adapter', () => {
   it('looks up an active timeline by its workflowId alias', async () => {
     const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -203,6 +210,7 @@ describe('execution timeline HTTP adapter', () => {
   it('returns 404 for an unknown valid identifier', async () => {
     const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -218,7 +226,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toEqual({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '2.0.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.0.0' },
       errors: [
         {
           code: 'EXECUTION_TIMELINE_NOT_FOUND',
@@ -232,6 +240,7 @@ describe('execution timeline HTTP adapter', () => {
   it('rejects malformed identifiers and query parameters before lookup', async () => {
     const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -265,6 +274,7 @@ describe('execution timeline HTTP adapter', () => {
   it('returns a standardized 405 without consulting history', async () => {
     const repository = fakeRepository();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger: capturedLogger().logger,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -283,7 +293,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toMatchObject({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '2.0.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.0.0' },
       errors: [{ code: 'METHOD_NOT_ALLOWED' }],
     });
     expect(repository.findByExecutionId).not.toHaveBeenCalled();
@@ -295,6 +305,7 @@ describe('execution timeline HTTP adapter', () => {
     repository.findByExecutionId.mockRejectedValueOnce(new Error('file:private-database.db'));
     const { logger, records } = capturedLogger();
     const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       logger,
       requestIdFactory: () => FIXED_REQUEST_ID,

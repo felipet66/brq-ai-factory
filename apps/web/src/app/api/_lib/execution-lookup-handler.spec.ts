@@ -3,7 +3,12 @@
 import type { ExecutionRecord, ExecutionRecordRepository } from '@brq/execution-repository';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EXECUTION_ID, FIXED_REQUEST_ID, capturedLogger } from '@/test/api-fixtures';
+import {
+  EXECUTION_ID,
+  FIXED_REQUEST_ID,
+  authenticateRequestFixture,
+  capturedLogger,
+} from '@/test/api-fixtures';
 
 import { createExecutionLookupHandler } from './execution-lookup-handler';
 
@@ -117,6 +122,7 @@ describe('execution lookup HTTP adapter', () => {
     const repository = fakeRepository();
     const { logger, records } = capturedLogger();
     const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger,
@@ -174,6 +180,7 @@ describe('execution lookup HTTP adapter', () => {
   it('returns 404 for an unknown execution', async () => {
     const repository = fakeRepository(null);
     const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,
@@ -193,6 +200,7 @@ describe('execution lookup HTTP adapter', () => {
   it('rejects malformed identifiers, query parameters and methods before lookup', async () => {
     const repository = fakeRepository();
     const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,
@@ -220,6 +228,7 @@ describe('execution lookup HTTP adapter', () => {
   it('maps repository unavailability and sanitizes its cause', async () => {
     const { logger, records } = capturedLogger();
     const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => {
         throw new Error('DATABASE_URL=file:private.db');
       },
@@ -242,6 +251,7 @@ describe('execution lookup HTTP adapter', () => {
     const malformed = { ...executionRecord(), executionId: null } as ExecutionRecord;
     const repository = fakeRepository(malformed);
     const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,

@@ -1,0 +1,284 @@
+.loginShell,
+.profileShell {
+  min-height: 100vh;
+  padding: 3rem 1.25rem;
+}
+
+.loginLayout {
+  display: grid;
+  width: min(100%, 30rem);
+  margin: 0 auto;
+  gap: 1.5rem;
+}
+
+.loginHero,
+.profileHero {
+  padding-top: 1rem;
+}
+
+.loginHero > p,
+.profileHero > p {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.loginHero h1,
+.profileHero h1 {
+  margin: 0.75rem 0 1rem;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+}
+
+.loginHero > span,
+.profileHero > span {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.loginPanel,
+.profilePanel {
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 18%);
+  backdrop-filter: blur(1rem);
+}
+
+.loginPanel {
+  padding: 1.5rem;
+}
+
+.loginForm {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+  height: 3rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: rgb(3 13 25 / 64%);
+  color: var(--foreground);
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 2.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primaryButton {
+  border: 0;
+  background: var(--accent);
+  color: #041511;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.loadingState,
+.errorState {
+  display: flex;
+  min-height: 3.25rem;
+  padding: 0.8rem;
+  border-radius: 0.8rem;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.loadingState {
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: auth-spin 700ms linear infinite;
+}
+
+.errorState {
+  display: grid;
+  border: 1px solid rgb(255 158 171 / 32%);
+  color: var(--danger);
+  background: var(--danger-surface);
+}
+
+.errorState strong,
+.errorState span {
+  display: block;
+}
+
+.applicationHeader {
+  display: grid;
+  width: min(calc(100% - 2.5rem), 76rem);
+  min-height: 4.5rem;
+  margin: 1rem auto 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.brand {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.navigation,
+.accountControls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.navigation a {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-underline-offset: 0.25em;
+}
+
+.accountControls {
+  justify-content: flex-end;
+}
+
+.currentUser {
+  display: grid;
+  min-width: 0;
+  text-align: right;
+  text-decoration: none;
+}
+
+.currentUserName {
+  font-weight: 800;
+}
+
+.currentUserMeta {
+  overflow: hidden;
+  max-width: 18rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logoutControl {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+}
+
+.logoutError {
+  max-width: 18rem;
+  color: var(--danger);
+  font-size: 0.75rem;
+}
+
+.profileLayout {
+  display: grid;
+  width: min(100%, 60rem);
+  margin: 0 auto;
+  gap: 1.5rem;
+}
+
+.profilePanel {
+  padding: 1.5rem;
+}
+
+.profilePanel h2 {
+  margin: 0 0 1.25rem;
+}
+
+.profileFacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  padding: 0;
+  margin: 0;
+  gap: 0.75rem;
+}
+
+.profileFacts > div {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface-soft);
+}
+
+.profileFacts dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.profileFacts dd {
+  margin: 0.45rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 54rem) {
+  .applicationHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation,
+  .accountControls {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .currentUser {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

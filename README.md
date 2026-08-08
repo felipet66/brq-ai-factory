@@ -45,7 +45,8 @@ brq-ai-factory/
 │   │   ├── ADR-025-FRONTEND-MVP.md
 │   │   ├── ADR-026-OBSERVABILITY-BOUNDARY.md
 │   │   ├── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
-│   │   └── ADR-028-JOB-QUEUE-BOUNDARY.md
+│   │   ├── ADR-028-JOB-QUEUE-BOUNDARY.md
+│   │   └── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -89,7 +90,8 @@ brq-ai-factory/
 │   ├── 39-FRONTEND_FLOW.md
 │   ├── 40-OBSERVABILITY_FLOW.md
 │   ├── 41-EXECUTION_REPOSITORY_FLOW.md
-│   └── 42-JOB_QUEUE_FLOW.md
+│   ├── 42-JOB_QUEUE_FLOW.md
+│   └── 43-AUTHENTICATION_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -132,13 +134,22 @@ npm ci
 cp .env.example .env
 npm run prisma:migrate:deploy
 npm run prisma:validate
+npm run auth:seed
 npm run dev
 ```
 
 `BRQ_KNOWLEDGE_ROOT` é opcional e, quando informado, deve ser um caminho absoluto. O host web
 resolve `knowledge/` a partir do workspace por padrão.
 
-O MVP utiliza SQLite local. Os comandos de migration inicializam o arquivo configurado em `DATABASE_URL` quando necessário. Nenhuma configuração de deploy faz parte do MVP atual.
+O MVP utiliza SQLite local. Os comandos de migration inicializam o arquivo configurado em
+`DATABASE_URL` quando necessário. Nenhuma configuração de deploy faz parte do MVP atual.
+
+O host autenticado exige `BETTER_AUTH_SECRET` com ao menos 32 caracteres e uma origem HTTP(S)
+exata em `BRQ_APP_ORIGIN`. O seed local é explícito e exige `BRQ_SEED_ADMIN_PASSWORD` e
+`BRQ_SEED_USER_PASSWORD`; nenhuma senha padrão integra o repositório. Ele provisiona as contas de
+desenvolvimento `admin@example.local` e `user@example.local`. Não execute o seed com credenciais
+reais ou reutilizadas. O comando carrega o arquivo `.env` da raiz do repositório quando ele existe,
+preservando variáveis já definidas no processo.
 
 ## Persistência
 
@@ -148,12 +159,16 @@ O workspace `@brq/prisma` implementa os repositories definidos em `@brq/shared`.
 npm run prisma:migrate:dev -- --name nome_da_migration
 ```
 
-Não existe seed obrigatório. Os repositories históricos de domínio permanecem disponíveis sem
-alteração. A Sprint 17 adiciona o agregado normalizado `ExecutionRecord`, dedicado ao histórico
-minimizado de execuções, sem persistir prompts, specifications, respostas, knowledge ou conteúdo
-de artifacts. A Sprint 18 adiciona a relação normalizada `ExecutionJob`, que persiste somente
-`jobId`, status e timestamps da fila; o `ExecutionRequest` permanece exclusivamente em memória
-enquanto o job estiver ativo.
+Os repositories históricos de domínio permanecem disponíveis sem alteração. A Sprint 17 adiciona
+o agregado normalizado `ExecutionRecord`, dedicado ao histórico minimizado de execuções, sem
+persistir prompts, specifications, respostas, knowledge ou conteúdo de artifacts. A Sprint 18
+adiciona a relação normalizada `ExecutionJob`, que persiste somente `jobId`, status e timestamps da
+fila; o `ExecutionRequest` permanece exclusivamente em memória enquanto o job estiver ativo.
+
+A Sprint 19 adiciona `User`, `Session`, `Account` e `Verification` para o adapter de autenticação e
+torna `ExecutionRecord.userId` obrigatório. `ExecutionJob` herda o owner pela relação com o
+registro, sem duplicar `userId`. O seed de autenticação é opcional para o bootstrap do ambiente
+local e nunca possui senha versionada.
 
 ## AI Provider
 
@@ -304,7 +319,8 @@ identidade da execução.
 
 ## HTTP API
 
-A API permanece um adapter em Next.js 16 Route Handlers. Na versão `2.0.0`,
+A API permanece um adapter em Next.js 16 Route Handlers. A versão `3.0.0` adiciona a fronteira de
+autenticação do host e preserva os contratos assíncronos introduzidos na versão `2.0.0`:
 `POST /api/executions` valida a entrada, delega ao `ExecutionDispatcher` e devolve imediatamente
 `202 Accepted` com `executionId`, `jobId` e status `QUEUED`; o workflow não mantém a conexão HTTP
 aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`, `SUCCESS`,
@@ -314,10 +330,15 @@ aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`
 `GET /api/executions/[id]` e `GET /api/executions/[id]/timeline` continuam consultando o
 Execution Repository, com paginação, filtros e read models públicos já aprovados.
 
-O adapter valida media type, encoding, limite de 512 KiB, JSON e schema Zod; gera `requestId` e
-não altera hashes, métricas, lineage ou provenance. Após a aceitação, o sinal da requisição HTTP
-não controla o job: cancelamento e shutdown pertencem ao Worker. Logs e erros usam allowlists
-sanitizadas e todas as respostas recebem headers mínimos de segurança.
+`POST /api/auth/login` e `POST /api/auth/logout` usam envelopes públicos próprios e nunca expõem o
+token interno do adapter. Todas as rotas de execução, histórico, timeline e job exigem sessão; o
+health check e o login permanecem públicos. A API deriva o owner exclusivamente da sessão, rejeita
+campos desconhecidos e devolve `404` para lookup cross-owner de um USER, evitando enumeração.
+
+O adapter valida origem, media type, encoding, limite de 512 KiB, JSON e schema Zod; gera
+`requestId` e não altera hashes, métricas, lineage ou provenance. Após a aceitação, o sinal da
+requisição HTTP não controla o job: cancelamento e shutdown pertencem ao Worker. Logs e erros usam
+allowlists sanitizadas e todas as respostas recebem headers mínimos de segurança.
 
 O composition root fica no host em `apps/web/src/server/runtime.ts`. Ele monta factories públicas
 de forma lazy e fornece Engine persistente/observado, repository, fila local, dispatcher e Worker;
@@ -342,9 +363,14 @@ Clients HTTP internos continuam sendo os únicos pontos que chamam `fetch`. O Fr
 Engine, Worker, fila, repository, Orchestrator, agentes, runtime ou internals da API e não renderiza
 prompts, specifications, artifacts, knowledge, respostas da IA ou logs.
 
-O request HTTP `2.0.0` ainda preserva IDs e configurações técnicas dos agentes herdados do contrato
+O request HTTP ainda preserva IDs e configurações técnicas dos agentes herdados do contrato
 anterior. O client fornece um perfil técnico versionado e gera esses IDs por submissão como
 limitação temporária; `executionId` e `jobId` são sempre produzidos no backend.
+
+A Sprint 19 adiciona `/login`, header autenticado, logout e proteção server-side da homepage,
+histórico e detalhe. A página protegida `/profile` recebe somente a projeção segura do usuário:
+ID, nome, email, role e timestamps. Tokens, cookies, password hashes, Session e Account nunca
+integram props ou estado React.
 
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
 
@@ -414,6 +440,32 @@ processo continue ativo depois do `202`.
 
 [Fluxo visual da Job Queue](knowledge/42-JOB_QUEUE_FLOW.md) ·
 [ADR-028](knowledge/ADR/ADR-028-JOB-QUEUE-BOUNDARY.md)
+
+## Authentication & Authorization
+
+A Sprint 19 concentra identidade no host Next.js. Better Auth foi escolhido depois de uma
+reavaliação explícita com Auth.js: o fluxo Credentials do Auth.js não persiste credenciais por
+padrão e exigiria código próprio relevante para combinar email/senha com as database sessions
+revogáveis adotadas. Better Auth fornece o fluxo de credential account, sessões Prisma e logout
+server-side sem entrar em qualquer workspace de domínio.
+
+Passwords usam Argon2id; sessões duram oito horas, não são renovadas automaticamente e chegam ao
+browser somente em cookie `httpOnly`, `sameSite=lax`, host-only e `secure` em produção. Mutações
+validam a origem exata do host. Logs podem conter apenas `userId`, role, outcome, correlações e
+códigos sanitizados; password, hash, cookie, token e authorization header são sempre proibidos.
+
+`USER` cria e consulta somente suas execuções, jobs e timelines. `ADMIN` cria como o próprio owner
+e possui leitura global explícita. A aplicação converte o principal autenticado em uma capability
+do Execution Repository; o repository conhece owner IDs opacos, mas não conhece sessão ou papéis.
+Workers continuam usando somente acesso interno de lifecycle. Nenhum `userId` fornecido pelo
+frontend é aceito.
+
+O Frontend possui `/login`, usuário atual, logout, páginas protegidas e `/profile`. O perfil expõe
+somente a projeção pública mínima da conta. OAuth, SSO, MFA, permission engine, rate limit,
+administração completa de usuários e qualquer item da Sprint 20 permanecem fora do escopo.
+
+[Fluxo visual de Authentication & Authorization](knowledge/43-AUTHENTICATION_FLOW.md) ·
+[ADR-029](knowledge/ADR/ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md)
 
 ## Validações
 

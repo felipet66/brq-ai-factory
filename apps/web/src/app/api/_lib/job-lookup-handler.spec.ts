@@ -4,7 +4,12 @@ import type { ExecutionRecord, ExecutionRecordRepository } from '@brq/execution-
 import type { JobStatus } from '@brq/job-queue';
 import { describe, expect, it, vi } from 'vitest';
 
-import { EXECUTION_ID, FIXED_REQUEST_ID, capturedLogger } from '@/test/api-fixtures';
+import {
+  EXECUTION_ID,
+  FIXED_REQUEST_ID,
+  authenticateRequestFixture,
+  capturedLogger,
+} from '@/test/api-fixtures';
 
 import { createJobLookupHandler } from './job-lookup-handler';
 
@@ -47,6 +52,7 @@ describe('job lookup HTTP adapter', () => {
       const repository = fakeRepository(executionRecord(status));
       const { logger, records } = capturedLogger();
       const handler = createJobLookupHandler({
+        authenticate: authenticateRequestFixture,
         getExecutionRepository: async () => repository,
         requestIdFactory: () => FIXED_REQUEST_ID,
         logger,
@@ -71,7 +77,7 @@ describe('job lookup HTTP adapter', () => {
         },
         metadata: {
           requestId: FIXED_REQUEST_ID,
-          apiVersion: '2.0.0',
+          apiVersion: '3.0.0',
           executionId: EXECUTION_ID,
         },
         errors: [],
@@ -94,6 +100,7 @@ describe('job lookup HTTP adapter', () => {
     const repository = fakeRepository(null);
     const { logger, records } = capturedLogger();
     const handler = createJobLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger,
@@ -118,6 +125,7 @@ describe('job lookup HTTP adapter', () => {
   it('rejects malformed IDs, query parameters and methods before repository access', async () => {
     const repository = fakeRepository();
     const handler = createJobLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,
@@ -150,6 +158,7 @@ describe('job lookup HTTP adapter', () => {
   it('maps repository factory and query failures to sanitized 503 responses', async () => {
     const { logger, records } = capturedLogger();
     const unavailable = createJobLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => {
         throw new Error('DATABASE_URL=file:private.db');
       },
@@ -159,6 +168,7 @@ describe('job lookup HTTP adapter', () => {
     const repository = fakeRepository();
     repository.findByJobId.mockRejectedValueOnce(new Error('private query payload'));
     const failed = createJobLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger,
@@ -187,6 +197,7 @@ describe('job lookup HTTP adapter', () => {
   ])('rejects a corrupted record with %s', async (_label, rawRecord) => {
     const repository = fakeRepository(rawRecord as ExecutionRecord);
     const handler = createJobLookupHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
       logger: capturedLogger().logger,

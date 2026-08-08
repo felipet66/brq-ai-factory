@@ -10,8 +10,10 @@ import { jobRecordSchema, type JobRecord } from '@brq/job-queue';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  AUTHENTICATED_PRINCIPAL,
   EXECUTION_ID,
   FIXED_REQUEST_ID,
+  authenticateRequestFixture,
   capturedLogger,
   executionBody,
   jsonRequest,
@@ -82,6 +84,8 @@ function createHandler(dispatcher: ExecutionDispatcher, extra: Record<string, un
   const logger = capturedLogger().logger;
   const repository = fakeRepository();
   return createExecutionsHandler({
+    authenticate: authenticateRequestFixture,
+    expectedOrigin: 'http://localhost',
     getExecutionDispatcher: async () => dispatcher,
     getExecutionRepository: async () => repository,
     requestIdFactory: () => FIXED_REQUEST_ID,
@@ -126,7 +130,7 @@ describe('executions HTTP adapter', () => {
       data: { executionId: EXECUTION_ID, jobId: JOB_ID, status: 'QUEUED' },
       metadata: {
         requestId: FIXED_REQUEST_ID,
-        apiVersion: '2.0.0',
+        apiVersion: '3.0.0',
         executionId: EXECUTION_ID,
       },
       errors: [],
@@ -150,10 +154,45 @@ describe('executions HTTP adapter', () => {
     expect(JSON.stringify(body)).not.toContain('workflowId');
   });
 
+  it('passes the authenticated principal to ownership factories and rejects cross-origin dispatch', async () => {
+    const dispatcher = fakeDispatcher();
+    const repository = fakeRepository();
+    const getExecutionDispatcher = vi.fn(async () => dispatcher);
+    const getExecutionRepository = vi.fn(async () => repository);
+    const handler = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
+      expectedOrigin: 'http://localhost',
+      getExecutionDispatcher,
+      getExecutionRepository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const accepted = await handler(jsonRequest('http://localhost/api/executions'), undefined);
+    const rejected = await handler(
+      jsonRequest('http://localhost/api/executions', undefined, {
+        headers: { origin: 'https://attacker.example.test' },
+      }),
+      undefined,
+    );
+
+    expect(accepted.status).toBe(202);
+    expect(getExecutionDispatcher).toHaveBeenCalledWith(AUTHENTICATED_PRINCIPAL);
+    expect(rejected.status).toBe(403);
+    expect((await rejected.json()).errors[0].code).toBe('CSRF_REJECTED');
+    expect(dispatcher.dispatch).toHaveBeenCalledOnce();
+    expect(getExecutionRepository).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       label: 'missing content type',
-      request: () => new Request('http://localhost/api/executions', { method: 'POST', body: '{}' }),
+      request: () =>
+        new Request('http://localhost/api/executions', {
+          method: 'POST',
+          headers: { origin: 'http://localhost' },
+          body: '{}',
+        }),
       status: 415,
       code: 'UNSUPPORTED_MEDIA_TYPE',
     },
@@ -171,7 +210,7 @@ describe('executions HTTP adapter', () => {
       request: () =>
         new Request('http://localhost/api/executions', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', origin: 'http://localhost' },
           body: '{',
         }),
       status: 400,
@@ -181,6 +220,16 @@ describe('executions HTTP adapter', () => {
       label: 'unknown field',
       request: () =>
         jsonRequest('http://localhost/api/executions', { ...executionBody(), executionId: 'x' }),
+      status: 400,
+      code: 'INVALID_REQUEST',
+    },
+    {
+      label: 'client-supplied owner',
+      request: () =>
+        jsonRequest('http://localhost/api/executions', {
+          ...executionBody(),
+          userId: 'user-attacker-controlled',
+        }),
       status: 400,
       code: 'INVALID_REQUEST',
     },
@@ -231,6 +280,8 @@ describe('executions HTTP adapter', () => {
   it('maps dispatcher factory and dispatch failures without exposing their causes', async () => {
     const { logger, records } = capturedLogger();
     const unavailable = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
+      expectedOrigin: 'http://localhost',
       getExecutionDispatcher: async () => {
         throw new Error('QUEUE_SECRET=private-factory');
       },
@@ -241,6 +292,8 @@ describe('executions HTTP adapter', () => {
     const dispatcher = fakeDispatcher();
     dispatcher.dispatch.mockRejectedValueOnce(new Error('private-dispatch-payload'));
     const failed = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
+      expectedOrigin: 'http://localhost',
       getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => fakeRepository(),
       logger,
@@ -299,6 +352,7 @@ describe('executions HTTP adapter', () => {
     const getExecutionDispatcher = vi.fn(async () => fakeDispatcher());
     const { logger, records } = capturedLogger();
     const handler = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionDispatcher,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -357,6 +411,7 @@ describe('executions HTTP adapter', () => {
     const repository = fakeRepository();
     const dispatcher = fakeDispatcher();
     const handler = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => repository,
       requestIdFactory: () => FIXED_REQUEST_ID,
@@ -379,6 +434,7 @@ describe('executions HTTP adapter', () => {
     const { logger, records } = capturedLogger();
     const dispatcher = fakeDispatcher();
     const unavailable = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => {
         throw new Error('DATABASE_URL=file:secret.db');
@@ -389,6 +445,7 @@ describe('executions HTTP adapter', () => {
     const failingRepository = fakeRepository();
     failingRepository.list.mockRejectedValueOnce(new Error('query secret'));
     const failingQuery = createExecutionsHandler({
+      authenticate: authenticateRequestFixture,
       getExecutionDispatcher: async () => dispatcher,
       getExecutionRepository: async () => failingRepository,
       requestIdFactory: () => FIXED_REQUEST_ID,
