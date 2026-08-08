@@ -46,7 +46,8 @@ brq-ai-factory/
 │   │   ├── ADR-026-OBSERVABILITY-BOUNDARY.md
 │   │   ├── ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md
 │   │   ├── ADR-028-JOB-QUEUE-BOUNDARY.md
-│   │   └── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
+│   │   ├── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
+│   │   └── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -91,7 +92,8 @@ brq-ai-factory/
 │   ├── 40-OBSERVABILITY_FLOW.md
 │   ├── 41-EXECUTION_REPOSITORY_FLOW.md
 │   ├── 42-JOB_QUEUE_FLOW.md
-│   └── 43-AUTHENTICATION_FLOW.md
+│   ├── 43-AUTHENTICATION_FLOW.md
+│   └── 44-PROMPT_PLAYGROUND_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -99,7 +101,8 @@ brq-ai-factory/
 │   ├── observability/
 │   ├── execution-repository/
 │   ├── job-queue/
-│   └── execution-worker/
+│   ├── execution-worker/
+│   └── prompt-inspector/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -193,6 +196,21 @@ O workspace `@brq/prompt-builder` transforma estruturas prontas em um `PromptRes
 Templates usam slots tipados resolvidos em uma única passagem. O orçamento padrão centralizado é de 128 KiB, pode ser configurado por instância e apenas reduzido pela chamada; um preflight de limite inferior rejeita excesso evidente antes do clone por schema e da renderização, e a carga final é medida exatamente. Referências de proveniência não consomem esse orçamento de payload, mas possuem limite estrutural próprio, configurável por instância e aplicado antes do clone. Hashes canônicos identificam template, canais, output contract e resultado final. O documento resolvido preserva proveniência de rule sets e contextos sem incorporá-la ao `promptHash` do payload efetivo. A transformação não realiza I/O de domínio ou acesso a recursos externos; o logger estruturado injetável é sua única saída lateral. O módulo não conhece providers, agentes, Orchestrator, Knowledge Source ou persistência. Product Owner, Developer e QA possuem bundles estáticos próprios; loader genérico de prompts, registry, descoberta e seleção dinâmica de versões permanecem adiados.
 
 [Fluxo visual do Prompt Builder](knowledge/27-PROMPT_BUILDER_FLOW.md)
+
+## Prompt Inspector
+
+A Sprint 20 adiciona `@brq/prompt-inspector`, uma façade transport-neutral e stateless para montar
+previews reais de Product Owner, Developer e QA e validar respostas manuais. O serviço projeta
+sections, trust boundaries, budget, Knowledge metadata, hashes e output contracts produzidos pelos
+componentes existentes; ele não modifica prompts nem mantém um registry dinâmico.
+
+O composition root do Inspector fica separado do runtime de execução em `apps/web/src/server/`
+e não possui acesso a AI Provider, Agent Runner, Orchestrator, Execution Engine, Queue, Worker,
+Repository ou Observability. Todo resultado é `EPHEMERAL`, protegido para `ADMIN`, servido com
+`no-store` e proibido em logs ou persistência.
+
+[Fluxo visual do Prompt Playground](knowledge/44-PROMPT_PLAYGROUND_FLOW.md) ·
+[ADR-030](knowledge/ADR/ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md)
 
 ## Agent Runner
 
@@ -372,6 +390,11 @@ histórico e detalhe. A página protegida `/profile` recebe somente a projeção
 ID, nome, email, role e timestamps. Tokens, cookies, password hashes, Session e Account nunca
 integram props ou estado React.
 
+A Sprint 20 adiciona `/playground` exclusivamente para `ADMIN`. A experiência usa somente o client
+HTTP interno para inspecionar a construção do prompt, budget, hashes, Knowledge metadata, contrato
+e validação manual. Nenhum componente React importa agentes ou workspaces do núcleo, e nenhum dado
+de inspeção é persistido no browser.
+
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
 
 ## Execution History & Observability
@@ -461,8 +484,8 @@ Workers continuam usando somente acesso interno de lifecycle. Nenhum `userId` fo
 frontend é aceito.
 
 O Frontend possui `/login`, usuário atual, logout, páginas protegidas e `/profile`. O perfil expõe
-somente a projeção pública mínima da conta. OAuth, SSO, MFA, permission engine, rate limit,
-administração completa de usuários e qualquer item da Sprint 20 permanecem fora do escopo.
+somente a projeção pública mínima da conta. OAuth, SSO, MFA, permission engine, rate limit e
+administração completa de usuários permanecem fora do escopo.
 
 [Fluxo visual de Authentication & Authorization](knowledge/43-AUTHENTICATION_FLOW.md) ·
 [ADR-029](knowledge/ADR/ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md)

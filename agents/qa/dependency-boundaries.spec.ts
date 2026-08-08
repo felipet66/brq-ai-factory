@@ -147,7 +147,7 @@ describe('QA Agent dependency boundaries', () => {
     expect(packageJson.exports).toEqual({ '.': './index.ts' });
   });
 
-  it('does not expose deep imports or internal pipeline helpers', () => {
+  it('exposes only the approved pure inspection projection and no deep imports', () => {
     const tsconfig = JSON.parse(
       readFileSync(join(MODULE_ROOT, '..', '..', 'tsconfig.base.json'), 'utf8'),
     ) as { compilerOptions?: { paths?: Record<string, readonly string[]> } };
@@ -155,7 +155,9 @@ describe('QA Agent dependency boundaries', () => {
 
     expect(tsconfig.compilerOptions?.paths?.['@brq/qa-agent/*']).toBeUndefined();
     expect(publicIndex).not.toContain('deepFreeze');
-    expect(publicIndex).not.toContain('projectQAPromptContexts');
+    expect(publicIndex).toContain(
+      "export { projectQAPromptContexts } from './knowledge-projection';",
+    );
     expect(publicIndex).not.toContain('createQAAgentRunRequest');
     expect(publicIndex).not.toContain('createGeneratedResult');
     expect(publicIndex).not.toContain('requestLogContext');

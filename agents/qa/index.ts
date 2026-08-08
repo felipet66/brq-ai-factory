@@ -12,6 +12,7 @@ export {
 } from './business-validation';
 export * from './contracts';
 export { createQAAgent } from './qa-agent';
+export { projectQAPromptContexts } from './knowledge-projection';
 export {
   QA_AGENT_ERROR_CODES,
   QA_AGENT_STAGES,

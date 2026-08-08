@@ -3,13 +3,15 @@
 Aplicação Next.js 16 do BRQ AI Factory.
 
 O workspace hospeda o Frontend, o adapter HTTP e o composition root da aplicação. O contrato HTTP
-`2.0.0` expõe:
+`3.0.0` expõe:
 
 - `GET /api/health`;
 - `POST /api/executions`, que aceita o job com `202 Accepted`;
 - `GET /api/jobs/[id]`, que consulta o lifecycle persistido do job;
 - `GET /api/executions`, `GET /api/executions/[id]` e
-  `GET /api/executions/[id]/timeline`, que consultam o histórico durável.
+  `GET /api/executions/[id]/timeline`, que consultam o histórico durável;
+- `GET /api/playground/agents`, `POST /api/playground/preview` e
+  `POST /api/playground/validate`, exclusivos para `ADMIN` e sempre ephemeral.
 
 `src/app/page.tsx` compõe a página como Server Component. A subárvore interativa usa estado local e
 delega toda comunicação a clients HTTP internos. O formulário envia o POST uma única vez, recebe
@@ -21,6 +23,11 @@ delega toda comunicação a clients HTTP internos. O formulário envia o POST um
 públicas e fornece o Engine persistente/observado, o `ExecutionRecordRepository`, o
 `InMemoryJobQueue`, o dispatcher e o único Execution Worker sequencial. Regras de negócio
 permanecem nos workspaces do núcleo e nenhum workspace de runtime existe no domínio.
+
+`src/server/playground/prompt-inspection-runtime.ts` é um composition root independente. Ele
+fornece somente o `PromptInspector` e adapters estáticos para Product Owner, Developer e QA. Não
+importa `runtime.ts` e não pode alcançar provider, Runner, Orchestrator, Engine, Queue, Worker,
+Repository ou Observability.
 
 O dispatcher persiste a metadata `QUEUED` antes de disponibilizar o payload à fila. O signal da
 requisição HTTP termina quando o POST é aceito; o Worker possui seu próprio `AbortController` para
@@ -36,10 +43,11 @@ filas independentes e não existe recovery, retry ou garantia de continuidade em
 As projeções de job e execução persistem somente metadados técnicos permitidos; prompts, demanda
 detalhada, knowledge, respostas e artifacts não são persistidos pela fila.
 
-O request `2.0.0` ainda exige IDs e configurações técnicas dos agentes. O client fornece um perfil
+O request de execução ainda exige IDs e configurações técnicas dos agentes. O client fornece um perfil
 versionado e gera esses IDs por submissão como limitação temporária; `executionId` e `jobId`
 permanecem exclusivamente sob responsabilidade do backend.
 
 Consulte `knowledge/38-HTTP_API_FLOW.md`, `knowledge/39-FRONTEND_FLOW.md`,
-`knowledge/41-EXECUTION_REPOSITORY_FLOW.md`, `knowledge/42-JOB_QUEUE_FLOW.md` e os ADRs 024, 025,
-027 e 028 para contratos, status e fronteiras.
+`knowledge/41-EXECUTION_REPOSITORY_FLOW.md`, `knowledge/42-JOB_QUEUE_FLOW.md`,
+`knowledge/44-PROMPT_PLAYGROUND_FLOW.md` e os ADRs 024, 025, 027, 028 e 030 para contratos, status
+e fronteiras.

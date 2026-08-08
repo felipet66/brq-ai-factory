@@ -35,9 +35,17 @@ describe('authenticated user presentation', () => {
     expect(screen.getByRole('link', { name: 'BRQ AI Factory' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'New execution' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/executions');
+    expect(screen.getByRole('link', { name: 'Playground' })).toHaveAttribute('href', '/playground');
     expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/token|cookie|session id/i);
+  });
+
+  it('does not advertise the ADMIN-only Playground to a USER', () => {
+    render(<AuthenticatedHeader currentUser={{ ...USER, role: 'USER' }} />);
+
+    expect(screen.queryByRole('link', { name: 'Playground' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'History' })).toBeInTheDocument();
   });
 
   it('renders exactly the six approved public profile fields as text', () => {

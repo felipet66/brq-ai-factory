@@ -1,0 +1,868 @@
+.shell {
+  min-height: 100vh;
+  padding: 2.5rem 1.25rem 4rem;
+  background-image:
+    linear-gradient(rgb(101 215 189 / 3%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(101 215 189 / 3%) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+}
+
+.layout {
+  display: grid;
+  width: min(100%, 92rem);
+  margin: 0 auto;
+  gap: 1.25rem;
+}
+
+.hero {
+  display: grid;
+  padding: 1rem 0 0.5rem;
+  gap: 1rem;
+}
+
+.hero h1,
+.sectionHeading h2,
+.panelHeadingCompact h2,
+.nodeDetails h3,
+.trustColumns h3,
+.subheading {
+  margin: 0;
+}
+
+.hero h1 {
+  margin-top: 0.7rem;
+  font-size: clamp(2.75rem, 7vw, 6rem);
+  font-weight: 650;
+  letter-spacing: -0.06em;
+  line-height: 0.92;
+}
+
+.hero > p {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.kicker {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ephemeralBanner {
+  display: flex;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgb(101 215 189 / 30%);
+  border-radius: 0.9rem;
+  background: rgb(30 105 100 / 18%);
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.ephemeralBanner > span {
+  color: var(--accent);
+  font-size: 0.65rem;
+  text-shadow: 0 0 0.8rem var(--accent);
+}
+
+.ephemeralBanner p,
+.fullState p,
+.supportingText,
+.nodeDetails p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.workbench {
+  display: grid;
+  min-width: 0;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.controlRail,
+.inspector,
+.overviewGrid {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.agentSelector,
+.inputForm,
+.pipelinePanel,
+.nodeDetails,
+.contentPanel,
+.budgetCard,
+.trustPanel,
+.fullState,
+.emptyInspector {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 1.1rem;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 14%);
+  backdrop-filter: blur(1rem);
+}
+
+.agentSelector {
+  margin: 0;
+}
+
+.agentSelector legend {
+  padding: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.agentSelector > p {
+  margin: 0.45rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.agentOptions {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.agentOption {
+  position: relative;
+  display: grid;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: rgb(2 10 20 / 28%);
+  cursor: pointer;
+  grid-template-columns: auto auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.agentOption[data-selected='true'] {
+  border-color: rgb(101 215 189 / 64%);
+  background: rgb(46 188 157 / 10%);
+}
+
+.agentOption input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--accent);
+}
+
+.agentSequence,
+.pipelineIndex,
+.validationSequence {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.agentOption strong,
+.agentOption small {
+  display: block;
+}
+
+.agentOption small {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.inputForm,
+.formFields {
+  display: grid;
+  gap: 1rem;
+}
+
+.formFields {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.panelHeadingCompact,
+.sectionHeading,
+.validationHeading {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.panelHeadingCompact h2,
+.sectionHeading h2 {
+  margin-top: 0.35rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.sectionHeading > span,
+.validationHeading > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sectionHeading > span[data-warning='true'],
+.warningText {
+  color: #ffd166;
+}
+
+.supportingText {
+  font-size: 0.82rem;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.field > span {
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: rgb(2 10 20 / 64%);
+  color: var(--foreground);
+}
+
+.field input {
+  min-height: 2.9rem;
+}
+
+.field textarea {
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.field textarea[name$='Specification'],
+.codePreview,
+.hashGrid code,
+.sourceHashes code,
+.knowledgeTable code,
+.validationMetadata code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.field textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 0.7rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primaryButton {
+  border: 0;
+  background: var(--accent);
+  color: #041511;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.agentOption:has(input:focus-visible),
+.pipeline button:focus-visible,
+.inspectorTabs button:focus-visible,
+.subTabs button:focus-visible,
+.schemaDetails summary:focus-visible {
+  outline: 3px solid rgb(101 215 189 / 38%);
+  outline-offset: 2px;
+}
+
+.inlineError {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.inlineWarning {
+  margin: 0;
+  color: #ffd166;
+  font-size: 0.82rem;
+}
+
+.pipelinePanel {
+  overflow: hidden;
+}
+
+.pipeline {
+  display: grid;
+  padding: 0;
+  margin: 1rem 0 0;
+  gap: 0.6rem;
+  list-style: none;
+}
+
+.pipeline li {
+  position: relative;
+}
+
+.pipeline li:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  width: 1px;
+  height: 0.6rem;
+  bottom: -0.6rem;
+  left: 1.55rem;
+  background: var(--border);
+  content: '';
+}
+
+.pipeline button {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  min-height: 3.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: rgb(2 10 20 / 38%);
+  color: var(--foreground);
+  cursor: pointer;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  text-align: left;
+}
+
+.pipeline button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgb(46 188 157 / 10%);
+}
+
+.pipeline button > span:last-child {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pipeline li[data-status='VALID'] button > span:last-child {
+  color: var(--accent);
+}
+
+.pipeline li[data-status='WARNING'] button > span:last-child {
+  color: #ffd166;
+}
+
+.pipeline li[data-status='ERROR'] button > span:last-child {
+  color: var(--danger);
+}
+
+.nodeDetails {
+  display: grid;
+  gap: 1rem;
+  border-left: 3px solid var(--accent);
+}
+
+.inspectorTabs,
+.subTabs {
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspectorTabs > div,
+.subTabs > div {
+  display: flex;
+  min-width: max-content;
+  gap: 0.25rem;
+}
+
+.inspectorTabs button,
+.subTabs button {
+  padding: 0.75rem 0.9rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.inspectorTabs button[aria-selected='true'],
+.subTabs button[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--foreground);
+}
+
+.inspectorTabPanel:focus {
+  outline: none;
+}
+
+.overviewGrid {
+  grid-template-columns: 1fr;
+}
+
+.contentPanel,
+.budgetCard,
+.trustPanel {
+  display: grid;
+  gap: 1rem;
+}
+
+.budgetProgress {
+  width: 100%;
+  height: 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--accent);
+}
+
+.budgetProgress::-webkit-progress-bar {
+  background: rgb(255 255 255 / 8%);
+}
+
+.budgetProgress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+}
+
+.budgetValue {
+  margin: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.budgetValue strong {
+  color: var(--foreground);
+}
+
+.budgetBreakdown,
+.contractFacts,
+.contractSummary,
+.hashGrid,
+.validationMetadata {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.budgetBreakdown > div,
+.contractFacts > div,
+.contractSummary > div,
+.hashGrid > div,
+.validationMetadata > div {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: rgb(2 10 20 / 28%);
+}
+
+.budgetBreakdown dt,
+.contractFacts dt,
+.contractSummary dt,
+.hashGrid dt,
+.validationMetadata dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.budgetBreakdown dd,
+.contractFacts dd,
+.contractSummary dd,
+.hashGrid dd,
+.validationMetadata dd {
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 750;
+}
+
+.trustColumns {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.trustColumns > section {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: rgb(2 10 20 / 28%);
+}
+
+.trustColumns h3 {
+  color: var(--accent);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+}
+
+.trustColumns section:last-child h3 {
+  color: #ffd166;
+}
+
+.trustColumns ul,
+.requiredProperties ul,
+.contractInstructions ol,
+.knowledgeExceptions ul,
+.sourceHashes,
+.validationPipeline,
+.issueList {
+  display: grid;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  gap: 0.55rem;
+  list-style: none;
+}
+
+.trustColumns li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.trustColumns li span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.codePreview {
+  max-height: 38rem;
+  padding: 1rem;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: #020a14;
+  color: #d9eaff;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formatBadge {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent) !important;
+}
+
+.requiredProperties h3,
+.contractInstructions h3,
+.knowledgeExceptions h3,
+.schemaDetails summary,
+.subheading {
+  font-size: 0.9rem;
+}
+
+.requiredProperties ul {
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.contractInstructions ol,
+.knowledgeExceptions ul {
+  padding-left: 1.25rem;
+}
+
+.contractInstructions li,
+.knowledgeExceptions li {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.requiredProperties li {
+  display: grid;
+  padding: 0.5rem;
+  border-radius: 0.55rem;
+  background: var(--surface-soft);
+  gap: 0.25rem;
+}
+
+.requiredProperties li span,
+.requiredProperties li small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.knowledgeExceptions {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.schemaDetails summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.schemaDetails .codePreview {
+  margin-top: 0.75rem;
+}
+
+.tableScroller {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+}
+
+.knowledgeTable {
+  width: 100%;
+  min-width: 62rem;
+  border-collapse: collapse;
+}
+
+.knowledgeTable th,
+.knowledgeTable td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.knowledgeTable th {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.knowledgeTable td {
+  font-size: 0.78rem;
+}
+
+.knowledgeTable code {
+  overflow-wrap: anywhere;
+}
+
+.sourceHashes li {
+  display: grid;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: rgb(2 10 20 / 28%);
+  gap: 0.3rem;
+  grid-template-columns: minmax(5rem, auto) minmax(8rem, 1fr);
+}
+
+.sourceHashes li > span {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sourceHashes code {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.7rem;
+  grid-column: 1 / -1;
+}
+
+.validationPipeline {
+  margin-top: 0;
+}
+
+.validationPipeline > li {
+  display: grid;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 0.8rem;
+  background: rgb(2 10 20 / 28%);
+  gap: 0.8rem;
+  grid-template-columns: auto 1fr;
+}
+
+.validationPipeline > li[data-status='PASS'] {
+  border-left-color: var(--accent);
+}
+
+.validationPipeline > li[data-status='FAIL'] {
+  border-left-color: var(--danger);
+}
+
+.validationHeading span {
+  color: var(--muted);
+}
+
+.validationPipeline > li[data-status='PASS'] .validationHeading span {
+  color: var(--accent);
+}
+
+.validationPipeline > li[data-status='FAIL'] .validationHeading span {
+  color: var(--danger);
+}
+
+.issueList > li {
+  display: flex;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+  gap: 0.35rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.issueList code {
+  color: var(--danger);
+}
+
+.issueList span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.issueList p {
+  width: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.fullState,
+.emptyInspector {
+  display: flex;
+  min-height: 9rem;
+  gap: 0.9rem;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.fullState.errorState {
+  border-color: rgb(255 158 171 / 34%);
+  background: var(--danger-surface);
+  color: var(--danger);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: playground-spin 700ms linear infinite;
+}
+
+.emptyInspector > span {
+  color: var(--accent);
+  font-size: 2rem;
+}
+
+@keyframes playground-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 48rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.8fr);
+    align-items: end;
+  }
+
+  .trustColumns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 72rem) {
+  .workbench {
+    grid-template-columns: minmax(20rem, 0.72fr) minmax(0, 2fr);
+  }
+
+  .controlRail {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
+
+  .overviewGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trustPanel {
+    grid-column: 1 / -1;
+  }
+
+  .pipeline {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .pipeline li:not(:last-child)::after {
+    width: 0.6rem;
+    height: 1px;
+    right: -0.6rem;
+    bottom: auto;
+    left: auto;
+    top: 50%;
+  }
+
+  .pipeline button {
+    min-height: 6rem;
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 40rem) {
+  .shell {
+    padding: 1.5rem 0.75rem 3rem;
+  }
+
+  .agentSelector,
+  .inputForm,
+  .pipelinePanel,
+  .nodeDetails,
+  .contentPanel,
+  .budgetCard,
+  .trustPanel,
+  .fullState,
+  .emptyInspector {
+    padding: 1rem;
+  }
+
+  .panelHeadingCompact,
+  .sectionHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

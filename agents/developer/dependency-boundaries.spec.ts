@@ -138,7 +138,7 @@ describe('Developer Agent dependency boundaries', () => {
     expect(packageJson.exports).toEqual({ '.': './index.ts' });
   });
 
-  it('does not expose deep imports or internal pipeline helpers', () => {
+  it('exposes only the approved pure inspection projection and no deep imports', () => {
     const tsconfig = JSON.parse(
       readFileSync(join(MODULE_ROOT, '..', '..', 'tsconfig.base.json'), 'utf8'),
     ) as { compilerOptions?: { paths?: Record<string, readonly string[]> } };
@@ -146,7 +146,9 @@ describe('Developer Agent dependency boundaries', () => {
 
     expect(tsconfig.compilerOptions?.paths?.['@brq/developer-agent/*']).toBeUndefined();
     expect(publicIndex).not.toContain('deepFreeze');
-    expect(publicIndex).not.toContain('projectDeveloperPromptContexts');
+    expect(publicIndex).toContain(
+      "export { projectDeveloperPromptContexts } from './knowledge-projection';",
+    );
     expect(publicIndex).not.toContain('createDeveloperAgentRunRequest');
     expect(publicIndex).not.toContain('createGeneratedResult');
     expect(publicIndex).not.toContain('requestLogContext');

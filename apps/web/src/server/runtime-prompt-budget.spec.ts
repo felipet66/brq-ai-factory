@@ -56,7 +56,8 @@ import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it } from 'vitest';
 
 import { capturedLogger, executionBody, FIXED_REQUEST_ID } from '../test/api-fixtures';
-import { AI_FACTORY_PROMPT_BUILDER_MAX_BYTES, createApplicationRuntime } from './runtime';
+import { AI_FACTORY_PROMPT_BUILDER_MAX_BYTES } from './ai-factory-runtime-configuration';
+import { createApplicationRuntime } from './runtime';
 
 const KNOWLEDGE_ROOT = fileURLToPath(new URL('../../../../knowledge', import.meta.url));
 const FITTING_PAYLOAD_BYTES = 400 * 1024;

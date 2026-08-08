@@ -18,6 +18,7 @@
     "core/observability/**/*.ts",
     "core/orchestrator/**/*.ts",
     "core/prompt-builder/**/*.ts",
+    "core/prompt-inspector/**/*.ts",
     "core/response-validator/**/*.ts",
     "prisma.config.ts",
     "prisma/**/*.ts",

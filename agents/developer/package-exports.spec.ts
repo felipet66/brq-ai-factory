@@ -7,6 +7,7 @@ import {
   developerAgentRequestSchema,
   developerAgentResultSchema,
   loadDeveloperPromptAssets,
+  projectDeveloperPromptContexts,
   technicalSpecificationSchema,
   validateDeveloperBusinessRules,
   type DeveloperAgentRequest,
@@ -29,6 +30,7 @@ describe('@brq/developer-agent package exports', () => {
     expect(developerAgentResultSchema).toBeDefined();
     expect(resultTypeCheck).toBeUndefined();
     expect(loadDeveloperPromptAssets().manifest.agent).toBe('DEVELOPER');
+    expect(projectDeveloperPromptContexts).toBeTypeOf('function');
     expect(DEVELOPER_READINESS_VALUES).toEqual([
       'READY',
       'PARTIALLY_READY',
@@ -44,11 +46,11 @@ describe('@brq/developer-agent package exports', () => {
     expect(DEVELOPER_AGENT_ERROR_CODES.RUN_FAILED).toBe('DEVELOPER_AGENT_RUN_FAILED');
   });
 
-  it('does not expose internal assembly, projection, result or logging helpers', async () => {
+  it('exposes only the pure projection seam while keeping assembly, result and logging internal', async () => {
     const publicApi: Record<string, unknown> = await import('@brq/developer-agent');
 
     expect(publicApi).not.toHaveProperty('deepFreeze');
-    expect(publicApi).not.toHaveProperty('projectDeveloperPromptContexts');
+    expect(publicApi).toHaveProperty('projectDeveloperPromptContexts');
     expect(publicApi).not.toHaveProperty('createDeveloperAgentRunRequest');
     expect(publicApi).not.toHaveProperty('createGeneratedResult');
     expect(publicApi).not.toHaveProperty('requestLogContext');

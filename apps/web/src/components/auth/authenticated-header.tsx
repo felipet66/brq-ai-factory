@@ -19,6 +19,7 @@ export function AuthenticatedHeader({ currentUser }: AuthenticatedHeaderProps) {
       <nav className={styles.navigation} aria-label="Primary navigation">
         <Link href="/">New execution</Link>
         <Link href="/executions">History</Link>
+        {currentUser.role === 'ADMIN' ? <Link href="/playground">Playground</Link> : null}
         <Link href="/profile">Profile</Link>
       </nav>
       <div className={styles.accountControls}>

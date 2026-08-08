@@ -4,7 +4,7 @@ import { API_ERROR_CODES } from './constants';
 import type { RequestIdFactory } from './contracts';
 import { HttpApiError, mapTechnicalError } from './errors';
 import { createRequestId } from './request';
-import { errorResponse } from './responses';
+import { errorResponse } from './response-foundation';
 
 export interface RouteOperationResult {
   readonly response: Response;

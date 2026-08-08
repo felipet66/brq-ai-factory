@@ -18,6 +18,7 @@
       "@brq/ai-provider/*": ["./core/ai-provider/*"],
       "@brq/knowledge-loader/*": ["./core/knowledge-loader/*"],
       "@brq/prompt-builder/*": ["./core/prompt-builder/*"],
+      "@brq/prompt-inspector/*": ["./core/prompt-inspector/*"],
       "@brq/response-validator/*": ["./core/response-validator/*"],
       "@brq/shared/*": ["./shared/*"]
     }

@@ -18,5 +18,6 @@ export {
   type ProductOwnerAgentStage,
 } from './errors';
 export { createProductOwnerAgent } from './product-owner-agent';
+export { projectProductOwnerPromptContexts } from './knowledge-projection';
 export * from './prompt-assets';
 export * from './schemas';

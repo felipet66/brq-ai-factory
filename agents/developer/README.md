@@ -53,4 +53,4 @@ drift no 1.0.2 e uma versão 1.0.3 depende da reprodução concreta do payload h
 
 ## API pública
 
-O entrypoint `@brq/developer-agent` expõe a factory, os contratos e schemas canônicos, a Developer Business Validation e o carregador validado de prompt assets. Funções internas de projeção, logging e montagem de resultado não fazem parte da API pública.
+O entrypoint `@brq/developer-agent` expõe a factory, os contratos e schemas canônicos, a Developer Business Validation, o carregador validado de prompt assets e a função pura `projectDeveloperPromptContexts`. Essa projeção pública é o seam mínimo usado pelo Prompt Inspector; ela reutiliza exatamente a transformação do agente sem executar o agente. Logging, montagem de requests do runner e montagem de resultado permanecem internos.

@@ -5,6 +5,7 @@ import {
   createProductOwnerAgent,
   deriveProductOwnerReadiness,
   loadProductOwnerPromptAssets,
+  projectProductOwnerPromptContexts,
   productOwnerAgentRequestSchema,
   productOwnerAgentResultSchema,
   productOwnerSpecificationSchema,
@@ -32,6 +33,7 @@ describe('@brq/product-owner-agent package exports', () => {
     expect(productOwnerAgentResultSchema).toBeDefined();
     expect(resultTypeCheck).toBeUndefined();
     expect(loadProductOwnerPromptAssets().manifest.agent).toBe('PRODUCT_OWNER');
+    expect(projectProductOwnerPromptContexts).toBeTypeOf('function');
     expect(PRODUCT_OWNER_READINESS_VALUES).toEqual([
       'READY',
       'PARTIALLY_READY',
@@ -48,11 +50,11 @@ describe('@brq/product-owner-agent package exports', () => {
     expect(PRODUCT_OWNER_AGENT_ERROR_CODES.RUN_FAILED).toBe('PRODUCT_OWNER_AGENT_RUN_FAILED');
   });
 
-  it('does not expose internal assembly, projection, result or logging helpers', async () => {
+  it('exposes only the pure projection seam while keeping assembly, result and logging internal', async () => {
     const publicApi: Record<string, unknown> = await import('@brq/product-owner-agent');
 
     expect(publicApi).not.toHaveProperty('deepFreeze');
-    expect(publicApi).not.toHaveProperty('projectProductOwnerPromptContexts');
+    expect(publicApi).toHaveProperty('projectProductOwnerPromptContexts');
     expect(publicApi).not.toHaveProperty('createProductOwnerAgentRunRequest');
     expect(publicApi).not.toHaveProperty('createGeneratedResult');
     expect(publicApi).not.toHaveProperty('requestLogContext');

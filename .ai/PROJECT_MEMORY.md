@@ -2,10 +2,10 @@
 
 ## Estado atual
 
-Sprint 19 — Authentication & Authorization concluída localmente após aprovação arquitetural.
-Better Auth foi mantido depois de reavaliação com Auth.js, e `/profile` integra a entrega. O hotfix
-separado de Structured Outputs do Developer Agent permanece isolado. Nenhum item da Sprint 20 foi
-iniciado e nenhuma chamada real à OpenAI integra esta Sprint.
+Sprint 20 — Prompt Playground & Agent Debugger implementada localmente após aprovação arquitetural.
+O Playground é exclusivo para `ADMIN`, usa um runtime de inspeção separado e não executa agentes
+nem acessa AI Provider/OpenAI. O hotfix separado de Structured Outputs do Developer Agent
+permanece isolado. Nenhum item da Sprint 21 foi iniciado.
 
 ## Fundação técnica
 
@@ -16,6 +16,8 @@ iniciado e nenhuma chamada real à OpenAI integra esta Sprint.
 - SDK OpenAI 7.4 com Responses API isolada no adapter concreto;
 - Knowledge Loader determinístico com origem filesystem abstraída por `KnowledgeSource`;
 - Prompt Builder determinístico com AST imutável e renderização final em dois canais;
+- Prompt Inspector transport-neutral para preview determinístico e validação manual ephemeral,
+  sem provider, execução, persistência ou observabilidade;
 - Agent Runner genérico integrando Prompt Builder e AI Provider sem regras de agente ou workflow;
 - Response Validator genérico para classificação funcional determinística de `AgentRunResult`;
 - Artifact Generator genérico para produzir drafts determinísticos a partir de saídas validadas e specifications declarativas;
@@ -56,6 +58,8 @@ iniciado e nenhuma chamada real à OpenAI integra esta Sprint.
   host-only, `httpOnly`, `sameSite=lax` e `secure` em produção;
 - passwords protegidos por Argon2id e credenciais de seed recebidas somente por variáveis de
   ambiente;
+- inspection data do Playground permanece em memória e em resposta `no-store`, sem Repository,
+  Observability, History, cache ou browser storage;
 
 ## Shared Layer
 
@@ -868,6 +872,50 @@ iniciado e nenhuma chamada real à OpenAI integra esta Sprint.
 - rate limiting, lockout, MFA, OAuth, SSO, password reset e administração completa de usuários
   permanecem riscos ou itens futuros, não funcionalidades implícitas desta Sprint;
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 20
+  foi iniciado.
+
+## Implementação da Sprint 20
+
+- `core/prompt-inspector` foi criado como workspace transport-neutral, stateless e imutável;
+- o Inspector recebe três adapters fixos e oferece catálogo, preview `BUILT | REJECTED` e
+  Validation Preview, sem registry, descoberta ou seleção dinâmica;
+- Knowledge Loader, Prompt Builder e Response Validator reais são reutilizados; nenhum Agent
+  Runner, AI Provider, Orchestrator, Engine, Queue, Worker, Repository ou Observability integra o
+  runtime de inspeção;
+- as funções puras `projectProductOwnerPromptContexts`, `projectDeveloperPromptContexts` e
+  `projectQAPromptContexts` passaram a integrar os entrypoints públicos como seams mínimos; nenhuma
+  lógica funcional dos agentes foi alterada;
+- o composition root exclusivo em `apps/web/src/server/playground/` reutiliza o source ID de
+  Knowledge e o budget aprovado de 512 KiB por uma configuração compartilhada do host, sem
+  importar `apps/web/src/server/runtime.ts`;
+- o default global do Prompt Builder permanece 128 KiB, o budget do host permanece 512 KiB e o
+  Knowledge Manifest e Selection Policy permanecem intactos;
+- o preview projeta pipeline, sections, trust boundaries, prompt renderizado, budget, Knowledge
+  metadata allowlisted, hashes reais e resumo bounded do output contract;
+- o Validation Preview reconstrói o prompt de forma determinística e aplica Response Validator,
+  JSON Schema, contrato Zod público e Business Validation pública, sem corrigir conteúdo e sem
+  chamar provider;
+- o hash do payload manual é exposto exclusivamente como `candidateHash`; mensagens são
+  sanitizadas e issues indicam code, path, keyword e truncamento;
+- `GET /api/playground/agents`, `POST /api/playground/preview` e
+  `POST /api/playground/validate` exigem `ADMIN`, usam envelopes `3.0.0`, `no-store`, Zod, limites,
+  same-origin para mutações e propagação de `AbortSignal`;
+- `/playground` apresenta uma interface control-room acessível com selector de agentes, fixtures
+  sintéticas, sete nodes de build, tabs, trust boundaries, budget, Knowledge, hashes, schema
+  read-only e Validation Pipeline; nenhum componente conhece workspaces funcionais;
+- a experiência mantém estado somente em React, aborta requests obsoletos e não usa localStorage,
+  sessionStorage, query string, unsafe HTML ou biblioteca visual adicional;
+- ADR-030 e `knowledge/44-PROMPT_PLAYGROUND_FLOW.md` documentam arquitetura, inspeção, trust,
+  validação, interação e segurança;
+- a validação final com Node 24.19.0 aprovou 1.242 testes em 201 arquivos; cobertura do núcleo em
+  93,61% statements, 85,86% branches, 98,55% functions e 94,29% lines, e do host web em 95,90%
+  statements, 87,80% branches, 95,27% functions e 97,12% lines;
+- `format`, `format:check`, `lint`, `typecheck`, `test`, `test:coverage`, `prisma:validate`, `build`
+  e `git diff --check` foram executados com sucesso;
+- prompt assets, output contracts, Business Validations, schemas públicos, budget, manifest e
+  policy não foram modificados; a única integração nos agentes foi a exportação das projeções
+  puras já existentes;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 21
   foi iniciado.
 
 ## Fora do escopo confirmado

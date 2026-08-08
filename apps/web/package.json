@@ -28,6 +28,7 @@
     "@brq/prisma": "0.1.0",
     "@brq/product-owner-agent": "0.1.0",
     "@brq/prompt-builder": "0.1.0",
+    "@brq/prompt-inspector": "0.1.0",
     "@brq/qa-agent": "0.1.0",
     "@brq/response-validator": "0.1.0",
     "@brq/shared": "0.1.0",

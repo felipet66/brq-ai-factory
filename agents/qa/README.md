@@ -48,3 +48,7 @@ Artifacts canônicos:
 - ausência de retry, workflow, código, Playwright e execução de testes.
 
 Consulte [ADR-021](../../knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md) e [fluxo visual](../../knowledge/35-QA_AGENT_FLOW.md).
+
+## API pública
+
+O entrypoint também expõe a função pura `projectQAPromptContexts` como seam mínimo do Prompt Inspector. Ela reutiliza a transformação canônica de conhecimento e specifications sem executar o QA Agent. Logging, montagem de requests do runner e montagem de resultado permanecem internos.

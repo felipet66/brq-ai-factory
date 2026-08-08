@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { createAgentRunner } from '@brq/agent-runner';
 import type { AIProvider } from '@brq/ai-provider';
 import { OpenAIProvider } from '@brq/ai-provider/openai';
@@ -19,12 +17,7 @@ import {
   type ExecutionDispatcher,
   type ExecutionWorker,
 } from '@brq/execution-worker';
-import {
-  createKnowledgeLoader,
-  KNOWLEDGE_MANIFEST,
-  type KnowledgeSource,
-} from '@brq/knowledge-loader';
-import { FilesystemKnowledgeSource } from '@brq/knowledge-loader/filesystem';
+import { createKnowledgeLoader, type KnowledgeSource } from '@brq/knowledge-loader';
 import {
   createInMemoryExecutionHistory,
   createObservabilityLogger,
@@ -43,8 +36,11 @@ import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
 import type { AuthenticatedPrincipal } from './auth/contracts';
-
-export const AI_FACTORY_PROMPT_BUILDER_MAX_BYTES = 512 * 1024;
+import {
+  AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
+  createAIFactoryKnowledgeSource,
+  resolveAIFactoryKnowledgeRoot,
+} from './ai-factory-runtime-configuration';
 
 export interface ApplicationRuntimeOptions {
   readonly aiProvider?: AIProvider;
@@ -124,25 +120,6 @@ export function createApplicationWorkerRuntime(
   return runtime;
 }
 
-function validateKnowledgeRoot(rootPath: string): string {
-  if (!path.isAbsolute(rootPath)) {
-    throw new Error('A raiz de knowledge deve ser um caminho absoluto.');
-  }
-  return rootPath;
-}
-
-function defaultKnowledgeRoot(environment: NodeJS.ProcessEnv): string {
-  const configured = environment.BRQ_KNOWLEDGE_ROOT?.trim();
-  if (configured !== undefined && configured.length > 0) {
-    return validateKnowledgeRoot(configured);
-  }
-  const currentDirectory = process.cwd();
-  const fromWebWorkspace =
-    path.basename(currentDirectory) === 'web' &&
-    path.basename(path.dirname(currentDirectory)) === 'apps';
-  return path.resolve(currentDirectory, fromWebWorkspace ? '../../knowledge' : 'knowledge');
-}
-
 export async function createApplicationRuntime(
   options: ApplicationRuntimeOptions = {},
 ): Promise<ExecutionEngine> {
@@ -157,18 +134,10 @@ export async function createApplicationRuntime(
   });
   const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
   const environment = options.environment ?? process.env;
-  const knowledgeRoot = validateKnowledgeRoot(
-    options.knowledgeRoot ?? defaultKnowledgeRoot(environment),
-  );
+  const knowledgeRoot = resolveAIFactoryKnowledgeRoot(environment, options.knowledgeRoot);
   const aiProvider =
     options.aiProvider ?? OpenAIProvider.fromEnvironment(environment, { logger, now });
-  const source =
-    options.knowledgeSource ??
-    new FilesystemKnowledgeSource({
-      sourceId: 'knowledge-filesystem',
-      rootPath: knowledgeRoot,
-      allowedLocators: KNOWLEDGE_MANIFEST.documents.map((document) => document.locator),
-    });
+  const source = options.knowledgeSource ?? createAIFactoryKnowledgeSource(knowledgeRoot);
   const knowledgeLoader = await createKnowledgeLoader({ source, logger, now });
   const promptBuilder = createPromptBuilder({
     configuration: { maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES },

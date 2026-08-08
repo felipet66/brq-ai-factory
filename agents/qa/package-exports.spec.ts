@@ -5,6 +5,7 @@ import {
   createQAAgent,
   deriveQAReadiness,
   loadQAPromptAssets,
+  projectQAPromptContexts,
   qaAgentRequestSchema,
   qaAgentResultSchema,
   qaSpecificationSchema,
@@ -29,6 +30,7 @@ describe('@brq/qa-agent package exports', () => {
     expect(qaAgentResultSchema).toBeDefined();
     expect(resultTypeCheck).toBeUndefined();
     expect(loadQAPromptAssets().manifest.agent).toBe('QA');
+    expect(projectQAPromptContexts).toBeTypeOf('function');
     expect(QA_READINESS_VALUES).toEqual(['READY', 'PARTIALLY_READY', 'REQUIRES_CLARIFICATION']);
     expect(deriveQAReadiness('READY', 'READY', [], [], [])).toBe('READY');
     expect(
@@ -42,10 +44,10 @@ describe('@brq/qa-agent package exports', () => {
     expect(QA_AGENT_ERROR_CODES.RUN_FAILED).toBe('QA_AGENT_RUN_FAILED');
   });
 
-  it('não expõe helpers internos de assembly, projeção, resultado ou logging', async () => {
+  it('expõe somente a projeção pura e mantém assembly, resultado e logging internos', async () => {
     const publicApi: Record<string, unknown> = await import('@brq/qa-agent');
     expect(publicApi).not.toHaveProperty('deepFreeze');
-    expect(publicApi).not.toHaveProperty('projectQAPromptContexts');
+    expect(publicApi).toHaveProperty('projectQAPromptContexts');
     expect(publicApi).not.toHaveProperty('createQAAgentRunRequest');
     expect(publicApi).not.toHaveProperty('createGeneratedResult');
     expect(publicApi).not.toHaveProperty('requestLogContext');
