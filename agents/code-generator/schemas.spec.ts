@@ -9,6 +9,7 @@ import {
 } from './schemas';
 import {
   createCodeGenerationRequest,
+  createCodeGeneratorTechnicalSpecification,
   createGeneratedCodeProposal,
 } from './testing/code-generator-fixtures';
 
@@ -41,6 +42,43 @@ describe('Code Generator public schemas', () => {
     });
     expect(Object.isFrozen(CODE_GENERATOR_CONTRACT_LIMITS)).toBe(true);
     expect(Object.isFrozen(CODE_GENERATOR_CONTRACT_LIMITS.generation)).toBe(true);
+  });
+
+  it('rejects a structurally valid TechnicalSpecification above the aggregate byte ceiling', () => {
+    const base = createCodeGeneratorTechnicalSpecification();
+    const itemText = 'x'.repeat(1_000);
+    const description = 'y'.repeat(2_000);
+    const technicalSpecification = createCodeGeneratorTechnicalSpecification({
+      architecture: {
+        ...base.architecture,
+        principles: Array.from({ length: 20 }, () => itemText),
+        constraints: Array.from({ length: 30 }, () => itemText),
+        qualityAttributes: Array.from({ length: 20 }, () => itemText),
+        trustBoundaries: Array.from({ length: 30 }, () => itemText),
+      },
+      modules: Array.from({ length: 80 }, (_, index) => ({
+        ...base.modules[0]!,
+        id: `MOD-${String(index + 1).padStart(3, '0')}`,
+        name: `Generated module ${index + 1}`,
+        path: `core/generated-module-${index + 1}`,
+        responsibility: description,
+      })),
+    });
+    const result = codeGenerationRequestSchema.safeParse(
+      createCodeGenerationRequest({ technicalSpecification }),
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ['technicalSpecification'],
+            message: expect.stringContaining('excede'),
+          }),
+        ]),
+      );
+    }
   });
 
   it('rejects unknown request fields and malformed approval evidence', () => {

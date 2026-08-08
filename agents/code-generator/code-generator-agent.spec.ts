@@ -8,7 +8,12 @@ import {
   canonicalizeJson,
   createPromptBuilder,
 } from '@brq/prompt-builder';
-import { createResponseValidator } from '@brq/response-validator';
+import {
+  createResponseValidator,
+  RESPONSE_VALIDATOR_ERROR_CODES,
+  ResponseValidatorError,
+  type ResponseValidator,
+} from '@brq/response-validator';
 import { createLogger } from '@brq/shared/logger/logger';
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { describe, expect, it } from 'vitest';
@@ -20,7 +25,7 @@ import {
 } from '../../core/ai-provider/fake/fake-ai-provider';
 import { FakeKnowledgeSource } from '../../core/knowledge-loader/testing/fake-knowledge-source';
 import { createCodeGeneratorAgent } from './code-generator-agent';
-import { CODE_GENERATOR_AGENT_ERROR_CODES, CodeGeneratorAgentError } from './errors';
+import { CODE_GENERATOR_AGENT_ERROR_CODES } from './errors';
 import {
   calculateBundleContentHash,
   calculateCodeGenerationHash,
@@ -75,6 +80,7 @@ interface HarnessOptions {
   readonly outcomes?: FakeAIProviderOutcome[];
   readonly knowledgeContent?: string;
   readonly knowledgeLoader?: KnowledgeLoader;
+  readonly responseValidator?: ResponseValidator;
 }
 
 type MutableGeneratedCodeBundle = z.infer<typeof generatedCodeBundleSchema>;
@@ -170,7 +176,7 @@ async function createHarness(options: HarnessOptions = {}) {
   const agent = createCodeGeneratorAgent({
     knowledgeLoader: options.knowledgeLoader ?? defaultKnowledgeLoader,
     agentRunner,
-    responseValidator: createResponseValidator({ logger }),
+    responseValidator: options.responseValidator ?? createResponseValidator({ logger }),
     promptAssets: loadCodeGeneratorPromptAssets(),
     logger,
   });
@@ -247,6 +253,48 @@ describe('CodeGeneratorAgent', () => {
     );
   });
 
+  it('rejects noncanonical file and entrypoint ordering at the public bundle boundary', async () => {
+    const base = createGeneratedCodeProposal().files[0]!;
+    const proposal = createGeneratedCodeProposal({
+      files: [
+        { ...base, path: 'core/order-query/a.ts', content: 'export const a = true;\n' },
+        { ...base, path: 'core/order-query/b.ts', content: 'export const b = true;\n' },
+      ],
+      entrypoints: ['core/order-query/b.ts', 'core/order-query/a.ts'],
+    });
+    const { agent } = await createHarness({
+      outcomes: [{ type: 'success', response: createCodeGeneratorAIResponse(proposal) }],
+    });
+    const result = await agent.execute(createCodeGenerationRequest());
+    if (result.outcome !== 'GENERATED') throw new Error('Expected generated result.');
+
+    const fileOrder = structuredClone(result.bundle) as unknown as MutableGeneratedCodeBundle;
+    fileOrder.files.reverse();
+    const entrypointOrder = structuredClone(result.bundle) as unknown as MutableGeneratedCodeBundle;
+    entrypointOrder.entrypoints.reverse();
+
+    expect(generatedCodeBundleSchema.safeParse(fileOrder).success).toBe(false);
+    expect(generatedCodeBundleSchema.safeParse(entrypointOrder).success).toBe(false);
+  });
+
+  it('rejects an invalid approval envelope before Knowledge or provider execution', async () => {
+    const request = createCodeGenerationRequest({
+      approval: {
+        ...createCodeGenerationRequest().approval,
+        qaReadiness: 'PARTIALLY_READY' as never,
+      },
+    });
+    const { agent, logLines, provider } = await createHarness();
+
+    await expect(agent.execute(request)).rejects.toMatchObject({
+      code: CODE_GENERATOR_AGENT_ERROR_CODES.INVALID_REQUEST,
+      stage: 'REQUEST_VALIDATION',
+      executionId: request.context.executionId,
+    });
+    expect(provider.calls).toHaveLength(0);
+    expect(logLines.join('\n')).not.toContain(request.technicalSpecification.summary);
+  });
+
   it.each([
     ['fileCount', (result: MutableGeneratedResult) => (result.metadata.generation.fileCount += 1)],
     [
@@ -280,6 +328,14 @@ describe('CodeGeneratorAgent', () => {
       'generationHash',
       (result: MutableGeneratedResult) =>
         (result.metadata.generation.generationHash = '0'.repeat(64)),
+    ],
+    [
+      'manifest fileCount',
+      (result: MutableGeneratedResult) => (result.bundle.manifest.fileCount += 1),
+    ],
+    [
+      'manifest totalBytes',
+      (result: MutableGeneratedResult) => (result.bundle.manifest.totalBytes += 1),
     ],
     [
       'technicalSpecificationHash',
@@ -338,6 +394,10 @@ describe('CodeGeneratorAgent', () => {
         (result.metadata.run.prompt.metadata.promptHash = '0'.repeat(64)),
     ],
     [
+      'prompt agent',
+      (result: MutableGeneratedResult) => (result.metadata.run.prompt.metadata.agent = 'DEVELOPER'),
+    ],
+    [
       'response hash',
       (result: MutableGeneratedResult) => (result.metadata.run.responseHash = '0'.repeat(64)),
     ],
@@ -367,7 +427,7 @@ describe('CodeGeneratorAgent', () => {
     expect(codeGeneratorAgentResultSchema.safeParse(candidate).success).toBe(false);
   });
 
-  it('rejects execution and TechnicalSpecification drift in rejected results', async () => {
+  it('rejects correlation and validation-state drift in rejected results', async () => {
     const { agent } = await createHarness({ outcomes: [{ type: 'malformed_json' }] });
     const result = await agent.execute(createCodeGenerationRequest());
     if (result.outcome !== 'VALIDATION_REJECTED') throw new Error('Expected rejected result.');
@@ -379,6 +439,14 @@ describe('CodeGeneratorAgent', () => {
     const specificationDrift = structuredClone(result) as unknown as MutableRejectedResult;
     specificationDrift.metadata.declaredTechnicalSpecificationHash = `sha256:${'0'.repeat(64)}`;
     expect(codeGeneratorAgentResultSchema.safeParse(specificationDrift).success).toBe(false);
+
+    const stageDrift = structuredClone(result) as unknown as MutableRejectedResult;
+    stageDrift.rejectedAt = 'BUSINESS_VALIDATION';
+    expect(codeGeneratorAgentResultSchema.safeParse(stageDrift).success).toBe(false);
+
+    const summaryDrift = structuredClone(result) as unknown as MutableRejectedResult;
+    summaryDrift.validation.response.valid = true;
+    expect(codeGeneratorAgentResultSchema.safeParse(summaryDrift).success).toBe(false);
   });
 
   it('preserves deterministic hashes for the same explicit response and source evidence', async () => {
@@ -485,36 +553,36 @@ describe('CodeGeneratorAgent', () => {
     }
   });
 
-  it('rejects re-hashed cross-boundary lineage evidence that diverges from the bundle', async () => {
-    const { agent } = await createHarness();
-    const result = await agent.execute(createCodeGenerationRequest());
-    if (result.outcome !== 'GENERATED') throw new Error('Expected generated result.');
-    const candidate = structuredClone(result.bundle) as unknown as MutableGeneratedCodeBundle;
+  it.each([
+    [
+      'calculated TechnicalSpecification hash',
+      (bundle: MutableGeneratedCodeBundle) =>
+        (bundle.lineage.technicalSpecificationHash = `sha256:${'7'.repeat(64)}`),
+    ],
+    [
+      'declared TechnicalSpecification hash',
+      (bundle: MutableGeneratedCodeBundle) =>
+        (bundle.lineage.declaredTechnicalSpecificationHash = `sha256:${'9'.repeat(64)}`),
+    ],
+    [
+      'QA approval hash',
+      (bundle: MutableGeneratedCodeBundle) =>
+        (bundle.lineage.qaSpecificationHash = `sha256:${'8'.repeat(64)}`),
+    ],
+  ])(
+    'rejects re-hashed %s evidence that breaks cross-boundary correlation',
+    async (_case, mutate) => {
+      const { agent } = await createHarness();
+      const result = await agent.execute(createCodeGenerationRequest());
+      if (result.outcome !== 'GENERATED') throw new Error('Expected generated result.');
+      const candidate = structuredClone(result.bundle) as unknown as MutableGeneratedCodeBundle;
 
-    candidate.lineage.declaredTechnicalSpecificationHash = `sha256:${'9'.repeat(64)}`;
-    candidate.hashes.lineageHash = calculateCodeGenerationLineageHash(candidate.lineage);
-    candidate.hashes.bundleHash = calculateGeneratedBundleHash({
-      bundleVersion: candidate.bundleVersion,
-      contractVersion: candidate.contractVersion,
-      technicalSpecificationHash: candidate.technicalSpecificationHash,
-      bundleContentHash: candidate.bundleContentHash,
-      manifestHash: candidate.hashes.manifestHash,
-      lineageHash: candidate.hashes.lineageHash,
-      provenanceHash: candidate.hashes.provenanceHash,
-    });
-    candidate.hashes.generationHash = calculateCodeGenerationHash({
-      bundleVersion: candidate.bundleVersion,
-      contractVersion: candidate.contractVersion,
-      bundleHash: candidate.hashes.bundleHash,
-      bundleContentHash: candidate.bundleContentHash,
-      promptHash: candidate.provenance.promptHash,
-      responseHash: candidate.provenance.responseHash,
-      validationHash: candidate.provenance.validationHash,
-      assetBundleHash: candidate.provenance.assetBundleHash,
-    });
+      mutate(candidate);
+      rehashBundle(candidate);
 
-    expect(generatedCodeBundleSchema.safeParse(candidate).success).toBe(false);
-  });
+      expect(generatedCodeBundleSchema.safeParse(candidate).success).toBe(false);
+    },
+  );
 
   it('returns RESPONSE_VALIDATION rejection without a bundle for malformed provider output', async () => {
     const { agent, provider } = await createHarness({ outcomes: [{ type: 'malformed_json' }] });
@@ -716,17 +784,32 @@ describe('CodeGeneratorAgent', () => {
     expect(provider.calls).toHaveLength(1);
   });
 
-  it('rejects mismatched hashes and execution evidence before provider invocation', async () => {
-    const request = createCodeGenerationRequest({
-      declaredTechnicalSpecificationHash: `sha256:${'0'.repeat(64)}`,
-      approval: {
-        ...createCodeGenerationRequest().approval,
-        executionId: 'another-execution',
-      },
-    });
+  it.each([
+    [
+      'declared TechnicalSpecification hash',
+      () =>
+        createCodeGenerationRequest({
+          declaredTechnicalSpecificationHash: `sha256:${'0'.repeat(64)}`,
+        }),
+    ],
+    [
+      'approval execution',
+      () =>
+        createCodeGenerationRequest({
+          approval: {
+            ...createCodeGenerationRequest().approval,
+            executionId: 'another-execution',
+          },
+        }),
+    ],
+  ])('rejects mismatched %s evidence before provider invocation', async (_case, requestFactory) => {
+    const request = requestFactory();
     const { agent, provider } = await createHarness();
 
-    await expect(agent.execute(request)).rejects.toBeInstanceOf(CodeGeneratorAgentError);
+    await expect(agent.execute(request)).rejects.toMatchObject({
+      code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
+      stage: 'SOURCE_VALIDATION',
+    });
     expect(provider.calls).toHaveLength(0);
   });
 
@@ -767,6 +850,41 @@ describe('CodeGeneratorAgent', () => {
       code: CODE_GENERATOR_AGENT_ERROR_CODES.RUN_FAILED,
     });
     expect(failed.provider.calls).toHaveLength(1);
+  });
+
+  it.each([
+    ['timeout', { type: 'timeout' } as const, CODE_GENERATOR_AGENT_ERROR_CODES.TIMEOUT],
+    ['cancellation', { type: 'cancelled' } as const, CODE_GENERATOR_AGENT_ERROR_CODES.CANCELLED],
+  ])('maps provider %s without retry', async (_case, outcome, expectedCode) => {
+    const { agent, provider } = await createHarness({ outcomes: [outcome] });
+
+    await expect(agent.execute(createCodeGenerationRequest())).rejects.toMatchObject({
+      code: expectedCode,
+      stage: 'RUNNER_EXECUTION',
+    });
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it('sanitizes a Response Validator exception and maps the validation stage', async () => {
+    const sensitiveMessage = 'validator failure containing private response material';
+    const responseValidator: ResponseValidator = {
+      validate() {
+        throw new ResponseValidatorError(sensitiveMessage, {
+          code: RESPONSE_VALIDATOR_ERROR_CODES.INTERNAL_ERROR,
+          stage: 'RESULT',
+          durationMs: 1,
+        });
+      },
+    };
+    const { agent, logLines, provider } = await createHarness({ responseValidator });
+
+    await expect(agent.execute(createCodeGenerationRequest())).rejects.toMatchObject({
+      code: CODE_GENERATOR_AGENT_ERROR_CODES.VALIDATION_FAILED,
+      stage: 'RESPONSE_VALIDATION',
+      sourceCode: RESPONSE_VALIDATOR_ERROR_CODES.INTERNAL_ERROR,
+    });
+    expect(provider.calls).toHaveLength(1);
+    expect(logLines.join('\n')).not.toContain(sensitiveMessage);
   });
 
   it('logs only allowlisted metadata and never logs source or generated content', async () => {

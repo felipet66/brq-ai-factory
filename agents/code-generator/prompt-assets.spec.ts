@@ -29,6 +29,18 @@ function sources(): CodeGeneratorPromptAssetSources {
   });
 }
 
+interface MutablePromptManifest {
+  assets: {
+    template: { id: string; filename: string };
+    ruleSets: Array<{ id: string; filename: string }>;
+  };
+  contexts: { knowledge: string; technicalSpecification: string };
+}
+
+function mutableManifest(): MutablePromptManifest {
+  return structuredClone(rawManifest) as unknown as MutablePromptManifest;
+}
+
 function strictObjectSchemaViolations(value: unknown, path = '$'): readonly string[] {
   if (Array.isArray(value)) {
     return value.flatMap((entry, index) =>
@@ -140,6 +152,11 @@ describe('Code Generator prompt assets', () => {
       type: 'RULE_SET_SLOT',
       ruleSetId: 'rules:code-generator-security',
     };
+    changedTemplate.sections[1]!.blocks[0]!.fragments[0] = {
+      id: 'security-rules:slot',
+      type: 'RULE_SET_SLOT',
+      ruleSetId: 'rules:code-generator-global',
+    };
     expect(() =>
       parseCodeGeneratorPromptAssets({ ...sources(), template: changedTemplate }),
     ).toThrow(CodeGeneratorPromptAssetsError);
@@ -149,5 +166,36 @@ describe('Code Generator prompt assets', () => {
     };
     loaded.hashes.bundleHash = '0'.repeat(64);
     expect(() => validateCodeGeneratorPromptAssets(loaded)).toThrow(CodeGeneratorPromptAssetsError);
+  });
+
+  it('rejects duplicate manifest identities, filenames and context bindings', () => {
+    const duplicateId = mutableManifest();
+    duplicateId.assets.ruleSets[0]!.id = duplicateId.assets.template.id;
+
+    const duplicateFilename = mutableManifest();
+    duplicateFilename.assets.ruleSets[0]!.filename = duplicateFilename.assets.template.filename;
+
+    const duplicateContext = mutableManifest();
+    duplicateContext.contexts.technicalSpecification = duplicateContext.contexts.knowledge;
+
+    for (const manifest of [duplicateId, duplicateFilename, duplicateContext]) {
+      expect(() => parseCodeGeneratorPromptAssets({ ...sources(), manifest })).toThrow(
+        CodeGeneratorPromptAssetsError,
+      );
+    }
+  });
+
+  it('rejects a structurally valid TEXT output contract and malformed injected bundles', () => {
+    const textContract = {
+      id: rawOutputContract.id,
+      version: rawOutputContract.version,
+      format: 'TEXT',
+      instructions: rawOutputContract.instructions,
+    } as const;
+
+    expect(() =>
+      parseCodeGeneratorPromptAssets({ ...sources(), outputContract: textContract }),
+    ).toThrow(CodeGeneratorPromptAssetsError);
+    expect(() => validateCodeGeneratorPromptAssets({})).toThrow(CodeGeneratorPromptAssetsError);
   });
 });

@@ -168,6 +168,21 @@ describe('Code Generator Business Validation', () => {
     expect(issueCodes(withFiles(files, [files[0]!.path]))).toContain(CODES.BUNDLE_TOO_LARGE);
   });
 
+  it('enforces collection ceilings when Business Validation is invoked directly', () => {
+    const base = createGeneratedCodeProposal().files[0]!;
+    const files = Array.from(
+      { length: CODE_GENERATOR_CONTRACT_LIMITS.generation.files + 1 },
+      (_, index) => ({ ...base, path: `core/order-query/file-${index}.ts` }),
+    );
+    const entrypoints = files
+      .slice(0, CODE_GENERATOR_CONTRACT_LIMITS.generation.entrypoints + 1)
+      .map((file) => file.path);
+    const codes = issueCodes(withFiles(files, entrypoints));
+
+    expect(codes).toContain(CODES.TOO_MANY_FILES);
+    expect(codes).toContain(CODES.TOO_MANY_ENTRYPOINTS);
+  });
+
   it('rejects an empty generated file before bundle assembly', () => {
     const base = createGeneratedCodeProposal().files[0]!;
 
@@ -193,6 +208,15 @@ describe('Code Generator Business Validation', () => {
     ]) {
       expect(issueCodes(withFiles([{ ...base, content }]))).toContain(CODES.SENSITIVE_CONTENT);
     }
+  });
+
+  it('accepts valid supplementary Unicode and rejects an isolated low surrogate', () => {
+    const base = createGeneratedCodeProposal().files[0]!;
+    const valid = validate(withFiles([{ ...base, content: 'export const glyph = "😀";\n' }]));
+    const invalid = issueCodes(withFiles([{ ...base, content: '\udc00' }]));
+
+    expect(valid.valid).toBe(true);
+    expect(invalid).toContain(CODES.INVALID_TEXT_CONTENT);
   });
 
   it('requires known, unique module and plan references on every file', () => {
