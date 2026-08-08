@@ -28,6 +28,7 @@ describe('Knowledge Loader schemas', () => {
     expect(knowledgeCategorySchema.safeParse('ADR').success).toBe(true);
     expect(knowledgeCategorySchema.safeParse('UNKNOWN').success).toBe(false);
     expect(knowledgeContextKindSchema.safeParse('PRODUCT_OWNER').success).toBe(true);
+    expect(knowledgeContextKindSchema.safeParse('CODE_GENERATOR').success).toBe(true);
     expect(knowledgeContextKindSchema.safeParse('PRODUCT-OWNER').success).toBe(false);
   });
 

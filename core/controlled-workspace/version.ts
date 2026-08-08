@@ -1,0 +1,3 @@
+export const CONTROLLED_WORKSPACE_VERSION = '1.0.0' as const;
+export const CONTROLLED_WORKSPACE_CONTRACT_VERSION = '1.0.0' as const;
+export const CONTROLLED_WORKSPACE_HASH_ALGORITHM = 'SHA-256' as const;

@@ -21,12 +21,13 @@ const ADR_IDS = Array.from(
 
 describe('Knowledge selection policy', () => {
   it('defines every canonical context under a versioned policy', () => {
-    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.12.0');
+    expect(KNOWLEDGE_SELECTION_POLICY.version).toBe('1.13.0');
     expect(Object.keys(KNOWLEDGE_SELECTION_POLICY.contexts)).toEqual([
       'GLOBAL',
       'PRODUCT_OWNER',
       'DEVELOPER',
       'QA',
+      'CODE_GENERATOR',
       'SECURITY',
       'ARCHITECTURE',
     ]);
@@ -129,6 +130,35 @@ describe('Knowledge selection policy', () => {
     expect(context.budget.usedBytes).toBeLessThanOrEqual(DEFAULT_CONTEXT_MAX_BYTES);
     expect(qaRule.required).toHaveLength(6);
     for (const documentId of qaRule.required) expect(includedIds.has(documentId)).toBe(true);
+  });
+
+  it('loads the focused CODE_GENERATOR context within its explicit 48 KiB budget', async () => {
+    const knowledgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../knowledge');
+    const source = new FilesystemKnowledgeSource({
+      sourceId: 'code-generator-budget-check',
+      rootPath: knowledgeRoot,
+      allowedLocators: KNOWLEDGE_MANIFEST.documents.map(({ locator }) => locator),
+    });
+    const loader = await createKnowledgeLoader({
+      source,
+      logger: createLogger({ sink: () => undefined }),
+    });
+    const context = await loader.load({ context: 'CODE_GENERATOR', maxBytes: 48 * 1024 });
+
+    expect(getKnowledgeSelectionRule('CODE_GENERATOR')).toEqual({
+      required: [
+        'knowledge:tech-stack',
+        'knowledge:coding-standards',
+        'knowledge:testing',
+        'knowledge:security',
+      ],
+      optional: [],
+    });
+    expect(context.includedDocuments.map(({ id }) => id)).toEqual(
+      getKnowledgeSelectionRule('CODE_GENERATOR').required,
+    );
+    expect(context.budget.maxBytes).toBe(48 * 1024);
+    expect(context.budget.usedBytes).toBeLessThanOrEqual(48 * 1024);
   });
 
   it('implements the approved QA and SECURITY matrices', () => {

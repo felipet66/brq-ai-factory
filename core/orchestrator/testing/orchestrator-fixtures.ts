@@ -62,6 +62,7 @@ const POLICY = {
     PRODUCT_OWNER: { required: ['knowledge:orchestrator-po'], optional: [] },
     DEVELOPER: { required: ['knowledge:orchestrator-dev'], optional: [] },
     QA: { required: ['knowledge:orchestrator-qa'], optional: [] },
+    CODE_GENERATOR: EMPTY_SELECTION,
     SECURITY: EMPTY_SELECTION,
     ARCHITECTURE: EMPTY_SELECTION,
   },

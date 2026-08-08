@@ -48,7 +48,8 @@ brq-ai-factory/
 │   │   ├── ADR-028-JOB-QUEUE-BOUNDARY.md
 │   │   ├── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
 │   │   ├── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
-│   │   └── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
+│   │   ├── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
+│   │   └── ADR-032-CODE-GENERATION-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -95,7 +96,9 @@ brq-ai-factory/
 │   ├── 42-JOB_QUEUE_FLOW.md
 │   ├── 43-AUTHENTICATION_FLOW.md
 │   ├── 44-PROMPT_PLAYGROUND_FLOW.md
-│   └── 45-FACTORY_VISUALIZATION_FLOW.md
+│   ├── 45-FACTORY_VISUALIZATION_FLOW.md
+│   ├── 46-CODE_GENERATION_FLOW.md
+│   └── 47-CONTROLLED_WORKSPACE_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -104,11 +107,13 @@ brq-ai-factory/
 │   ├── execution-repository/
 │   ├── job-queue/
 │   ├── execution-worker/
-│   └── prompt-inspector/
+│   ├── prompt-inspector/
+│   └── controlled-workspace/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
-│   └── qa/
+│   ├── qa/
+│   └── code-generator/
 ├── prompts/
 │   ├── product-owner/
 │   │   ├── 1.0.0/
@@ -117,7 +122,8 @@ brq-ai-factory/
 │   │   ├── 1.0.0/
 │   │   ├── 1.0.1/
 │   │   └── 1.0.2/ (ativo)
-│   └── qa/1.0.0/
+│   ├── qa/1.0.0/
+│   └── code-generator/1.0.0/
 ├── shared/
 ├── prisma/
 ├── package.json
@@ -190,6 +196,10 @@ RUN_OPENAI_LIVE_TESTS=true OPENAI_LIVE_TEST_MODEL=nome-do-modelo npm run test:ai
 O workspace `@brq/knowledge-loader` carrega documentos Markdown autorizados por um manifesto JSON validado por Zod. IDs são explícitos e independentes de filenames; seleção, ordem, hashes e orçamento de contexto são determinísticos e configuráveis por instância.
 
 O contexto preserva o conteúdo original e identifica cada documento por ID, categoria e hash. O módulo não monta prompts, resume conteúdo nem utiliza IA, embeddings, RAG ou busca semântica.
+
+A Selection Policy `1.13.0` adiciona o contexto isolado `CODE_GENERATOR`, limitado a tech stack,
+coding standards, testing e segurança. O Knowledge Manifest permanece em `1.12.0` e as matrizes
+dos contextos existentes não foram alteradas.
 
 ## Prompt Builder
 
@@ -297,6 +307,45 @@ Cada tentativa projeta exatamente três contextos `INPUT/UNTRUSTED` e segue `Kno
 Uma saída aceita gera, nessa ordem, `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA Agent não recebe código, não executa testes, não gera Playwright, não persiste drafts, não retenta e não afirma aprovação operacional.
 
 [Fluxo visual do QA Agent](knowledge/35-QA_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-021](knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md)
+
+## Code Generator
+
+O workspace `@brq/code-generator-agent` é uma nova fachada independente que recebe somente uma
+`TechnicalSpecification` pública acompanhada de evidência técnica de workflow e QA `READY`. A
+fachada recalcula a correlação da origem e executa uma única tentativa por
+`Knowledge Loader → Agent Runner → Response Validator → Code Business Validation → Bundle
+Assembler`.
+
+A resposta aceita produz um `GeneratedCodeBundle` textual, ordenado, profundamente imutável e com
+manifest, lineage, provenance e hashes calculados server-side. O modelo não fornece hashes ou
+autoridade de filesystem. O Agent não importa AI Provider concreto, Artifact Generator,
+filesystem, Orchestrator, Engine, Worker, Repository ou aplicações.
+
+O Code Generator não integra o workflow atual nesta Sprint. Uma capability futura deverá receber a
+`TechnicalSpecification` enquanto ela ainda estiver disponível em memória; o Execution Repository
+persiste somente seu hash.
+
+[Fluxo visual do Code Generator](knowledge/46-CODE_GENERATION_FLOW.md) ·
+[ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
+
+## Controlled Workspace
+
+O workspace `@brq/controlled-workspace` é uma fronteira separada e sem dependência de agentes. O
+planner puro revalida arquivos, paths, limites e hashes e produz um `WorkspacePlan` imutável. O
+adapter explícito `@brq/controlled-workspace/filesystem` aceita somente uma raiz absoluta
+configurada pelo host, grava em staging privado, relê os arquivos e publica o diretório com rename
+atômico.
+
+Paths absolutos, traversal, backslashes, drives/UNC, null bytes, normalização ambígua, symlinks,
+arquivos sensíveis e colisões exatas, case-insensitive, Unicode ou arquivo/diretório são rejeitados.
+Nenhum destino existente é sobrescrito e nenhum arquivo recebe permissão executável.
+
+Código materializado continua sendo dado não confiável. A Sprint 22 não instala dependências, não
+executa package manager, build, testes, shell, rede, preview ou deploy e não persiste conteúdo ou
+metadata no Execution Repository.
+
+[Fluxo visual do Controlled Workspace](knowledge/47-CONTROLLED_WORKSPACE_FLOW.md) ·
+[ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
 
 ## Orchestrator
 

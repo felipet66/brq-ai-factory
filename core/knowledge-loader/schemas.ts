@@ -33,6 +33,7 @@ export const knowledgeContextKindSchema = z.enum([
   'PRODUCT_OWNER',
   'DEVELOPER',
   'QA',
+  'CODE_GENERATOR',
   'SECURITY',
   'ARCHITECTURE',
 ]);
@@ -170,6 +171,7 @@ export const knowledgeSelectionPolicySchema = z
         PRODUCT_OWNER: knowledgeSelectionRuleSchema,
         DEVELOPER: knowledgeSelectionRuleSchema,
         QA: knowledgeSelectionRuleSchema,
+        CODE_GENERATOR: knowledgeSelectionRuleSchema,
         SECURITY: knowledgeSelectionRuleSchema,
         ARCHITECTURE: knowledgeSelectionRuleSchema,
       })

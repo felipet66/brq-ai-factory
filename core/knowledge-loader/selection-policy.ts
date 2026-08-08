@@ -39,7 +39,7 @@ const ADR_IDS = [
 ] as const;
 
 const rawKnowledgeSelectionPolicy = {
-  version: '1.12.0',
+  version: '1.13.0',
   contexts: {
     GLOBAL: {
       required: [
@@ -101,6 +101,15 @@ const rawKnowledgeSelectionPolicy = {
         'adr:010',
         'adr:021',
       ],
+    },
+    CODE_GENERATOR: {
+      required: [
+        'knowledge:tech-stack',
+        'knowledge:coding-standards',
+        'knowledge:testing',
+        'knowledge:security',
+      ],
+      optional: [],
     },
     SECURITY: {
       required: ['knowledge:security'],

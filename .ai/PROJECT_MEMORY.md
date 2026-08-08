@@ -964,10 +964,61 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 22
   foi iniciado.
 
+## Implementação da Sprint 22
+
+- `agents/code-generator` foi criado como agente funcional independente do Developer: recebe uma
+  `TechnicalSpecification` pública aprovada e produz somente um `GeneratedCodeBundle` textual;
+- a elegibilidade da fonte é verificada antes de Knowledge/provider: readiness `READY`, hash
+  canônico, evidência QA `READY`, correlação de execução, snapshot exclusivamente `CREATE` e roots
+  de módulos materializáveis sem colisão portátil exata;
+- o pipeline reutiliza Knowledge Loader, Prompt Builder por meio do Agent Runner e Response
+  Validator; Code Business Validation e Bundle Assembler permanecem específicos do agente;
+- o contexto `CODE_GENERATOR` foi adicionado à Knowledge Selection Policy `1.13.0` com somente tech
+  stack, coding standards, testing e security; o Knowledge Manifest permanece `1.12.0`;
+- o budget explícito do agente é 48 KiB/4 documentos de Knowledge, 224 KiB de
+  `TechnicalSpecification`, 384 KiB de prompt e 131.072 output tokens; defaults e runtime dos
+  agentes existentes não foram modificados;
+- o bundle `1.0.0` suporta somente UTF-8, até 96 arquivos, 64 KiB por arquivo, 384 KiB totais, 16
+  entrypoints, paths de 512 bytes/20 segmentos/255 bytes por segmento e media types textuais
+  allowlisted;
+- JSON Schema valida a estrutura; Code Business Validation continua autoritativa para paths,
+  conteúdo, limites, referências, cobertura, entrypoints, secrets e consistência com a fonte;
+- manifest, byte lengths, content/file/bundle/generation hashes, lineage e provenance são
+  calculados server-side; schemas públicos recalculam a cadeia e rejeitam drift ou tampering;
+- `core/controlled-workspace` foi criado como fronteira provider/agent-neutral e recebe somente um
+  `WorkspacePlanRequest` projetado explicitamente por um caller confiável;
+- o planner revalida conteúdo, hashes, allowlists, limits, paths relativos POSIX/NFC, traversal,
+  nomes sensíveis, colisões case/Unicode e conflitos arquivo/diretório antes de produzir um plano
+  profundamente imutável;
+- o adapter filesystem exige uma raiz absoluta preexistente do host, grava com permissões privadas
+  em staging no mesmo filesystem, verifica antes e depois do rename atômico e limpa estado próprio
+  em falhas capturadas; nenhum destino existente é sobrescrito;
+- Code Generator e Controlled Workspace não importam um ao outro; um teste de integração cobre a
+  projeção pública e preserva `bundleContentHash` entre as fronteiras;
+- Artifact Generator não foi reutilizado porque sua quantidade de templates e filenames planos são
+  configuração confiável, enquanto arquivos de código possuem paths dinâmicos propostos por saída
+  não confiável;
+- código gerado/materializado permanece dado não confiável: não há shell, subprocesso, package
+  manager, instalação, build, testes, rede executada, preview, deploy, Git ou correção autônoma;
+- Orchestrator, Execution Engine, Worker, Queue, Repository, Prisma, API, Frontend, Factory View,
+  agents anteriores e seus prompt assets continuam sem integração funcional com a nova capability;
+- ADR-032, `knowledge/46-CODE_GENERATION_FLOW.md` e
+  `knowledge/47-CONTROLLED_WORKSPACE_FLOW.md` documentam as fronteiras, validações, hashes,
+  atomicidade, falhas e o limite futuro de Build/Test Runner;
+- a validação final com Node 24.19.0 aprovou 1.514 testes em 223 arquivos: 1.144 testes do núcleo
+  em 156 arquivos e 370 testes do host web em 67 arquivos; a cobertura do núcleo ficou em 93,39%
+  statements, 85,53% branches, 98,25% functions e 94,04% lines, e a do host web em 94,13%
+  statements, 86,89% branches, 95,40% functions e 95,53% lines;
+- format, format check, lint, typecheck, testes, cobertura, Prisma validate, build e diff check
+  foram aprovados integralmente;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 23
+  foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
-- geração ou execução de código e testes por agentes;
+- execução, build, testes ou preview do código gerado; a Sprint 22 limita-se à geração textual e à
+  materialização controlada;
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, requeue, recovery, workflows dinâmicos e concorrência;

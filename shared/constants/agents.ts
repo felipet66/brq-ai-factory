@@ -1,1 +1,1 @@
-export const AGENT_NAMES = ['PRODUCT_OWNER', 'DEVELOPER', 'QA'] as const;
+export const AGENT_NAMES = ['PRODUCT_OWNER', 'DEVELOPER', 'QA', 'CODE_GENERATOR'] as const;

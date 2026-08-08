@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { baseAgentInputSchema, baseAgentOutputSchema } from './agent-contracts.schema';
 import { artifactDraftSchema, artifactSchema } from './artifact.schema';
+import { agentNameSchema } from './common.schema';
 
 const NOW = '2026-08-04T18:00:00.000Z';
 
@@ -13,6 +14,10 @@ const artifactDraft = {
 } as const;
 
 describe('base agent contracts', () => {
+  it('recognizes Code Generator as a distinct generic agent identity', () => {
+    expect(agentNameSchema.parse('CODE_GENERATOR')).toBe('CODE_GENERATOR');
+  });
+
   it('should accept the canonical base input envelope', () => {
     const result = baseAgentInputSchema.safeParse({
       executionId: 'execution_123',

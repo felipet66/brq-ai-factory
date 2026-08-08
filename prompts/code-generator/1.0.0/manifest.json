@@ -1,0 +1,42 @@
+{
+  "id": "assets:code-generator",
+  "version": "1.0.0",
+  "schemaVersion": "1.0.0",
+  "agent": "CODE_GENERATOR",
+  "contexts": {
+    "knowledge": "context:code-generator-knowledge",
+    "technicalSpecification": "context:code-generator-technical-specification"
+  },
+  "assets": {
+    "template": {
+      "filename": "template.json",
+      "id": "prompt:code-generator",
+      "version": "1.0.0"
+    },
+    "ruleSets": [
+      {
+        "filename": "global-rules.json",
+        "id": "rules:code-generator-global",
+        "version": "1.0.0",
+        "scope": "GLOBAL"
+      },
+      {
+        "filename": "security-rules.json",
+        "id": "rules:code-generator-security",
+        "version": "1.0.0",
+        "scope": "SECURITY"
+      },
+      {
+        "filename": "code-generator-rules.json",
+        "id": "rules:code-generator",
+        "version": "1.0.0",
+        "scope": "AGENT"
+      }
+    ],
+    "outputContract": {
+      "filename": "output-contract.json",
+      "id": "contract:code-generation-proposal",
+      "version": "1.0.0"
+    }
+  }
+}

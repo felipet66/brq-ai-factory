@@ -4,12 +4,14 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "agents/code-generator/**/*.ts",
     "agents/developer/**/*.ts",
     "agents/product-owner/**/*.ts",
     "agents/qa/**/*.ts",
     "core/agent-runner/**/*.ts",
     "core/ai-provider/**/*.ts",
     "core/artifact-generator/**/*.ts",
+    "core/controlled-workspace/**/*.ts",
     "core/execution-engine/**/*.ts",
     "core/execution-repository/**/*.ts",
     "core/execution-worker/**/*.ts",

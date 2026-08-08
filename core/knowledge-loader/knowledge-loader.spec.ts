@@ -38,6 +38,7 @@ function policy(
       PRODUCT_OWNER: rule(),
       DEVELOPER: rule(),
       QA: rule(),
+      CODE_GENERATOR: rule(),
       SECURITY: rule(),
       ARCHITECTURE: rule(),
     },
