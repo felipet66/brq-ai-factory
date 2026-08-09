@@ -19,13 +19,13 @@ export function HashInspector({ hashes }: HashInspectorProps) {
     ...hashes.ruleSetHashes.map(({ ruleSetId, scope, hash }) => ({
       kind: scope,
       id: ruleSetId,
-      hash,
+      integrityHash: hash,
       contentHash: null,
     })),
-    ...hashes.contextHashes.map(({ contextId, kind, contentHash, hash }) => ({
+    ...hashes.contextHashes.map(({ contextId, kind, contentHash, descriptorHash }) => ({
       kind,
       id: contextId,
-      hash,
+      integrityHash: descriptorHash,
       contentHash,
     })),
   ];
@@ -55,7 +55,7 @@ export function HashInspector({ hashes }: HashInspectorProps) {
           <li key={`${source.kind}-${source.id}`}>
             <span>{source.kind}</span>
             <strong>{source.id}</strong>
-            <code>{source.hash}</code>
+            <code>{source.integrityHash}</code>
             {source.contentHash === null ? null : <code>Content: {source.contentHash}</code>}
           </li>
         ))}

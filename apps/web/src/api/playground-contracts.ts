@@ -256,8 +256,9 @@ const contextHashSchema = z
   .object({
     contextId: z.string().min(1).max(128),
     kind: z.enum(['KNOWLEDGE', 'EXECUTION', 'USER_INPUT', 'ARTIFACT']),
+    serialization: z.enum(['TEXT', 'JSON']),
     contentHash: sourceHashSchema,
-    hash: hashSchema,
+    descriptorHash: hashSchema,
     references: z.array(
       z
         .object({

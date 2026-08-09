@@ -252,8 +252,9 @@ export function builtPreviewFixture(
         {
           contextId: 'knowledge',
           kind: 'KNOWLEDGE',
+          serialization: 'TEXT',
           contentHash: SOURCE_HASH,
-          hash: SECONDARY_HASH,
+          descriptorHash: SECONDARY_HASH,
           references: [{ id: 'knowledge-security', category: 'SECURITY', hash: SOURCE_HASH }],
         },
       ],
