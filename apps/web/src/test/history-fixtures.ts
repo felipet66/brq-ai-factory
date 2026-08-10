@@ -1,5 +1,6 @@
 import type {
   ExecutionHistoryDetail,
+  ExecutionHistoryFactoryResult,
   ExecutionHistoryPage,
   ExecutionHistoryTimeline,
 } from '@/api/execution-history-contracts';
@@ -7,6 +8,103 @@ import type {
 export const HISTORY_EXECUTION_ID = `execution-${'a'.repeat(32)}`;
 const HASH = '1'.repeat(64);
 const KNOWLEDGE_HASH = `sha256:${'2'.repeat(64)}`;
+
+export function historyFactoryResult(
+  overrides: Partial<ExecutionHistoryFactoryResult> = {},
+): ExecutionHistoryFactoryResult {
+  const stageIds = [
+    'PRODUCT_OWNER',
+    'DEVELOPER',
+    'QA',
+    'CODE_GENERATOR',
+    'WORKSPACE_PLAN',
+    'WORKSPACE_MATERIALIZATION',
+    'SANDBOX_PREPARE',
+    'SANDBOX_TYPECHECK',
+    'SANDBOX_BUILD',
+    'SANDBOX_TEST',
+    'WORKSPACE_RELEASE',
+  ] as const;
+  const factoryResultHash = '3'.repeat(64);
+  return {
+    factoryVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    status: 'SUCCESS',
+    terminalStage: 'WORKSPACE_RELEASE',
+    startedAt: '2026-08-07T10:00:00.000Z',
+    finishedAt: '2026-08-07T10:00:01.000Z',
+    durationMs: 1_000,
+    readiness: 'READY',
+    generationStatus: 'SUCCESS',
+    generatedFileCount: 3,
+    generatedTotalBytes: 1_024,
+    workspaceId: `workspace-${'4'.repeat(32)}`,
+    workspaceFileCount: 3,
+    workspaceTotalBytes: 1_024,
+    workspaceReleaseStatus: 'RELEASED',
+    sandboxStatus: 'SUCCESS',
+    sandboxRunId: `sandbox-${'5'.repeat(32)}`,
+    sandboxResourceOutcome: 'NONE',
+    hashes: {
+      lineageHash: '4'.repeat(64),
+      provenanceHash: '5'.repeat(64),
+      factoryResultHash,
+    },
+    failure: null,
+    stages: stageIds.map((stageId) => ({
+      stageId,
+      status: 'SUCCESS',
+      startedAt: '2026-08-07T10:00:00.000Z',
+      finishedAt: '2026-08-07T10:00:00.010Z',
+      durationMs: 10,
+      outputHash: '6'.repeat(64),
+      failureCode: null,
+      resourceOutcome: stageId.startsWith('SANDBOX_') ? 'NONE' : null,
+    })),
+    lineage: {
+      productOwnerSpecificationHash: KNOWLEDGE_HASH,
+      technicalSpecificationHash: KNOWLEDGE_HASH,
+      qaSpecificationHash: KNOWLEDGE_HASH,
+      executionHash: HASH,
+      workflowHash: HASH,
+      generationHash: HASH,
+      bundleHash: HASH,
+      bundleContentHash: HASH,
+      workspacePlanHash: HASH,
+      workspaceHash: HASH,
+      sandboxRequestHash: HASH,
+      sandboxResultHash: HASH,
+      factoryResultHash,
+    },
+    provenance: {
+      codeGeneratorAgentVersion: '1.0.0',
+      codeGeneratorContractVersion: '1.0.0',
+      codeGeneratorAssetBundleHash: HASH,
+      workspaceVersion: '1.0.0',
+      workspaceContractVersion: '1.0.0',
+      workspacePolicyHash: HASH,
+      workspaceConfigurationHash: HASH,
+      sandboxRunnerVersion: '1.0.0',
+      sandboxContractVersion: '1.0.0',
+      sandboxSanitizerVersion: '1.0.0',
+      sandboxHelperAbiVersion: '1.0.0',
+      sandboxDependencySnapshotHash: HASH,
+      sandboxPolicyId: 'NODE_TYPESCRIPT_24_V1',
+      sandboxPolicyVersion: '1.0.0',
+      sandboxPolicyHash: HASH,
+      sandboxCommandPolicyHash: HASH,
+      sandboxLimitsHash: HASH,
+      sandboxAdapter: 'DOCKER',
+      sandboxImageDigest: KNOWLEDGE_HASH,
+      sandboxImageId: 'sha256:factory-image-id',
+      sandboxPlatform: 'linux/arm64',
+      sandboxRuntimeName: 'node',
+      sandboxRuntimeVersion: '24.19.0',
+      toolchainVersions: { node: '24.19.0', typescript: '6.0.3' },
+    },
+    ...overrides,
+  };
+}
 
 export function historyPage(overrides: Partial<ExecutionHistoryPage> = {}): ExecutionHistoryPage {
   return {
@@ -85,6 +183,7 @@ export function historyDetail(
         },
       ],
     },
+    factoryResult: null,
     ...overrides,
   };
 }

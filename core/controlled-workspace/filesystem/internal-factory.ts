@@ -3,9 +3,11 @@ import path from 'node:path';
 import type {
   ControlledWorkspace,
   CreateFilesystemControlledWorkspaceOptions,
+  WorkspaceMaterializationOptions,
   WorkspaceMaterializationResult,
   WorkspacePlan,
   WorkspacePlanRequest,
+  WorkspaceReleaseResult,
 } from '../contracts';
 import { resolveControlledWorkspaceLimits } from '../configuration';
 import {
@@ -15,13 +17,29 @@ import {
 } from '../errors';
 import { calculateMaterializedWorkspaceHash } from '../hashing';
 import { immutableClone } from '../immutability';
-import { workspaceMaterializationResultSchema, workspacePlanSchema } from '../schemas';
+import { resolveControlledWorkspaceCleanupTimeout } from '../lifecycle';
+import {
+  workspaceMaterializationResultSchema,
+  workspacePlanSchema,
+  workspaceReleaseResultSchema,
+} from '../schemas';
 import { createWorkspacePlan } from '../workspace-planner';
-import { materializeWorkspaceAtomically } from './atomic-materializer';
+import {
+  materializeWorkspaceAtomically,
+  verifyOwnedMaterializedWorkspace,
+  type MaterializedWorkspaceOwnership,
+} from './atomic-materializer';
+import { removeWorkspaceWithDeadline } from './cleanup';
 import type { WorkspaceFileSystem } from './file-system';
 
 interface FilesystemControlledWorkspaceDependencies {
   readonly fileSystem: WorkspaceFileSystem;
+}
+
+interface OwnedWorkspace {
+  readonly ownership: MaterializedWorkspaceOwnership;
+  readonly result: WorkspaceMaterializationResult;
+  releasePromise?: Promise<WorkspaceReleaseResult>;
 }
 
 function emitLogSafely(operation: (() => void) | undefined): void {
@@ -56,7 +74,9 @@ export function createFilesystemControlledWorkspaceWithDependencies(
 ): ControlledWorkspace {
   const rootPath = validateRootPath(options.rootPath);
   const limits = resolveControlledWorkspaceLimits(options.limits);
+  const cleanupTimeoutMs = resolveControlledWorkspaceCleanupTimeout(options.cleanupTimeoutMs);
   const now = options.now ?? Date.now;
+  const ownedWorkspaces = new Map<string, OwnedWorkspace>();
   const plan = (request: WorkspacePlanRequest) => {
     const startedAt = now();
     const createdPlan = createWorkspacePlan(request, { limits });
@@ -81,7 +101,10 @@ export function createFilesystemControlledWorkspaceWithDependencies(
 
   return Object.freeze({
     plan,
-    materialize: async (inputPlan: WorkspacePlan) => {
+    materialize: async (
+      inputPlan: WorkspacePlan,
+      materializationOptions?: WorkspaceMaterializationOptions,
+    ) => {
       const startedAt = now();
       let workspaceId: string | undefined;
       try {
@@ -181,7 +204,18 @@ export function createFilesystemControlledWorkspaceWithDependencies(
                   totalBytes: workspacePlan.metadata.totalBytes,
                 }),
         );
-        await materializeWorkspaceAtomically(workspacePlan, rootPath, dependencies.fileSystem);
+        const ownership = await materializeWorkspaceAtomically(
+          workspacePlan,
+          rootPath,
+          {
+            cleanupTimeoutMs,
+            ...(materializationOptions?.signal === undefined
+              ? {}
+              : { signal: materializationOptions.signal }),
+          },
+          dependencies.fileSystem,
+        );
+        ownedWorkspaces.set(workspaceId, { ownership, result });
         emitLogSafely(
           options.logger === undefined
             ? undefined
@@ -217,6 +251,134 @@ export function createFilesystemControlledWorkspaceWithDependencies(
         );
         throw controlledError;
       }
+    },
+    release: async (inputResult: WorkspaceMaterializationResult) => {
+      const parsed = workspaceMaterializationResultSchema.safeParse(inputResult);
+      if (!parsed.success) {
+        throw new ControlledWorkspaceError(
+          'O resultado fornecido para release não corresponde ao contrato público.',
+          {
+            code: CONTROLLED_WORKSPACE_ERROR_CODES.INVALID_REQUEST,
+            stage: CONTROLLED_WORKSPACE_ERROR_STAGES.REQUEST_VALIDATION,
+          },
+        );
+      }
+      const releaseInput = immutableClone(parsed.data);
+      const owned = ownedWorkspaces.get(releaseInput.workspaceId);
+      if (
+        owned === undefined ||
+        owned.result.metadata.planHash !== releaseInput.metadata.planHash ||
+        owned.result.metadata.workspaceHash !== releaseInput.metadata.workspaceHash ||
+        owned.result.source.bundleHash !== releaseInput.source.bundleHash ||
+        owned.result.source.bundleContentHash !== releaseInput.source.bundleContentHash ||
+        owned.result.source.technicalSpecificationHash !==
+          releaseInput.source.technicalSpecificationHash
+      ) {
+        throw new ControlledWorkspaceError(
+          'O workspace não pertence a esta instância controlada.',
+          {
+            code: CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED,
+            stage: CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+            workspaceId: releaseInput.workspaceId,
+          },
+        );
+      }
+      if (owned.releasePromise !== undefined) return owned.releasePromise;
+
+      owned.releasePromise = (async () => {
+        const startedAt = now();
+        emitLogSafely(
+          options.logger === undefined
+            ? undefined
+            : () =>
+                options.logger?.info('controlled_workspace.release.started', {
+                  workspaceId: releaseInput.workspaceId,
+                  planHash: releaseInput.metadata.planHash,
+                  workspaceHash: releaseInput.metadata.workspaceHash,
+                  fileCount: releaseInput.metadata.fileCount,
+                  totalBytes: releaseInput.metadata.totalBytes,
+                }),
+        );
+        try {
+          let verificationFailure: ControlledWorkspaceError | undefined;
+          try {
+            await verifyOwnedMaterializedWorkspace(
+              owned.ownership,
+              releaseInput,
+              dependencies.fileSystem,
+            );
+          } catch (error) {
+            if (
+              error instanceof ControlledWorkspaceError &&
+              error.code === CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED
+            ) {
+              throw error;
+            }
+            verificationFailure =
+              error instanceof ControlledWorkspaceError
+                ? error
+                : new ControlledWorkspaceError(
+                    'Não foi possível verificar o workspace antes do cleanup.',
+                    {
+                      code: CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
+                      stage: CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+                      workspaceId: releaseInput.workspaceId,
+                    },
+                  );
+          }
+
+          await removeWorkspaceWithDeadline(
+            dependencies.fileSystem,
+            owned.ownership.destinationPath,
+            cleanupTimeoutMs,
+            releaseInput.workspaceId,
+          );
+          if (verificationFailure !== undefined) throw verificationFailure;
+
+          const releaseCandidate = {
+            workspaceId: releaseInput.workspaceId,
+            status: 'RELEASED' as const,
+            planHash: releaseInput.metadata.planHash,
+            workspaceHash: releaseInput.metadata.workspaceHash,
+          };
+          const releaseResult = immutableClone(
+            workspaceReleaseResultSchema.parse(releaseCandidate),
+          );
+          emitLogSafely(
+            options.logger === undefined
+              ? undefined
+              : () =>
+                  options.logger?.info('controlled_workspace.release.completed', {
+                    workspaceId: releaseInput.workspaceId,
+                    planHash: releaseInput.metadata.planHash,
+                    workspaceHash: releaseInput.metadata.workspaceHash,
+                    durationMs: Math.max(0, now() - startedAt),
+                  }),
+          );
+          return releaseResult;
+        } catch (error) {
+          const controlledError =
+            error instanceof ControlledWorkspaceError
+              ? error
+              : new ControlledWorkspaceError('Não foi possível liberar o workspace.', {
+                  code: CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+                  stage: CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+                  workspaceId: releaseInput.workspaceId,
+                });
+          emitLogSafely(
+            options.logger === undefined
+              ? undefined
+              : () =>
+                  options.logger?.error('controlled_workspace.release.failed', {
+                    workspaceId: releaseInput.workspaceId,
+                    durationMs: Math.max(0, now() - startedAt),
+                    error: { code: controlledError.code, stage: controlledError.stage },
+                  }),
+          );
+          throw controlledError;
+        }
+      })();
+      return owned.releasePromise;
     },
   });
 }

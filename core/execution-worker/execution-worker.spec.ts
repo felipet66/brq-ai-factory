@@ -1,4 +1,5 @@
 import {
+  deriveExecutionIdentity,
   type ExecutionEngine,
   type ExecutionOptions,
   type ExecutionRequest,
@@ -11,6 +12,7 @@ import {
   type PersistentExecutionHistory,
 } from '@brq/execution-repository';
 import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
+import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -74,6 +76,30 @@ function deferred<T>() {
 }
 
 describe('execution worker', () => {
+  it('settles a job only after the full Factory Pipeline returns its terminal result', async () => {
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createWorkerExecutionRequestFixture();
+    const execute = vi.fn(async () =>
+      createFactoryExecutionResultFixture({
+        executionId: deriveExecutionIdentity(request).executionId,
+        workflowId: request.workflowId,
+      }),
+    );
+    const worker = createExecutionWorker({ queue, repository, pipeline: { execute } });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(await queue.get(job.jobId)).toMatchObject({ status: 'SUCCESS' });
+    expect(await repository.findByJobId(job.jobId)).toMatchObject({
+      job: { status: 'SUCCESS' },
+    });
+  });
+
   it('consumes jobs in FIFO order and invokes the public Engine exactly once per job', async () => {
     const queue = createInMemoryJobQueue({
       now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),

@@ -13,7 +13,9 @@ import {
   FACTORY_HASHES,
   FACTORY_JOB_ID,
   factoryExecutionFixture,
+  factoryResultFixture,
   factoryTimelineFixture,
+  factoryTimelineV2Fixture,
 } from './factory-view-model.spec.fixtures';
 
 function timelineWithStageStatus(
@@ -81,10 +83,116 @@ describe('FactoryViewModel', () => {
       completedAgentCount: 3,
       resolvedAgentCount: 3,
       totalAgentCount: 3,
+      activeTechnicalStageId: null,
+      failedTechnicalStageId: null,
+      completedTechnicalStageCount: 0,
+      resolvedTechnicalStageCount: 0,
+      totalTechnicalStageCount: 0,
       totalTokens: 1725,
       totalCostEstimate: { amount: 0.021, currency: 'USD', rateCardVersion: '1.0.0' },
     });
     expectDeeplyFrozen(model);
+  });
+
+  it('adds technical stations only from Factory observability evidence', () => {
+    const historical = createFactoryViewModel({
+      execution: factoryExecutionFixture(),
+      timeline: factoryTimelineFixture(),
+    });
+    const factory = createFactoryViewModel({
+      execution: factoryExecutionFixture({ factoryResult: factoryResultFixture() }),
+      timeline: factoryTimelineV2Fixture(),
+    });
+
+    expect(historical.technicalStages).toEqual([]);
+    expect(factory.technicalStages.map(({ id, status }) => ({ id, status }))).toEqual([
+      { id: 'CODE_GENERATOR', status: 'COMPLETED' },
+      { id: 'WORKSPACE', status: 'COMPLETED' },
+      { id: 'SANDBOX_PREPARE', status: 'COMPLETED' },
+      { id: 'SANDBOX_TYPECHECK', status: 'COMPLETED' },
+      { id: 'SANDBOX_BUILD', status: 'COMPLETED' },
+      { id: 'SANDBOX_TEST', status: 'COMPLETED' },
+    ]);
+    expect(factory.technicalStages[1]).toMatchObject({
+      evidenceSource: 'OBSERVABILITY_V2',
+      outputHash: expect.any(String),
+      facts: expect.arrayContaining([
+        { label: 'Plan', value: 'SUCCESS' },
+        { label: 'Materialization', value: 'SUCCESS' },
+        { label: 'Release', value: 'RELEASED' },
+      ]),
+    });
+    expect(factory.progress).toMatchObject({
+      completedTechnicalStageCount: 6,
+      resolvedTechnicalStageCount: 6,
+      totalTechnicalStageCount: 6,
+      activeTechnicalStageId: null,
+      failedTechnicalStageId: null,
+    });
+    expectDeeplyFrozen(factory.technicalStages);
+  });
+
+  it('maps v2 Factory terminal evidence into the allowlisted activity feed', () => {
+    const timeline = factoryTimelineV2Fixture();
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ factoryResult: factoryResultFixture() }),
+      timeline: factoryTimelineV2Fixture({
+        events: [
+          ...timeline.events,
+          {
+            sequence: timeline.events.length + 1,
+            type: 'execution.finished',
+            stageId: 'FACTORY',
+            stageName: 'Factory',
+            status: 'SUCCESS',
+            startedAt: '2026-08-08T10:00:00.000Z',
+            finishedAt: '2026-08-08T10:00:00.850Z',
+            durationMs: 850,
+            requestId: 'request-factory-001',
+            executionId: FACTORY_EXECUTION_ID,
+            errorCode: null,
+          },
+        ],
+      }),
+    });
+
+    expect(model.activity.at(-1)).toMatchObject({
+      stageId: 'FACTORY',
+      label: 'Factory pipeline finished',
+      status: 'SUCCESS',
+    });
+  });
+
+  it('renders failed and skipped technical states from v2 without inventing a live phase', () => {
+    const timeline = factoryTimelineV2Fixture();
+    const stages = timeline.stages.map((stage) =>
+      stage.stageId === 'SANDBOX_BUILD'
+        ? { ...stage, status: 'FAILED' as const }
+        : stage.stageId === 'SANDBOX_TEST'
+          ? {
+              ...stage,
+              status: 'SKIPPED' as const,
+              startedAt: null,
+              durationMs: null,
+            }
+          : stage,
+    ) as FactoryTimelineSource['stages'];
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({ status: 'FAILED' }),
+      }),
+      timeline: factoryTimelineV2Fixture({ status: 'FAILED', stages }),
+    });
+
+    expect(model.technicalStages.find((stage) => stage.id === 'SANDBOX_BUILD')?.status).toBe(
+      'FAILED',
+    );
+    expect(model.technicalStages.find((stage) => stage.id === 'SANDBOX_TEST')?.status).toBe(
+      'SKIPPED',
+    );
+    expect(model.progress.failedTechnicalStageId).toBe('SANDBOX_BUILD');
+    expect(JSON.stringify(model)).not.toMatch(/sourceCode|stdout|stderr|filesystem|containerId/);
   });
 
   it.each<[FactoryTimelineSource['stages'][number]['status'], FactoryVisualStatus]>([

@@ -38,9 +38,10 @@ flowchart TB
     DETAIL --> HASHES["Final hashes"]
     DETAIL --> LINEAGE["Verified lineage"]
     DETAIL --> PROVENANCE["Agent provenance and artifact hashes"]
+    DETAIL --> FACTORY_RESULT["Optional safe Factory result"]
 
     SNAPSHOT["Observability snapshot"] --> EVENTS["Typed events"]
-    SNAPSHOT --> STAGES["Knowledge, PO, Developer and QA stages"]
+    SNAPSHOT --> STAGES["Knowledge, agents and technical stages"]
     SNAPSHOT --> METRICS["Stage metrics"]
     SNAPSHOT --> SUMMARY["Execution summary"]
 
@@ -49,15 +50,18 @@ flowchart TB
     HASHES --> MAP
     LINEAGE --> MAP
     PROVENANCE --> MAP
+    FACTORY_RESULT --> MAP
     EVENTS --> MAP
     STAGES --> MAP
     METRICS --> MAP
     SUMMARY --> MAP
-    MAP --> VM["FactoryViewModel v1.0.0"]
+    MAP --> VM["FactoryViewModel v2.0.0"]
 ```
 
 O mapper não lê clocks globais, browser storage, internals do servidor ou conteúdo de execução.
 Elapsed live é observacional e não participa de hashes nem de decisões do workflow.
+Snapshots `1.0.0` sem `factoryResult` continuam válidos e exibem um estado vazio explícito para a
+linha técnica, sem inferir execução retroativa.
 
 ## Agent State Mapping
 
@@ -208,6 +212,7 @@ flowchart TB
     STATIONS --> CONNECTIONS["AgentConnection"]
     STATIONS --> DETAILS["AgentDetailPanel"]
     DETAILS --> ARTIFACTS["ArtifactCard"]
+    WORKSPACE --> TECHNICAL["FactoryTechnicalPipeline × 6"]
     WORKSPACE --> ACTIVITY["FactoryActivityFeed"]
     WORKSPACE --> STATES["Loading and error states"]
 ```

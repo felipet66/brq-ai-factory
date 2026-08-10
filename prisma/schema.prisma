@@ -171,17 +171,17 @@ model Account {
   updatedAt             DateTime  @updatedAt
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
   @@unique([providerId, accountId])
+  @@index([userId])
 }
 
 model Verification {
-  id         String    @id
+  id         String   @id
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([identifier])
 }
@@ -215,6 +215,7 @@ model ExecutionRecord {
   lineageOutput     ExecutionLineageOutput?
   lineageHandoffs   ExecutionLineageHandoff[]
   provenanceStages  ExecutionProvenanceStage[]
+  factoryResult     ExecutionFactoryResult?
   user              User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt])
@@ -267,24 +268,26 @@ model ExecutionRecordLifecycleEvent {
 }
 
 model ExecutionObservation {
-  executionRecordId      String                      @id
-  observabilityVersion   String
-  revision               Int
-  executionId            String
-  workflowId             String
-  requestId              String?
-  status                 String
-  updatedAt              DateTime
-  summaryWorkflowStatus  String?
-  summaryReadinessFinal  String?
-  summaryTotalDurationMs Int?
-  summaryTotalTokens     Int?
-  summaryCostAmount      Float?
-  summaryCostCurrency    String?
-  summaryRateCardVersion String?
-  executionRecord        ExecutionRecord             @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
-  events                 ExecutionObservationEvent[]
-  stages                 ExecutionObservedStage[]
+  executionRecordId        String                      @id
+  observabilityVersion     String
+  revision                 Int
+  executionId              String
+  workflowId               String
+  requestId                String?
+  status                   String
+  updatedAt                DateTime
+  summaryWorkflowStatus    String?
+  summaryFactoryStatus     String?
+  summaryFactoryResultHash String?
+  summaryReadinessFinal    String?
+  summaryTotalDurationMs   Int?
+  summaryTotalTokens       Int?
+  summaryCostAmount        Float?
+  summaryCostCurrency      String?
+  summaryRateCardVersion   String?
+  executionRecord          ExecutionRecord             @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  events                   ExecutionObservationEvent[]
+  stages                   ExecutionObservedStage[]
 
   @@index([executionId])
   @@index([workflowId])
@@ -402,4 +405,117 @@ model ExecutionProvenanceArtifactHash {
 
   @@unique([executionProvenanceStageId, ordinal])
   @@index([hash])
+}
+
+model ExecutionFactoryResult {
+  executionRecordId      String                             @id
+  factoryVersion         String
+  contractVersion        String
+  status                 String
+  startedAt              DateTime
+  finishedAt             DateTime
+  durationMs             Int
+  readiness              String?
+  terminalStage          String
+  factoryResultHash      String
+  lineageHash            String
+  provenanceHash         String
+  generationStatus       String
+  generatedFileCount     Int?
+  generatedTotalBytes    Int?
+  workspaceId            String?
+  workspaceFileCount     Int?
+  workspaceTotalBytes    Int?
+  workspaceReleaseStatus String
+  sandboxStatus          String
+  sandboxRunId           String?
+  sandboxResourceOutcome String
+  failureKind            String?
+  failureCode            String?
+  failureSourceCode      String?
+  failureStageId         String?
+  executionRecord        ExecutionRecord                    @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  stages                 ExecutionFactoryStageResult[]
+  lineage                ExecutionFactoryLineage?
+  provenance             ExecutionFactoryProvenance?
+  toolchainVersions      ExecutionFactoryToolchainVersion[]
+
+  @@index([status, finishedAt])
+  @@index([factoryResultHash])
+}
+
+model ExecutionFactoryStageResult {
+  id                       String                 @id @default(cuid())
+  executionFactoryResultId String
+  ordinal                  Int
+  stageId                  String
+  status                   String
+  startedAt                DateTime?
+  finishedAt               DateTime?
+  durationMs               Int?
+  outputHash               String?
+  failureCode              String?
+  resourceOutcome          String?
+  executionFactoryResult   ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
+
+  @@unique([executionFactoryResultId, ordinal])
+  @@unique([executionFactoryResultId, stageId])
+  @@index([stageId, status])
+}
+
+model ExecutionFactoryLineage {
+  executionFactoryResultId      String                 @id
+  productOwnerSpecificationHash String?
+  technicalSpecificationHash    String?
+  qaSpecificationHash           String?
+  executionHash                 String
+  workflowHash                  String?
+  generationHash                String?
+  bundleHash                    String?
+  bundleContentHash             String?
+  workspacePlanHash             String?
+  workspaceHash                 String?
+  sandboxRequestHash            String?
+  sandboxResultHash             String?
+  factoryResultHash             String
+  executionFactoryResult        ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
+}
+
+model ExecutionFactoryProvenance {
+  executionFactoryResultId      String                 @id
+  codeGeneratorAgentVersion     String?
+  codeGeneratorContractVersion  String?
+  codeGeneratorAssetBundleHash  String?
+  workspaceVersion              String?
+  workspaceContractVersion      String?
+  workspacePolicyHash           String?
+  workspaceConfigurationHash    String?
+  sandboxRunnerVersion          String?
+  sandboxContractVersion        String?
+  sandboxSanitizerVersion       String?
+  sandboxHelperAbiVersion       String?
+  sandboxDependencySnapshotHash String?
+  sandboxPolicyId               String?
+  sandboxPolicyVersion          String?
+  sandboxPolicyHash             String?
+  sandboxCommandPolicyHash      String?
+  sandboxLimitsHash             String?
+  sandboxAdapter                String?
+  sandboxImageDigest            String?
+  sandboxImageId                String?
+  sandboxPlatform               String?
+  sandboxRuntimeName            String?
+  sandboxRuntimeVersion         String?
+  executionFactoryResult        ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
+}
+
+model ExecutionFactoryToolchainVersion {
+  id                       String                 @id @default(cuid())
+  executionFactoryResultId String
+  name                     String
+  version                  String
+  executionFactoryResult   ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
+
+  @@unique([executionFactoryResultId, name])
+  @@index([name, version])
 }

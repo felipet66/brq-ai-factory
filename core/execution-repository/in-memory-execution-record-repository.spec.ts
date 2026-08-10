@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 
 import { createInMemoryExecutionRecordRepository } from './adapters/in-memory-execution-record-repository';
 import { EXECUTION_REPOSITORY_ERROR_CODES } from './errors';
@@ -124,6 +125,45 @@ describe('in-memory execution record repository', () => {
     expect(await repository.findByExecutionId(completed.executionId!)).toEqual(completed);
     expect(JSON.stringify(completed)).not.toContain('Allow customers');
     expect(JSON.stringify(completed)).not.toContain('additionalContext');
+  });
+
+  it('persiste o resultado metadata-safe da Factory sem conteúdo ou identidade insegura', async () => {
+    const repository = createInMemoryExecutionRecordRepository();
+    const result = createFactoryExecutionResultFixture({
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      workflowId: 'workflow-001',
+    });
+    await repository.create(createdInput('workflow-001'));
+    await repository.markRunning({
+      workflowId: 'workflow-001',
+      startedAt: result.startedAt,
+    });
+
+    const completed = await repository.completeFactory('workflow-001', result, null);
+    expect(completed).toMatchObject({
+      executionId: result.executionId,
+      status: 'SUCCESS',
+      workflowStatus: result.execution.status,
+      hashes: result.execution.hashes,
+      factoryResult: {
+        status: 'SUCCESS',
+        generationStatus: 'SUCCESS',
+        sandboxStatus: 'SUCCESS',
+        hashes: { factoryResultHash: result.hashes.factoryResultHash },
+      },
+    });
+    expect(completed.factoryResult?.stages).toHaveLength(11);
+    expect(completed.factoryResult?.lineage.sandboxResultHash).toBe(
+      result.hashes.sandboxResultHash,
+    );
+    expect(Object.isFrozen(completed.factoryResult)).toBe(true);
+    const serialized = JSON.stringify(completed.factoryResult);
+    expect(serialized).not.toMatch(
+      /"(?:imageReference|containerId|prompt|content|path|stdout|stderr)"\s*:/,
+    );
+    await expect(repository.completeFactory('workflow-001', result, null)).resolves.toEqual(
+      completed,
+    );
   });
 
   it('supports deterministic pagination and inclusive filters', async () => {

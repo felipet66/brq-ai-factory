@@ -12,7 +12,10 @@ export function FactoryProgress({ progress, agents }: FactoryProgressProps) {
       <div className={styles.sectionHeading}>
         <h2 id="factory-progress-heading">Factory progress</h2>
         <span>
-          {progress.resolvedAgentCount}/{progress.totalAgentCount} stages resolved
+          {progress.resolvedAgentCount}/{progress.totalAgentCount} agent stages resolved
+          {progress.totalTechnicalStageCount === 0
+            ? ''
+            : ` · ${progress.resolvedTechnicalStageCount}/${progress.totalTechnicalStageCount} technical stages resolved`}
         </span>
       </div>
       <ol className={styles.progressList}>

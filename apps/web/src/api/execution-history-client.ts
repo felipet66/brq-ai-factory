@@ -26,16 +26,39 @@ const stageStatusSchema = z.enum([
   'CANCELLED',
   'SKIPPED',
 ]);
-const stageIdSchema = z.enum(['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA']);
-const agentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
-const workflowStageSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
-const observabilityStageIdSchema = z.enum([
-  'EXECUTION',
+const legacyStageIdSchema = z.enum(['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const factoryTimelineStageIdSchema = z.enum([
   'KNOWLEDGE',
   'PRODUCT_OWNER',
   'DEVELOPER',
   'QA',
+  'CODE_GENERATOR',
+  'WORKSPACE',
+  'SANDBOX_PREPARE',
+  'SANDBOX_TYPECHECK',
+  'SANDBOX_BUILD',
+  'SANDBOX_TEST',
+]);
+const factoryPipelineStageIdSchema = z.enum([
+  'PRODUCT_OWNER',
+  'DEVELOPER',
+  'QA',
+  'CODE_GENERATOR',
+  'WORKSPACE_PLAN',
+  'WORKSPACE_MATERIALIZATION',
+  'SANDBOX_PREPARE',
+  'SANDBOX_TYPECHECK',
+  'SANDBOX_BUILD',
+  'SANDBOX_TEST',
+  'WORKSPACE_RELEASE',
+]);
+const agentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const workflowStageSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const observabilityStageIdSchema = z.enum([
+  'EXECUTION',
+  ...factoryTimelineStageIdSchema.options,
   'WORKFLOW',
+  'FACTORY',
 ]);
 const observabilityEventTypeSchema = z.enum([
   'execution.started',
@@ -156,6 +179,145 @@ const rawProvenanceSchema = z
   })
   .passthrough();
 
+const rawFactoryStageSchema = z
+  .object({
+    stageId: factoryPipelineStageIdSchema,
+    status: z.enum(['SUCCESS', 'FAILED', 'CANCELLED', 'SKIPPED']),
+    startedAt: nullableDateTimeSchema,
+    finishedAt: nullableDateTimeSchema,
+    durationMs: nullableMetricSchema,
+    outputHash: nullableHashSchema,
+    failureCode: z.string().min(1).max(128).nullable(),
+    resourceOutcome: z
+      .enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN'])
+      .nullable(),
+  })
+  .strict();
+
+const rawFactoryResultSchema = z
+  .object({
+    factoryVersion: semanticVersionSchema,
+    contractVersion: semanticVersionSchema,
+    status: z.enum(['SUCCESS', 'FAILED', 'CANCELLED']),
+    terminalStage: z.union([
+      factoryPipelineStageIdSchema,
+      z.literal('EXECUTION'),
+      z.literal('SANDBOX'),
+    ]),
+    startedAt: z.string().datetime({ offset: true }),
+    finishedAt: z.string().datetime({ offset: true }),
+    durationMs: z.number().int().nonnegative(),
+    readiness: z.string().min(1).max(64).nullable(),
+    generationStatus: z.enum(['SUCCESS', 'FAILED', 'CANCELLED', 'SKIPPED']),
+    generatedFileCount: z.number().int().positive().nullable(),
+    generatedTotalBytes: z.number().int().positive().nullable(),
+    workspaceId: z
+      .string()
+      .regex(/^workspace-[a-f0-9]{32}$/)
+      .nullable(),
+    workspaceFileCount: z.number().int().positive().nullable(),
+    workspaceTotalBytes: z.number().int().nonnegative().nullable(),
+    workspaceReleaseStatus: z.enum(['RELEASED', 'FAILED', 'NOT_REQUIRED']),
+    sandboxStatus: z.enum(['SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED', 'SKIPPED']),
+    sandboxRunId: z
+      .string()
+      .regex(/^sandbox-[a-f0-9]{32}$/)
+      .nullable(),
+    sandboxResourceOutcome: z.enum([
+      'NONE',
+      'OOM',
+      'PID_LIMIT',
+      'DISK_LIMIT',
+      'OUTPUT_LIMIT',
+      'UNKNOWN',
+    ]),
+    hashes: z
+      .object({
+        lineageHash: z.string().regex(HASH_PATTERN),
+        provenanceHash: z.string().regex(HASH_PATTERN),
+        factoryResultHash: z.string().regex(HASH_PATTERN),
+      })
+      .strict(),
+    failure: z
+      .object({
+        kind: z.literal('FACTORY_PIPELINE'),
+        code: z.string().min(1).max(128),
+        sourceCode: z.string().min(1).max(128).nullable(),
+        stageId: z.union([
+          factoryPipelineStageIdSchema,
+          z.literal('EXECUTION'),
+          z.literal('SANDBOX'),
+        ]),
+      })
+      .strict()
+      .nullable(),
+    stages: z.array(rawFactoryStageSchema).length(11),
+    lineage: z
+      .object({
+        productOwnerSpecificationHash: nullableKnowledgeHashSchema,
+        technicalSpecificationHash: nullableKnowledgeHashSchema,
+        qaSpecificationHash: nullableKnowledgeHashSchema,
+        executionHash: z.string().regex(HASH_PATTERN),
+        workflowHash: nullableHashSchema,
+        generationHash: nullableHashSchema,
+        bundleHash: nullableHashSchema,
+        bundleContentHash: nullableHashSchema,
+        workspacePlanHash: nullableHashSchema,
+        workspaceHash: nullableHashSchema,
+        sandboxRequestHash: nullableHashSchema,
+        sandboxResultHash: nullableHashSchema,
+        factoryResultHash: z.string().regex(HASH_PATTERN),
+      })
+      .strict(),
+    provenance: z
+      .object({
+        codeGeneratorAgentVersion: semanticVersionSchema,
+        codeGeneratorContractVersion: semanticVersionSchema.nullable(),
+        codeGeneratorAssetBundleHash: nullableHashSchema,
+        workspaceVersion: semanticVersionSchema.nullable(),
+        workspaceContractVersion: semanticVersionSchema.nullable(),
+        workspacePolicyHash: nullableHashSchema,
+        workspaceConfigurationHash: nullableHashSchema,
+        sandboxRunnerVersion: semanticVersionSchema.nullable(),
+        sandboxContractVersion: semanticVersionSchema.nullable(),
+        sandboxSanitizerVersion: semanticVersionSchema.nullable(),
+        sandboxHelperAbiVersion: semanticVersionSchema.nullable(),
+        sandboxDependencySnapshotHash: nullableHashSchema,
+        sandboxPolicyId: z.string().min(1).max(64).nullable(),
+        sandboxPolicyVersion: semanticVersionSchema.nullable(),
+        sandboxPolicyHash: nullableHashSchema,
+        sandboxCommandPolicyHash: nullableHashSchema,
+        sandboxLimitsHash: nullableHashSchema,
+        sandboxAdapter: z.string().min(1).max(64).nullable(),
+        sandboxImageDigest: nullableKnowledgeHashSchema,
+        sandboxImageId: z.string().min(1).max(256).nullable(),
+        sandboxPlatform: z.string().min(1).max(128).nullable(),
+        sandboxRuntimeName: z.string().min(1).max(128).nullable(),
+        sandboxRuntimeVersion: z.string().min(1).max(128).nullable(),
+        toolchainVersions: z.record(z.string().min(1).max(128), z.string().min(1).max(128)),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    result.stages.forEach((stage, index) => {
+      if (stage.stageId !== factoryPipelineStageIdSchema.options[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'stageId'],
+          message: 'The Factory stages are not in canonical order.',
+        });
+      }
+    });
+    if (result.hashes.factoryResultHash !== result.lineage.factoryResultHash) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lineage', 'factoryResultHash'],
+        message: 'The Factory lineage correlation is invalid.',
+      });
+    }
+  });
+
 const rawHistoryDetailSchema = rawHistoryItemSchema.extend({
   executionId: executionIdSchema,
   createdAt: z.string().datetime({ offset: true }),
@@ -180,11 +342,12 @@ const rawHistoryDetailSchema = rawHistoryItemSchema.extend({
   hashes: rawHashesSchema,
   lineage: rawLineageSchema.nullable(),
   provenance: rawProvenanceSchema.nullable(),
+  factoryResult: rawFactoryResultSchema.nullable(),
 });
 
 const rawTimelineStageSchema = z
   .object({
-    stageId: stageIdSchema,
+    stageId: factoryTimelineStageIdSchema,
     stageName: z.string().min(1).max(64),
     status: stageStatusSchema,
     startedAt: nullableDateTimeSchema,
@@ -241,15 +404,17 @@ const rawTimelineSummarySchema = z
       })
       .strict()
       .nullable(),
-    executedStages: z.array(stageIdSchema).max(4),
-    skippedStages: z.array(stageIdSchema).max(4),
+    executedStages: z.array(factoryTimelineStageIdSchema).max(10),
+    skippedStages: z.array(factoryTimelineStageIdSchema).max(10),
     hashes: rawHashesSchema,
+    factoryStatus: z.enum(['SUCCESS', 'FAILED', 'CANCELLED']).optional(),
+    factoryResultHash: z.string().regex(HASH_PATTERN).optional(),
   })
   .passthrough();
 
 const rawTimelineSchema = z
   .object({
-    observabilityVersion: semanticVersionSchema,
+    observabilityVersion: z.enum(['1.0.0', '2.0.0']),
     executionId: executionIdSchema,
     workflowId: z.string().min(1).max(128),
     requestId: z.string().min(1).max(128).nullable(),
@@ -257,12 +422,23 @@ const rawTimelineSchema = z
     status: terminalStatusSchema,
     updatedAt: z.string().datetime({ offset: true }),
     events: z.array(rawTimelineEventSchema).max(64),
-    stages: z.array(rawTimelineStageSchema).length(4),
+    stages: z.array(rawTimelineStageSchema).min(4).max(10),
     stageMetrics: z.array(rawStageMetricsSchema).length(3),
     summary: rawTimelineSummarySchema.nullable(),
   })
   .passthrough()
   .superRefine((timeline, context) => {
+    const expectedStageOrder =
+      timeline.observabilityVersion === '1.0.0'
+        ? legacyStageIdSchema.options
+        : factoryTimelineStageIdSchema.options;
+    if (timeline.stages.length !== expectedStageOrder.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stages'],
+        message: 'The timeline stage set is invalid for its observability version.',
+      });
+    }
     timeline.events.forEach((event, index) => {
       if (event.executionId !== timeline.executionId || event.sequence !== index + 1) {
         context.addIssue({
@@ -273,6 +449,13 @@ const rawTimelineSchema = z
       }
     });
     timeline.stages.forEach((stage, index) => {
+      if (stage.stageId !== expectedStageOrder[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'stageId'],
+          message: 'The timeline stages are not in canonical order.',
+        });
+      }
       if (stage.executionId !== timeline.executionId) {
         context.addIssue({
           code: 'custom',
@@ -504,6 +687,27 @@ function projectDetail(raw: z.output<typeof rawHistoryDetailSchema>): ExecutionH
             ),
           ),
         });
+  const factoryResult =
+    raw.factoryResult === null
+      ? null
+      : Object.freeze({
+          ...raw.factoryResult,
+          hashes: Object.freeze({ ...raw.factoryResult.hashes }),
+          failure:
+            raw.factoryResult.failure === null
+              ? null
+              : Object.freeze({ ...raw.factoryResult.failure }),
+          stages: Object.freeze(
+            raw.factoryResult.stages.map((stage) => Object.freeze({ ...stage })),
+          ),
+          lineage: Object.freeze({ ...raw.factoryResult.lineage }),
+          provenance: Object.freeze({
+            ...raw.factoryResult.provenance,
+            toolchainVersions: Object.freeze({
+              ...raw.factoryResult.provenance.toolchainVersions,
+            }),
+          }),
+        });
 
   return Object.freeze({
     ...projectItem(raw),
@@ -515,6 +719,7 @@ function projectDetail(raw: z.output<typeof rawHistoryDetailSchema>): ExecutionH
     hashes: Object.freeze({ ...raw.hashes }),
     lineage,
     provenance,
+    factoryResult,
   });
 }
 
@@ -535,6 +740,12 @@ function projectTimeline(raw: z.output<typeof rawTimelineSchema>): ExecutionHist
           executedStages: Object.freeze([...raw.summary.executedStages]),
           skippedStages: Object.freeze([...raw.summary.skippedStages]),
           hashes: Object.freeze({ ...raw.summary.hashes }),
+          ...(raw.summary.factoryStatus === undefined
+            ? {}
+            : { factoryStatus: raw.summary.factoryStatus }),
+          ...(raw.summary.factoryResultHash === undefined
+            ? {}
+            : { factoryResultHash: raw.summary.factoryResultHash }),
         });
   return Object.freeze({
     observabilityVersion: raw.observabilityVersion,
@@ -577,7 +788,7 @@ function projectTimeline(raw: z.output<typeof rawTimelineSchema>): ExecutionHist
     ),
     stageMetrics: Object.freeze(raw.stageMetrics.map((metrics) => Object.freeze({ ...metrics }))),
     summary,
-  });
+  }) as ExecutionHistoryTimeline;
 }
 
 function executionEndpoint(executionId: string): string {

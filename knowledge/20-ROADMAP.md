@@ -12,10 +12,10 @@ As fases podem ser reavaliadas conforme novos aprendizados.
 
 Estado incremental: Foundation, camadas core, Product Owner, Developer, QA, Orchestrator, Execution
 Engine, adapter HTTP, Frontend MVP, Observability, Execution Repository, Job Queue, Worker,
-autenticação, Prompt Playground, Factory View, Code Generator e Controlled Workspace estão
-implementados até a Sprint 22. A Sprint 23 adiciona o Sandbox Runner isolado para preparação,
-typecheck, build e testes explícitos, sem conectá-lo ao workflow, API, persistência ou UI. Preview,
-deploy, execução distribuída e integração operacional continuam em evoluções futuras.
+autenticação, Prompt Playground, Factory View, Code Generator, Controlled Workspace e Sandbox
+Runner estão implementados até a Sprint 23. A Sprint 24 integra o pipeline completo por um
+coordinator externo, com resultado, observabilidade, persistência e estações técnicas aditivas.
+Preview, deploy, execução distribuída e recovery após crash continuam em evoluções futuras.
 
 ---
 
@@ -67,6 +67,7 @@ Entregas:
 - eventos tipados, métricas por agente e resumo observacional
 - Code Generator textual e Controlled Workspace independente
 - Sandbox Build/Test Runner explícito, provider-neutral e isolado por adapter Docker
+- Factory Pipeline completo com release seguro, metadata persistida e visualização técnica
 - Persistência
 - Logs
 - Exportação de Artefatos
@@ -75,9 +76,8 @@ Critério de sucesso:
 
 Uma demanda percorre todo o pipeline e produz artefatos completos.
 
-As capabilities de geração, materialização e sandbox permanecem opt-in e fora do pipeline
-operacional até que ownership, autorização, persistência e eventos sejam definidos em Sprints
-próprias.
+Geração, materialização e Sandbox preservam fronteiras independentes mesmo quando compostas pelo
+Factory Pipeline. Docker real continua explicitamente configurado e fora da suíte padrão.
 
 ---
 
@@ -180,7 +180,7 @@ Entregas:
 - Fine Tuning
 - Plugin System
 - Marketplace de Agentes
-- integração confiável do Sandbox Runner ao lifecycle de execução
+- recovery explícito de workspaces e containers após crash do host
 - Preview Runner com lifecycle, autorização, portas e cleanup próprios
 - orphan recovery para containers e workspaces controlados
 

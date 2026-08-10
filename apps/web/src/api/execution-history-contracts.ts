@@ -74,6 +74,106 @@ export interface ExecutionHistoryJob {
   readonly finishedAt: string | null;
 }
 
+export type FactoryPipelineStageId =
+  | 'PRODUCT_OWNER'
+  | 'DEVELOPER'
+  | 'QA'
+  | 'CODE_GENERATOR'
+  | 'WORKSPACE_PLAN'
+  | 'WORKSPACE_MATERIALIZATION'
+  | 'SANDBOX_PREPARE'
+  | 'SANDBOX_TYPECHECK'
+  | 'SANDBOX_BUILD'
+  | 'SANDBOX_TEST'
+  | 'WORKSPACE_RELEASE';
+
+export interface ExecutionHistoryFactoryStage {
+  readonly stageId: FactoryPipelineStageId;
+  readonly status: 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+  readonly durationMs: number | null;
+  readonly outputHash: string | null;
+  readonly failureCode: string | null;
+  readonly resourceOutcome:
+    'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
+}
+
+export interface ExecutionHistoryFactoryResult {
+  readonly factoryVersion: string;
+  readonly contractVersion: string;
+  readonly status: 'SUCCESS' | 'FAILED' | 'CANCELLED';
+  readonly terminalStage: FactoryPipelineStageId | 'EXECUTION' | 'SANDBOX';
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly durationMs: number;
+  readonly readiness: string | null;
+  readonly generationStatus: 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  readonly generatedFileCount: number | null;
+  readonly generatedTotalBytes: number | null;
+  readonly workspaceId: string | null;
+  readonly workspaceFileCount: number | null;
+  readonly workspaceTotalBytes: number | null;
+  readonly workspaceReleaseStatus: 'RELEASED' | 'FAILED' | 'NOT_REQUIRED';
+  readonly sandboxStatus: 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'CANCELLED' | 'SKIPPED';
+  readonly sandboxRunId: string | null;
+  readonly sandboxResourceOutcome:
+    'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN';
+  readonly hashes: {
+    readonly lineageHash: string;
+    readonly provenanceHash: string;
+    readonly factoryResultHash: string;
+  };
+  readonly failure: {
+    readonly kind: 'FACTORY_PIPELINE';
+    readonly code: string;
+    readonly sourceCode: string | null;
+    readonly stageId: FactoryPipelineStageId | 'EXECUTION' | 'SANDBOX';
+  } | null;
+  readonly stages: readonly ExecutionHistoryFactoryStage[];
+  readonly lineage: {
+    readonly productOwnerSpecificationHash: string | null;
+    readonly technicalSpecificationHash: string | null;
+    readonly qaSpecificationHash: string | null;
+    readonly executionHash: string;
+    readonly workflowHash: string | null;
+    readonly generationHash: string | null;
+    readonly bundleHash: string | null;
+    readonly bundleContentHash: string | null;
+    readonly workspacePlanHash: string | null;
+    readonly workspaceHash: string | null;
+    readonly sandboxRequestHash: string | null;
+    readonly sandboxResultHash: string | null;
+    readonly factoryResultHash: string;
+  };
+  readonly provenance: {
+    readonly codeGeneratorAgentVersion: string;
+    readonly codeGeneratorContractVersion: string | null;
+    readonly codeGeneratorAssetBundleHash: string | null;
+    readonly workspaceVersion: string | null;
+    readonly workspaceContractVersion: string | null;
+    readonly workspacePolicyHash: string | null;
+    readonly workspaceConfigurationHash: string | null;
+    readonly sandboxRunnerVersion: string | null;
+    readonly sandboxContractVersion: string | null;
+    readonly sandboxSanitizerVersion: string | null;
+    readonly sandboxHelperAbiVersion: string | null;
+    readonly sandboxDependencySnapshotHash: string | null;
+    readonly sandboxPolicyId: string | null;
+    readonly sandboxPolicyVersion: string | null;
+    readonly sandboxPolicyHash: string | null;
+    readonly sandboxCommandPolicyHash: string | null;
+    readonly sandboxLimitsHash: string | null;
+    readonly sandboxAdapter: string | null;
+    readonly sandboxImageDigest: string | null;
+    readonly sandboxImageId: string | null;
+    readonly sandboxPlatform: string | null;
+    readonly sandboxRuntimeName: string | null;
+    readonly sandboxRuntimeVersion: string | null;
+    readonly toolchainVersions: Readonly<Record<string, string>>;
+  };
+}
+
 export interface ExecutionHistoryDetail extends ExecutionHistoryItem {
   readonly executionId: string;
   readonly createdAt: string;
@@ -87,7 +187,23 @@ export interface ExecutionHistoryDetail extends ExecutionHistoryItem {
   readonly hashes: ExecutionHistoryHashes;
   readonly lineage: ExecutionHistoryLineage | null;
   readonly provenance: ExecutionHistoryProvenance | null;
+  readonly factoryResult: ExecutionHistoryFactoryResult | null;
 }
+
+export type ExecutionHistoryTimelineStageId =
+  | 'KNOWLEDGE'
+  | 'PRODUCT_OWNER'
+  | 'DEVELOPER'
+  | 'QA'
+  | 'CODE_GENERATOR'
+  | 'WORKSPACE'
+  | 'SANDBOX_PREPARE'
+  | 'SANDBOX_TYPECHECK'
+  | 'SANDBOX_BUILD'
+  | 'SANDBOX_TEST';
+
+export type ExecutionHistoryObservabilityStageId =
+  'EXECUTION' | ExecutionHistoryTimelineStageId | 'WORKFLOW' | 'FACTORY';
 
 export interface ExecutionHistoryTimelineEvent {
   readonly sequence: number;
@@ -98,7 +214,7 @@ export interface ExecutionHistoryTimelineEvent {
     | 'stage.started'
     | 'stage.finished'
     | 'stage.failed';
-  readonly stageId: 'EXECUTION' | 'KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA' | 'WORKFLOW';
+  readonly stageId: ExecutionHistoryObservabilityStageId;
   readonly stageName: string;
   readonly status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
   readonly startedAt: string | null;
@@ -110,7 +226,7 @@ export interface ExecutionHistoryTimelineEvent {
 }
 
 export interface ExecutionHistoryTimeline {
-  readonly observabilityVersion: string;
+  readonly observabilityVersion: '1.0.0' | '2.0.0';
   readonly revision: number;
   readonly executionId: string;
   readonly workflowId: string;
@@ -119,7 +235,7 @@ export interface ExecutionHistoryTimeline {
   readonly updatedAt: string;
   readonly events: readonly ExecutionHistoryTimelineEvent[];
   readonly stages: readonly {
-    readonly stageId: 'KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
+    readonly stageId: ExecutionHistoryTimelineStageId;
     readonly stageName: string;
     readonly status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
     readonly startedAt: string | null;
@@ -151,10 +267,20 @@ export interface ExecutionHistoryTimeline {
       readonly currency: 'USD';
       readonly rateCardVersion: string;
     } | null;
-    readonly executedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
-    readonly skippedStages: readonly ('KNOWLEDGE' | 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA')[];
+    readonly executedStages: readonly ExecutionHistoryTimelineStageId[];
+    readonly skippedStages: readonly ExecutionHistoryTimelineStageId[];
     readonly hashes: ExecutionHistoryHashes;
+    readonly factoryStatus?: 'SUCCESS' | 'FAILED' | 'CANCELLED';
+    readonly factoryResultHash?: string;
   } | null;
+}
+
+export interface ExecutionHistoryTimelineV1 extends ExecutionHistoryTimeline {
+  readonly observabilityVersion: '1.0.0';
+}
+
+export interface ExecutionHistoryTimelineV2 extends ExecutionHistoryTimeline {
+  readonly observabilityVersion: '2.0.0';
 }
 
 export interface ExecutionHistoryDetailView {

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@brq/execution-engine": "0.1.0",
+    "@brq/factory-pipeline": "0.1.0",
     "@brq/shared": "0.1.0",
     "zod": "^4.4.3"
   }

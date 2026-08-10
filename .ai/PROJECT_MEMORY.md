@@ -1070,11 +1070,45 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 24
   foi iniciado.
 
+## Implementação da Sprint 24
+
+- `core/factory-pipeline` adiciona o `FactoryPipelineCoordinator` como composition layer externo ao
+  Orchestrator e ao Execution Engine; ambos preservam comportamento e contratos existentes;
+- o pipeline chama somente APIs públicas e mantém as projeções explícitas
+  `TechnicalSpecification → CodeGenerationRequest`, `GeneratedCodeBundle → WorkspacePlanRequest` e
+  `WorkspaceMaterializationResult → SandboxRunRequest`;
+- `FactoryExecutionResult` é um contrato aditivo e metadata-only; `ExecutionResult` e
+  `WorkflowResult` não foram ampliados nem substituídos;
+- Factory `SUCCESS` exige PO, Developer, QA `READY`, Code Generator, Workspace Plan,
+  materialização, PREPARE, TYPECHECK, BUILD, TEST e release do workspace com sucesso;
+- falhas e cancelamentos preservam resultados anteriores, interrompem o pipeline e projetam
+  downstream `SKIPPED` sem artifacts ou estados fictícios;
+- o mesmo `AbortSignal` atravessa Engine, Code Generator, materialização e Sandbox; Sandbox mantém
+  ownership do container e o coordinator mantém ownership do release do workspace;
+- Controlled Workspace expõe `release()` idempotente, valida ownership, root, inode e hashes,
+  executa rollback/cleanup sob deadline e nunca recebe path pelo contrato de release;
+- o profile Docker `NODE_TYPESCRIPT_24_V1` é separado da fixture da Sprint 23, usa Node 24.19.0 e
+  TypeScript 6.0.3 pinados e executa somente helpers fixos sem dependencies ou package scripts;
+- o host exige configuração Docker explícita e não possui fallback automático para fake; injeção
+  de runner/workspace existe somente como composition capability para testes;
+- Observability `2.0.0` adiciona Code Generator, Workspace, Prepare, Typecheck, Build e Test e
+  preserva snapshots `1.0.0` por contrato discriminado;
+- a migration aditiva normaliza resultado, etapas, lineage, provenance e toolchains da Factory;
+  nenhuma tabela armazena código, prompts, specifications, output bruto, filesystem ou secrets;
+- API `3.1.0` expõe `factoryResult` opcional e timeline v1/v2 sem novo endpoint; falhas funcionais
+  continuam respostas de consulta normais;
+- a Factory View mantém PO, Developer e QA como personagens e adiciona somente estações técnicas
+  derivadas de evidência real; execuções históricas permanecem compatíveis;
+- ADR-034 e `knowledge/50-FACTORY_PIPELINE_FLOW.md` documentam composição, lifecycle, hashes,
+  observabilidade, trust boundaries, falhas e cancelamento;
+- Preview Runner, servidor, iframe, portas, deploy, retry, self-healing e Sprint 25 permanecem fora
+  do escopo.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
-- execução direta no host, execução automática pelo workflow e preview do código gerado; build e
-  testes existem somente no Sandbox Runner explícito e isolado da Sprint 23;
+- execução direta no host e preview do código gerado; build e testes existem somente no Sandbox
+  Runner explícito, acionado pelo Factory Pipeline da Sprint 24;
 - network, privileged, Docker socket, bind mount, package scripts, lifecycle scripts, dependency
   install online, retry e exportação de build na sandbox;
 - execução dos cenários definidos pelo QA Agent;

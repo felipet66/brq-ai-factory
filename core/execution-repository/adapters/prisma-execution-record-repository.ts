@@ -1,5 +1,9 @@
 import type { ExecutionResult } from '@brq/execution-engine';
-import type { ExecutionObservabilitySnapshot } from '@brq/observability';
+import type { FactoryExecutionResult } from '@brq/factory-pipeline';
+import type {
+  ExecutionObservabilitySnapshot,
+  FactoryExecutionObservabilitySnapshot,
+} from '@brq/observability';
 import type { DatabaseClient } from '@brq/prisma/client';
 
 import type {
@@ -10,8 +14,8 @@ import type {
   ExecutionRecordListQuery,
   ExecutionRecordPage,
   ExecutionRecordQueuedInput,
-  ExecutionRecordRepository,
   ExecutionRecordRunningInput,
+  FactoryExecutionRecordRepository,
 } from '../contracts';
 import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from '../errors';
 import { immutableClone } from '../immutability';
@@ -22,6 +26,7 @@ import {
   projectJobTerminalExecutionRecord,
   projectObservedExecutionRecord,
   projectRunningExecutionRecord,
+  projectTerminalFactoryExecutionRecord,
   projectTerminalExecutionRecord,
 } from '../mapper';
 import {
@@ -139,6 +144,8 @@ interface RawObservation {
   status: string;
   updatedAt: Date;
   summaryWorkflowStatus: string | null;
+  summaryFactoryStatus: string | null;
+  summaryFactoryResultHash: string | null;
   summaryReadinessFinal: string | null;
   summaryTotalDurationMs: number | null;
   summaryTotalTokens: number | null;
@@ -183,6 +190,92 @@ interface RawProvenanceStage {
   artifactHashes: { ordinal: number; hash: string }[];
 }
 
+interface RawFactoryStage {
+  ordinal: number;
+  stageId: string;
+  status: string;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  durationMs: number | null;
+  outputHash: string | null;
+  failureCode: string | null;
+  resourceOutcome: string | null;
+}
+
+interface RawFactoryLineage {
+  productOwnerSpecificationHash: string | null;
+  technicalSpecificationHash: string | null;
+  qaSpecificationHash: string | null;
+  executionHash: string;
+  workflowHash: string | null;
+  generationHash: string | null;
+  bundleHash: string | null;
+  bundleContentHash: string | null;
+  workspacePlanHash: string | null;
+  workspaceHash: string | null;
+  sandboxRequestHash: string | null;
+  sandboxResultHash: string | null;
+  factoryResultHash: string;
+}
+
+interface RawFactoryProvenance {
+  codeGeneratorAgentVersion: string | null;
+  codeGeneratorContractVersion: string | null;
+  codeGeneratorAssetBundleHash: string | null;
+  workspaceVersion: string | null;
+  workspaceContractVersion: string | null;
+  workspacePolicyHash: string | null;
+  workspaceConfigurationHash: string | null;
+  sandboxRunnerVersion: string | null;
+  sandboxContractVersion: string | null;
+  sandboxSanitizerVersion: string | null;
+  sandboxHelperAbiVersion: string | null;
+  sandboxDependencySnapshotHash: string | null;
+  sandboxPolicyId: string | null;
+  sandboxPolicyVersion: string | null;
+  sandboxPolicyHash: string | null;
+  sandboxCommandPolicyHash: string | null;
+  sandboxLimitsHash: string | null;
+  sandboxAdapter: string | null;
+  sandboxImageDigest: string | null;
+  sandboxImageId: string | null;
+  sandboxPlatform: string | null;
+  sandboxRuntimeName: string | null;
+  sandboxRuntimeVersion: string | null;
+}
+
+interface RawFactoryResult {
+  factoryVersion: string;
+  contractVersion: string;
+  status: string;
+  terminalStage: string;
+  startedAt: Date;
+  finishedAt: Date;
+  durationMs: number;
+  readiness: string | null;
+  factoryResultHash: string;
+  lineageHash: string;
+  provenanceHash: string;
+  generationStatus: string;
+  generatedFileCount: number | null;
+  generatedTotalBytes: number | null;
+  workspaceId: string | null;
+  workspaceFileCount: number | null;
+  workspaceTotalBytes: number | null;
+  workspaceReleaseStatus: string;
+  sandboxStatus: string;
+  sandboxRunId: string | null;
+  sandboxResourceOutcome: string;
+  failureKind: string | null;
+  failureCode: string | null;
+  failureSourceCode: string | null;
+  failureStageId: string | null;
+  stages: RawFactoryStage[];
+  lineage: RawFactoryLineage | null;
+  provenance: RawFactoryProvenance | null;
+  toolchainVersions: { name: string; version: string }[];
+}
+
 interface RawExecutionRecord {
   storageId: string;
   workflowId: string;
@@ -211,6 +304,7 @@ interface RawExecutionRecord {
   lineageOutput: RawLineageOutput | null;
   lineageHandoffs: RawLineageHandoff[];
   provenanceStages: RawProvenanceStage[];
+  factoryResult: RawFactoryResult | null;
 }
 
 const aggregateInclude = {
@@ -231,6 +325,14 @@ const aggregateInclude = {
   provenanceStages: {
     orderBy: { ordinal: 'asc' as const },
     include: { artifactHashes: { orderBy: { ordinal: 'asc' as const } } },
+  },
+  factoryResult: {
+    include: {
+      stages: { orderBy: { ordinal: 'asc' as const } },
+      lineage: true,
+      provenance: true,
+      toolchainVersions: { orderBy: { name: 'asc' as const } },
+    },
   },
 } as const;
 
@@ -279,30 +381,57 @@ function mapObservation(raw: RawExecutionRecord): unknown {
   const summary =
     observation.summaryWorkflowStatus === null
       ? null
-      : {
-          executionId: observation.executionId,
-          workflowStatus: observation.summaryWorkflowStatus,
-          readinessFinal: observation.summaryReadinessFinal,
-          totalDurationMs: observation.summaryTotalDurationMs,
-          totalTokens: observation.summaryTotalTokens,
-          totalCostEstimate:
-            observation.summaryCostAmount === null ||
-            observation.summaryCostCurrency === null ||
-            observation.summaryRateCardVersion === null
-              ? null
-              : {
-                  amount: observation.summaryCostAmount,
-                  currency: observation.summaryCostCurrency,
-                  rateCardVersion: observation.summaryRateCardVersion,
-                },
-          executedStages: stages
-            .filter((stage) => stage.status !== 'PENDING' && stage.status !== 'SKIPPED')
-            .map((stage) => stage.stageId),
-          skippedStages: stages
-            .filter((stage) => stage.status === 'PENDING' || stage.status === 'SKIPPED')
-            .map((stage) => stage.stageId),
-          hashes: mapHashes(raw.hashes),
-        };
+      : observation.observabilityVersion === '2.0.0'
+        ? {
+            executionId: observation.executionId,
+            workflowStatus: observation.summaryWorkflowStatus,
+            factoryStatus: observation.summaryFactoryStatus,
+            readinessFinal: observation.summaryReadinessFinal,
+            totalDurationMs: observation.summaryTotalDurationMs,
+            totalTokens: observation.summaryTotalTokens,
+            totalCostEstimate:
+              observation.summaryCostAmount === null ||
+              observation.summaryCostCurrency === null ||
+              observation.summaryRateCardVersion === null
+                ? null
+                : {
+                    amount: observation.summaryCostAmount,
+                    currency: observation.summaryCostCurrency,
+                    rateCardVersion: observation.summaryRateCardVersion,
+                  },
+            executedStages: stages
+              .filter((stage) => stage.status !== 'PENDING' && stage.status !== 'SKIPPED')
+              .map((stage) => stage.stageId),
+            skippedStages: stages
+              .filter((stage) => stage.status === 'PENDING' || stage.status === 'SKIPPED')
+              .map((stage) => stage.stageId),
+            hashes: mapHashes(raw.hashes),
+            factoryResultHash: observation.summaryFactoryResultHash,
+          }
+        : {
+            executionId: observation.executionId,
+            workflowStatus: observation.summaryWorkflowStatus,
+            readinessFinal: observation.summaryReadinessFinal,
+            totalDurationMs: observation.summaryTotalDurationMs,
+            totalTokens: observation.summaryTotalTokens,
+            totalCostEstimate:
+              observation.summaryCostAmount === null ||
+              observation.summaryCostCurrency === null ||
+              observation.summaryRateCardVersion === null
+                ? null
+                : {
+                    amount: observation.summaryCostAmount,
+                    currency: observation.summaryCostCurrency,
+                    rateCardVersion: observation.summaryRateCardVersion,
+                  },
+            executedStages: stages
+              .filter((stage) => stage.status !== 'PENDING' && stage.status !== 'SKIPPED')
+              .map((stage) => stage.stageId),
+            skippedStages: stages
+              .filter((stage) => stage.status === 'PENDING' || stage.status === 'SKIPPED')
+              .map((stage) => stage.stageId),
+            hashes: mapHashes(raw.hashes),
+          };
   return {
     observabilityVersion: observation.observabilityVersion,
     revision: observation.revision,
@@ -327,6 +456,103 @@ function mapObservation(raw: RawExecutionRecord): unknown {
     stages,
     stageMetrics,
     summary,
+  };
+}
+
+function mapFactoryResult(raw: RawFactoryResult | null): unknown {
+  if (raw === null) return null;
+  return {
+    factoryVersion: raw.factoryVersion,
+    contractVersion: raw.contractVersion,
+    status: raw.status,
+    terminalStage: raw.terminalStage,
+    startedAt: raw.startedAt.toISOString(),
+    finishedAt: raw.finishedAt.toISOString(),
+    durationMs: raw.durationMs,
+    readiness: raw.readiness,
+    generationStatus: raw.generationStatus,
+    generatedFileCount: raw.generatedFileCount,
+    generatedTotalBytes: raw.generatedTotalBytes,
+    workspaceId: raw.workspaceId,
+    workspaceFileCount: raw.workspaceFileCount,
+    workspaceTotalBytes: raw.workspaceTotalBytes,
+    workspaceReleaseStatus: raw.workspaceReleaseStatus,
+    sandboxStatus: raw.sandboxStatus,
+    sandboxRunId: raw.sandboxRunId,
+    sandboxResourceOutcome: raw.sandboxResourceOutcome,
+    hashes: {
+      lineageHash: raw.lineageHash,
+      provenanceHash: raw.provenanceHash,
+      factoryResultHash: raw.factoryResultHash,
+    },
+    failure:
+      raw.failureKind === null || raw.failureCode === null || raw.failureStageId === null
+        ? null
+        : {
+            kind: raw.failureKind,
+            code: raw.failureCode,
+            sourceCode: raw.failureSourceCode,
+            stageId: raw.failureStageId,
+          },
+    stages: raw.stages.map((stage) => ({
+      stageId: stage.stageId,
+      status: stage.status,
+      startedAt: iso(stage.startedAt),
+      finishedAt: iso(stage.finishedAt),
+      durationMs: stage.durationMs,
+      outputHash: stage.outputHash,
+      failureCode: stage.failureCode,
+      resourceOutcome: stage.resourceOutcome,
+    })),
+    lineage:
+      raw.lineage === null
+        ? null
+        : {
+            productOwnerSpecificationHash: raw.lineage.productOwnerSpecificationHash,
+            technicalSpecificationHash: raw.lineage.technicalSpecificationHash,
+            qaSpecificationHash: raw.lineage.qaSpecificationHash,
+            executionHash: raw.lineage.executionHash,
+            workflowHash: raw.lineage.workflowHash,
+            generationHash: raw.lineage.generationHash,
+            bundleHash: raw.lineage.bundleHash,
+            bundleContentHash: raw.lineage.bundleContentHash,
+            workspacePlanHash: raw.lineage.workspacePlanHash,
+            workspaceHash: raw.lineage.workspaceHash,
+            sandboxRequestHash: raw.lineage.sandboxRequestHash,
+            sandboxResultHash: raw.lineage.sandboxResultHash,
+            factoryResultHash: raw.lineage.factoryResultHash,
+          },
+    provenance:
+      raw.provenance === null
+        ? null
+        : {
+            codeGeneratorAgentVersion: raw.provenance.codeGeneratorAgentVersion,
+            codeGeneratorContractVersion: raw.provenance.codeGeneratorContractVersion,
+            codeGeneratorAssetBundleHash: raw.provenance.codeGeneratorAssetBundleHash,
+            workspaceVersion: raw.provenance.workspaceVersion,
+            workspaceContractVersion: raw.provenance.workspaceContractVersion,
+            workspacePolicyHash: raw.provenance.workspacePolicyHash,
+            workspaceConfigurationHash: raw.provenance.workspaceConfigurationHash,
+            sandboxRunnerVersion: raw.provenance.sandboxRunnerVersion,
+            sandboxContractVersion: raw.provenance.sandboxContractVersion,
+            sandboxSanitizerVersion: raw.provenance.sandboxSanitizerVersion,
+            sandboxHelperAbiVersion: raw.provenance.sandboxHelperAbiVersion,
+            sandboxDependencySnapshotHash: raw.provenance.sandboxDependencySnapshotHash,
+            sandboxPolicyId: raw.provenance.sandboxPolicyId,
+            sandboxPolicyVersion: raw.provenance.sandboxPolicyVersion,
+            sandboxPolicyHash: raw.provenance.sandboxPolicyHash,
+            sandboxCommandPolicyHash: raw.provenance.sandboxCommandPolicyHash,
+            sandboxLimitsHash: raw.provenance.sandboxLimitsHash,
+            sandboxAdapter: raw.provenance.sandboxAdapter,
+            sandboxImageDigest: raw.provenance.sandboxImageDigest,
+            sandboxImageId: raw.provenance.sandboxImageId,
+            sandboxPlatform: raw.provenance.sandboxPlatform,
+            sandboxRuntimeName: raw.provenance.sandboxRuntimeName,
+            sandboxRuntimeVersion: raw.provenance.sandboxRuntimeVersion,
+            toolchainVersions: Object.fromEntries(
+              raw.toolchainVersions.map((entry) => [entry.name, entry.version]),
+            ),
+          },
   };
 }
 
@@ -410,6 +636,7 @@ function mapRecord(value: unknown): ExecutionRecord {
                 artifactHashes: stage.artifactHashes.map((artifact) => artifact.hash),
               })),
             },
+      factoryResult: mapFactoryResult(raw.factoryResult),
       observation: mapObservation(raw),
       lifecycle: raw.lifecycleEvents.map((event) => ({
         sequence: event.sequence,
@@ -464,6 +691,10 @@ function observationData(snapshot: ExecutionObservabilitySnapshot) {
     status: snapshot.status,
     updatedAt: new Date(snapshot.updatedAt),
     summaryWorkflowStatus: summary?.workflowStatus ?? null,
+    summaryFactoryStatus:
+      summary !== null && 'factoryStatus' in summary ? summary.factoryStatus : null,
+    summaryFactoryResultHash:
+      summary !== null && 'factoryResultHash' in summary ? summary.factoryResultHash : null,
     summaryReadinessFinal: summary?.readinessFinal ?? null,
     summaryTotalDurationMs: summary?.totalDurationMs ?? null,
     summaryTotalTokens: summary?.totalTokens ?? null,
@@ -473,7 +704,7 @@ function observationData(snapshot: ExecutionObservabilitySnapshot) {
   };
 }
 
-export class PrismaExecutionRecordRepository implements ExecutionRecordRepository {
+export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRepository {
   private readonly repositoryAccess: PrismaExecutionRecordRepositoryAccess;
 
   constructor(
@@ -599,6 +830,91 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
         })),
       });
     }
+  }
+
+  private async createFactoryResult(
+    client: DatabaseClient,
+    storageId: string,
+    factory: NonNullable<ExecutionRecord['factoryResult']>,
+  ): Promise<void> {
+    const provenance = factory.provenance;
+    await client.executionFactoryResult.create({
+      data: {
+        executionRecordId: storageId,
+        factoryVersion: factory.factoryVersion,
+        contractVersion: factory.contractVersion,
+        status: factory.status,
+        terminalStage: factory.terminalStage,
+        startedAt: new Date(factory.startedAt),
+        finishedAt: new Date(factory.finishedAt),
+        durationMs: factory.durationMs,
+        readiness: factory.readiness,
+        factoryResultHash: factory.hashes.factoryResultHash,
+        lineageHash: factory.hashes.lineageHash,
+        provenanceHash: factory.hashes.provenanceHash,
+        generationStatus: factory.generationStatus,
+        generatedFileCount: factory.generatedFileCount,
+        generatedTotalBytes: factory.generatedTotalBytes,
+        workspaceId: factory.workspaceId,
+        workspaceFileCount: factory.workspaceFileCount,
+        workspaceTotalBytes: factory.workspaceTotalBytes,
+        workspaceReleaseStatus: factory.workspaceReleaseStatus,
+        sandboxStatus: factory.sandboxStatus,
+        sandboxRunId: factory.sandboxRunId,
+        sandboxResourceOutcome: factory.sandboxResourceOutcome,
+        failureKind: factory.failure?.kind ?? null,
+        failureCode: factory.failure?.code ?? null,
+        failureSourceCode: factory.failure?.sourceCode ?? null,
+        failureStageId: factory.failure?.stageId ?? null,
+        stages: {
+          create: factory.stages.map((stage, ordinal) => ({
+            ordinal,
+            stageId: stage.stageId,
+            status: stage.status,
+            startedAt: stage.startedAt === null ? null : new Date(stage.startedAt),
+            finishedAt: stage.finishedAt === null ? null : new Date(stage.finishedAt),
+            durationMs: stage.durationMs,
+            outputHash: stage.outputHash,
+            failureCode: stage.failureCode,
+            resourceOutcome: stage.resourceOutcome,
+          })),
+        },
+        lineage: { create: { ...factory.lineage } },
+        provenance: {
+          create: {
+            codeGeneratorAgentVersion: provenance.codeGeneratorAgentVersion,
+            codeGeneratorContractVersion: provenance.codeGeneratorContractVersion,
+            codeGeneratorAssetBundleHash: provenance.codeGeneratorAssetBundleHash,
+            workspaceVersion: provenance.workspaceVersion,
+            workspaceContractVersion: provenance.workspaceContractVersion,
+            workspacePolicyHash: provenance.workspacePolicyHash,
+            workspaceConfigurationHash: provenance.workspaceConfigurationHash,
+            sandboxRunnerVersion: provenance.sandboxRunnerVersion,
+            sandboxContractVersion: provenance.sandboxContractVersion,
+            sandboxSanitizerVersion: provenance.sandboxSanitizerVersion,
+            sandboxHelperAbiVersion: provenance.sandboxHelperAbiVersion,
+            sandboxDependencySnapshotHash: provenance.sandboxDependencySnapshotHash,
+            sandboxPolicyId: provenance.sandboxPolicyId,
+            sandboxPolicyVersion: provenance.sandboxPolicyVersion,
+            sandboxPolicyHash: provenance.sandboxPolicyHash,
+            sandboxCommandPolicyHash: provenance.sandboxCommandPolicyHash,
+            sandboxLimitsHash: provenance.sandboxLimitsHash,
+            sandboxAdapter: provenance.sandboxAdapter,
+            sandboxImageDigest: provenance.sandboxImageDigest,
+            sandboxImageId: provenance.sandboxImageId,
+            sandboxPlatform: provenance.sandboxPlatform,
+            sandboxRuntimeName: provenance.sandboxRuntimeName,
+            sandboxRuntimeVersion: provenance.sandboxRuntimeVersion,
+          },
+        },
+        toolchainVersions: {
+          create: Object.entries(provenance.toolchainVersions).map(([name, version]) => ({
+            name,
+            version,
+          })),
+        },
+      },
+    });
   }
 
   async create(input: ExecutionRecordCreatedInput): Promise<ExecutionRecord> {
@@ -981,6 +1297,152 @@ export class PrismaExecutionRecordRepository implements ExecutionRecordRepositor
                 }),
           },
         });
+        if (snapshot !== null) {
+          await this.replaceObservation(
+            transaction as unknown as DatabaseClient,
+            current.storageId,
+            snapshot,
+          );
+        }
+      });
+      return (await this.loadByWorkflowIdForLifecycle(workflowId))!;
+    });
+  }
+
+  async completeFactory(
+    workflowId: string,
+    result: FactoryExecutionResult,
+    snapshot: FactoryExecutionObservabilitySnapshot | null,
+  ): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
+    return run(async () => {
+      const record = await this.client.executionRecord.findFirst({
+        where: { ...this.lifecycleWhere(), workflowId },
+        include: aggregateInclude,
+      });
+      if (record === null) {
+        throw new ExecutionRepositoryError('Registro de execução não encontrado.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      const current = mapRecord(record);
+      if (['SUCCESS', 'FAILED', 'CANCELLED'].includes(current.status)) {
+        if (
+          current.executionId === result.executionId &&
+          current.factoryResult?.hashes.factoryResultHash === result.hashes.factoryResultHash
+        ) {
+          return current;
+        }
+        throw new ExecutionRepositoryError('Resultado terminal da Factory divergente.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const projected = projectTerminalFactoryExecutionRecord(current, result, snapshot);
+      const terminalEvent = projected.lifecycle.at(-1)!;
+
+      await this.client.$transaction(async (transaction) => {
+        await transaction.executionProvenanceArtifactHash.deleteMany({
+          where: { executionProvenanceStage: { executionRecordId: current.storageId } },
+        });
+        await transaction.executionProvenanceStage.deleteMany({
+          where: { executionRecordId: current.storageId },
+        });
+        await transaction.executionLineageHandoff.deleteMany({
+          where: { executionRecordId: current.storageId },
+        });
+        await transaction.executionLineageOutput.deleteMany({
+          where: { executionRecordId: current.storageId },
+        });
+        await transaction.executionRecord.update({
+          where: { storageId: current.storageId },
+          data: {
+            executionId: projected.executionId,
+            status: projected.status,
+            workflowStatus: projected.workflowStatus,
+            readiness: projected.readiness,
+            startedAt: new Date(projected.startedAt!),
+            finishedAt: new Date(projected.finishedAt!),
+            durationMs: projected.durationMs,
+            ...(projected.job === null
+              ? {}
+              : {
+                  job: {
+                    update: {
+                      status: projected.job.status,
+                      finishedAt: new Date(projected.job.finishedAt!),
+                    },
+                  },
+                }),
+            revision: { increment: 1 },
+            failureKind: projected.failure?.kind ?? null,
+            failureCode: projected.failure?.code ?? null,
+            failureSourceCode: projected.failure?.sourceCode ?? null,
+            hashes: {
+              upsert: {
+                create: { ...projected.hashes },
+                update: { ...projected.hashes },
+              },
+            },
+            lifecycleEvents: {
+              create: {
+                sequence: terminalEvent.sequence,
+                event: terminalEvent.event,
+                state: terminalEvent.state,
+                occurredAt: new Date(terminalEvent.occurredAt),
+                durationMs: terminalEvent.durationMs,
+              },
+            },
+            ...(projected.lineage === null
+              ? {}
+              : {
+                  lineageOutput: { create: { ...projected.lineage.outputs } },
+                  lineageHandoffs: {
+                    create: projected.lineage.handoffs.map((handoff, ordinal) => ({
+                      ordinal,
+                      fromStage: handoff.from,
+                      toStage: handoff.to,
+                      specification: handoff.specification,
+                      calculatedHash: handoff.calculatedHash,
+                      declaredHash: handoff.declaredHash,
+                      verified: handoff.verified,
+                    })),
+                  },
+                }),
+            ...(projected.provenance === null
+              ? {}
+              : {
+                  provenanceStages: {
+                    create: projected.provenance.stages.map((stage, ordinal) => ({
+                      ordinal,
+                      stage: stage.stage,
+                      agent: stage.agent,
+                      executionId: stage.executionId,
+                      agentExecutionId: stage.agentExecutionId,
+                      agentVersion: stage.agentVersion,
+                      outcome: stage.outcome,
+                      readiness: stage.readiness,
+                      assetBundleHash: stage.assetBundleHash,
+                      knowledgeContextHash: stage.knowledgeContextHash,
+                      promptHash: stage.promptHash,
+                      responseHash: stage.responseHash,
+                      validationHash: stage.validationHash,
+                      generationHash: stage.generationHash,
+                      artifactHashes: {
+                        create: stage.artifactHashes.map((hash, artifactOrdinal) => ({
+                          ordinal: artifactOrdinal,
+                          hash,
+                        })),
+                      },
+                    })),
+                  },
+                }),
+          },
+        });
+        await this.createFactoryResult(
+          transaction as unknown as DatabaseClient,
+          current.storageId,
+          projected.factoryResult!,
+        );
         if (snapshot !== null) {
           await this.replaceObservation(
             transaction as unknown as DatabaseClient,

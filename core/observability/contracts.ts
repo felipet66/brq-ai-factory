@@ -1,4 +1,5 @@
 import type { ExecutionEngine, ExecutionRequest, ExecutionResult } from '@brq/execution-engine';
+import type { FactoryExecutionResult, FactoryPipelineCoordinator } from '@brq/factory-pipeline';
 import type { Logger, LogLevel } from '@brq/shared/logger/logger';
 import type { z } from 'zod';
 
@@ -10,6 +11,12 @@ import type {
   executionStageMetricsSchema,
   executionStageSchema,
   executionTimelineStageIdSchema,
+  factoryExecutionObservabilityEventSchema,
+  factoryExecutionObservabilitySnapshotSchema,
+  factoryExecutionObservabilitySummarySchema,
+  factoryExecutionStageSchema,
+  factoryExecutionTimelineStageIdSchema,
+  factoryObservabilityStageIdSchema,
   observableAgentStageIdSchema,
   observabilityEventTypeSchema,
   observabilityStageIdSchema,
@@ -41,15 +48,41 @@ export type ExecutionObservabilitySummary = DeepReadonly<
 export type ExecutionObservabilitySnapshot = DeepReadonly<
   z.infer<typeof executionObservabilitySnapshotSchema>
 >;
+export type FactoryExecutionTimelineStageId = z.infer<typeof factoryExecutionTimelineStageIdSchema>;
+export type FactoryObservabilityStageId = z.infer<typeof factoryObservabilityStageIdSchema>;
+export type FactoryExecutionObservabilityEvent = DeepReadonly<
+  z.infer<typeof factoryExecutionObservabilityEventSchema>
+>;
+export type FactoryExecutionStage = DeepReadonly<z.infer<typeof factoryExecutionStageSchema>>;
+export type FactoryExecutionObservabilitySummary = DeepReadonly<
+  z.infer<typeof factoryExecutionObservabilitySummarySchema>
+>;
+export type FactoryExecutionObservabilitySnapshot = DeepReadonly<
+  z.infer<typeof factoryExecutionObservabilitySnapshotSchema>
+>;
 
 export interface ExecutionHistoryReader {
   get(id: string): ExecutionObservabilitySnapshot | null;
 }
 
-export interface ExecutionHistoryRecorder extends ExecutionHistoryReader {
-  begin(request: ExecutionRequest): void;
+export interface ObservabilityEventRecorder {
   capture(level: LogLevel, event: string, context: Readonly<Record<string, unknown>>): void;
+}
+
+export interface ExecutionHistoryRecorder
+  extends ExecutionHistoryReader, ObservabilityEventRecorder {
+  begin(request: ExecutionRequest): void;
   complete(result: ExecutionResult): void;
+}
+
+export interface FactoryExecutionHistoryReader {
+  get(id: string): FactoryExecutionObservabilitySnapshot | null;
+}
+
+export interface FactoryExecutionHistoryRecorder
+  extends FactoryExecutionHistoryReader, ObservabilityEventRecorder {
+  beginFactory(request: ExecutionRequest): void;
+  completeFactory(result: FactoryExecutionResult): void;
 }
 
 export interface CreateInMemoryExecutionHistoryOptions {
@@ -59,10 +92,15 @@ export interface CreateInMemoryExecutionHistoryOptions {
 
 export interface CreateObservabilityLoggerOptions {
   readonly delegate: Logger;
-  readonly history: ExecutionHistoryRecorder;
+  readonly history: ObservabilityEventRecorder;
 }
 
 export interface CreateObservedExecutionEngineOptions {
   readonly engine: ExecutionEngine;
   readonly history: ExecutionHistoryRecorder;
+}
+
+export interface CreateObservedFactoryPipelineOptions {
+  readonly pipeline: FactoryPipelineCoordinator;
+  readonly history: FactoryExecutionHistoryRecorder;
 }

@@ -7,7 +7,7 @@ and Observability contracts to persistence.
 
 The workspace contains no workflow or agent business rules. It never imports agents, prompt
 assets, Knowledge Loader, Prompt Builder, AI Provider, Response Validator or Artifact Generator.
-The concrete Execution Engine and the Sprint 16 observability reducer remain unchanged.
+The historical Execution Engine and observability v1 contracts remain compatible.
 
 ## Persisted allowlist
 
@@ -25,14 +25,21 @@ Prompts, demand descriptions, additional context, knowledge, specifications, mod
 artifact contents, raw outputs, secrets, `AbortSignal` and internal runtime objects are never
 persisted.
 
+Sprint 24 adds an optional, normalized `factoryResult` aggregate. It stores only terminal status,
+durations, functional stage outcomes, hashes, lineage and safe provenance such as versioned policy,
+image digest/identity, runtime and toolchain versions. Generated files, workspace paths, image
+references, container identifiers and stdout/stderr are excluded. Historical records keep
+`factoryResult: null`; no downstream evidence is invented during migration.
+
 ## Composition
 
 The application host composes the decorators in this order:
 
 ```text
 concrete Execution Engine
-  -> observed Execution Engine
-    -> persistent Execution Engine
+  -> Factory Pipeline
+    -> observed Factory Pipeline
+      -> persistent Factory Pipeline
 ```
 
 The persistent coordinator writes `CREATED` and `RUNNING` before delegating exactly once, then

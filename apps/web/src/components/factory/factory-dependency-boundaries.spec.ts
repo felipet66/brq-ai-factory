@@ -34,6 +34,7 @@ describe('Factory View frontend boundary', () => {
     'agent-avatar.tsx',
     'agent-station.tsx',
     'agent-connection.tsx',
+    'factory-technical-pipeline.tsx',
     'factory-workspace.tsx',
   ] as const;
   const visualImplementationSource = visualImplementationFiles

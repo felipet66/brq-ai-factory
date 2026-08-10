@@ -41,6 +41,30 @@ function validMetrics() {
   }));
 }
 
+function validFactoryStages() {
+  return [
+    ['KNOWLEDGE', 'Knowledge'],
+    ['PRODUCT_OWNER', 'Product Owner'],
+    ['DEVELOPER', 'Developer'],
+    ['QA', 'QA'],
+    ['CODE_GENERATOR', 'Code Generator'],
+    ['WORKSPACE', 'Workspace'],
+    ['SANDBOX_PREPARE', 'Sandbox Prepare'],
+    ['SANDBOX_TYPECHECK', 'Sandbox Typecheck'],
+    ['SANDBOX_BUILD', 'Sandbox Build'],
+    ['SANDBOX_TEST', 'Sandbox Test'],
+  ].map(([stageId, stageName]) => ({
+    stageId,
+    stageName,
+    status: 'PENDING',
+    startedAt: null,
+    finishedAt: null,
+    durationMs: null,
+    requestId: null,
+    executionId: EXECUTION_ID,
+  }));
+}
+
 describe('Observability schemas', () => {
   it('valida evento tipado sem conteúdo sensível', () => {
     expect(
@@ -153,5 +177,71 @@ describe('Observability schemas', () => {
     expect(result.error?.issues.map((issue) => issue.path[0])).toEqual(
       expect.arrayContaining(['stages', 'stageMetrics']),
     );
+  });
+
+  it('preserva snapshots v1 e aceita o contrato v2 aditivo da Factory', () => {
+    const base = {
+      revision: 0,
+      executionId: EXECUTION_ID,
+      workflowId: 'workflow-test',
+      requestId: null,
+      status: 'RUNNING',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+      events: [],
+      stageMetrics: validMetrics(),
+      summary: null,
+    };
+    expect(
+      executionObservabilitySnapshotSchema.parse({
+        ...base,
+        observabilityVersion: '1.0.0',
+        stages: validStages(),
+      }).observabilityVersion,
+    ).toBe('1.0.0');
+    const factory = executionObservabilitySnapshotSchema.parse({
+      ...base,
+      observabilityVersion: '2.0.0',
+      stages: validFactoryStages(),
+    });
+    expect(factory.observabilityVersion).toBe('2.0.0');
+    expect(factory.stages).toHaveLength(10);
+  });
+
+  it('não aceita um payload v1 rotulado como Observability v2', () => {
+    const parsed = executionObservabilitySnapshotSchema.safeParse({
+      observabilityVersion: '2.0.0',
+      revision: 0,
+      executionId: EXECUTION_ID,
+      workflowId: 'workflow-test',
+      requestId: null,
+      status: 'RUNNING',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+      events: [],
+      stages: validStages(),
+      stageMetrics: validMetrics(),
+      summary: null,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejeita drift na ordem pública da Factory sem enfraquecer o v1', () => {
+    const stages = validFactoryStages();
+    [stages[4], stages[5]] = [stages[5]!, stages[4]!];
+    const parsed = executionObservabilitySnapshotSchema.safeParse({
+      observabilityVersion: '2.0.0',
+      revision: 0,
+      executionId: EXECUTION_ID,
+      workflowId: 'workflow-test',
+      requestId: null,
+      status: 'RUNNING',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+      events: [],
+      stages,
+      stageMetrics: validMetrics(),
+      summary: null,
+    });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.some((issue) => issue.path[0] === 'stages')).toBe(true);
   });
 });

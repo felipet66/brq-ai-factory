@@ -5,10 +5,17 @@ import type {
   ExecutionHistoryTimelineEvent,
 } from '@/api/execution-history-contracts';
 
-export const FACTORY_VIEW_MODEL_VERSION = '1.0.0' as const;
+export const FACTORY_VIEW_MODEL_VERSION = '2.0.0' as const;
 
 export type FactoryAgentId = 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
-export type FactoryStageId = 'KNOWLEDGE' | FactoryAgentId;
+export type FactoryTechnicalStageId =
+  | 'CODE_GENERATOR'
+  | 'WORKSPACE'
+  | 'SANDBOX_PREPARE'
+  | 'SANDBOX_TYPECHECK'
+  | 'SANDBOX_BUILD'
+  | 'SANDBOX_TEST';
+export type FactoryStageId = 'KNOWLEDGE' | FactoryAgentId | FactoryTechnicalStageId;
 export type FactoryVisualStatus =
   'WAITING' | 'WORKING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'SKIPPED' | 'NOT_OBSERVED';
 export type FactoryExecutionStatus =
@@ -98,6 +105,28 @@ export interface FactorySystemStage {
   readonly durationMs: number | null;
 }
 
+export interface FactoryTechnicalFact {
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface FactoryTechnicalStage {
+  readonly id: FactoryTechnicalStageId;
+  readonly name: string;
+  readonly group: 'GENERATION' | 'WORKSPACE' | 'SANDBOX';
+  readonly status: FactoryVisualStatus;
+  readonly sourceStatus: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  readonly startedAt: string | null;
+  readonly finishedAt: string | null;
+  readonly durationMs: number | null;
+  readonly outputHash: string | null;
+  readonly failureCode: string | null;
+  readonly resourceOutcome:
+    'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
+  readonly evidenceSource: 'OBSERVABILITY_V2' | 'FACTORY_RESULT';
+  readonly facts: readonly FactoryTechnicalFact[];
+}
+
 export interface FactoryHandoff {
   readonly id: 'PRODUCT_OWNER_TO_DEVELOPER' | 'DEVELOPER_TO_QA' | 'PRODUCT_OWNER_TO_QA';
   readonly kind: 'PRIMARY' | 'SUPPLEMENTAL';
@@ -131,7 +160,14 @@ export interface FactoryActivity {
   readonly id: string;
   readonly source: 'JOB_METADATA' | 'OBSERVABILITY_EVENT';
   readonly kind: FactoryActivityKind;
-  readonly stageId: 'JOB' | 'EXECUTION' | 'KNOWLEDGE' | FactoryAgentId | 'WORKFLOW';
+  readonly stageId:
+    | 'JOB'
+    | 'EXECUTION'
+    | 'KNOWLEDGE'
+    | FactoryAgentId
+    | FactoryTechnicalStageId
+    | 'WORKFLOW'
+    | 'FACTORY';
   readonly label: string;
   readonly status: 'NEUTRAL' | 'ACTIVE' | 'SUCCESS' | 'ERROR' | 'CANCELLED';
   readonly occurredAt: string;
@@ -146,6 +182,11 @@ export interface FactoryProgress {
   readonly completedAgentCount: number;
   readonly resolvedAgentCount: number;
   readonly totalAgentCount: 3;
+  readonly activeTechnicalStageId: FactoryTechnicalStageId | null;
+  readonly failedTechnicalStageId: FactoryTechnicalStageId | null;
+  readonly completedTechnicalStageCount: number;
+  readonly resolvedTechnicalStageCount: number;
+  readonly totalTechnicalStageCount: number;
   readonly totalTokens: number | null;
   readonly totalCostEstimate: {
     readonly amount: number;
@@ -172,6 +213,7 @@ export interface FactoryViewModel {
   };
   readonly knowledge: FactorySystemStage;
   readonly agents: readonly [FactoryAgent, FactoryAgent, FactoryAgent];
+  readonly technicalStages: readonly FactoryTechnicalStage[];
   readonly handoffs: readonly [FactoryHandoff, FactoryHandoff, FactoryHandoff];
   readonly activity: readonly FactoryActivity[];
   readonly progress: FactoryProgress;
@@ -197,8 +239,24 @@ const STAGE_LABELS = Object.freeze({
   PRODUCT_OWNER: 'Product Owner',
   DEVELOPER: 'Developer',
   QA: 'QA',
+  CODE_GENERATOR: 'Code Generator',
+  WORKSPACE: 'Controlled Workspace',
+  SANDBOX_PREPARE: 'Prepare',
+  SANDBOX_TYPECHECK: 'Typecheck',
+  SANDBOX_BUILD: 'Build',
+  SANDBOX_TEST: 'Test',
   WORKFLOW: 'Workflow',
+  FACTORY: 'Factory',
 } as const);
+
+const TECHNICAL_STAGE_DEFINITIONS = Object.freeze([
+  Object.freeze({ id: 'CODE_GENERATOR', name: 'Code Generator', group: 'GENERATION' }),
+  Object.freeze({ id: 'WORKSPACE', name: 'Controlled Workspace', group: 'WORKSPACE' }),
+  Object.freeze({ id: 'SANDBOX_PREPARE', name: 'Prepare', group: 'SANDBOX' }),
+  Object.freeze({ id: 'SANDBOX_TYPECHECK', name: 'Typecheck', group: 'SANDBOX' }),
+  Object.freeze({ id: 'SANDBOX_BUILD', name: 'Build', group: 'SANDBOX' }),
+  Object.freeze({ id: 'SANDBOX_TEST', name: 'Test', group: 'SANDBOX' }),
+] as const);
 
 const HANDOFF_DEFINITIONS = Object.freeze([
   Object.freeze({
@@ -406,6 +464,129 @@ function createKnowledge(
   });
 }
 
+function factoryResultStage(
+  execution: FactoryExecutionSource,
+  stageId: NonNullable<FactoryExecutionSource['factoryResult']>['stages'][number]['stageId'],
+) {
+  return execution.factoryResult?.stages.find((stage) => stage.stageId === stageId) ?? null;
+}
+
+function technicalFact(label: string, value: string | number | null): FactoryTechnicalFact | null {
+  return value === null ? null : Object.freeze({ label, value: String(value) });
+}
+
+function technicalFacts(
+  execution: FactoryExecutionSource,
+  stageId: FactoryTechnicalStageId,
+): readonly FactoryTechnicalFact[] {
+  const result = execution.factoryResult;
+  if (result === null) return Object.freeze([]);
+
+  const facts: (FactoryTechnicalFact | null)[] = [];
+  if (stageId === 'CODE_GENERATOR') {
+    facts.push(
+      technicalFact('Files', result.generatedFileCount),
+      technicalFact('Generated bytes', result.generatedTotalBytes),
+      technicalFact('Bundle hash', result.lineage.bundleHash),
+    );
+  } else if (stageId === 'WORKSPACE') {
+    facts.push(
+      technicalFact('Plan', factoryResultStage(execution, 'WORKSPACE_PLAN')?.status ?? null),
+      technicalFact(
+        'Materialization',
+        factoryResultStage(execution, 'WORKSPACE_MATERIALIZATION')?.status ?? null,
+      ),
+      technicalFact('Release', result.workspaceReleaseStatus),
+      technicalFact('Files', result.workspaceFileCount),
+      technicalFact('Materialized bytes', result.workspaceTotalBytes),
+      technicalFact('Workspace hash', result.lineage.workspaceHash),
+    );
+  } else {
+    facts.push(
+      technicalFact('Sandbox', result.sandboxStatus),
+      technicalFact('Resource', result.sandboxResourceOutcome),
+      technicalFact('Adapter', result.provenance.sandboxAdapter),
+      technicalFact('Platform', result.provenance.sandboxPlatform),
+    );
+  }
+  return freezeArray(facts.filter((fact): fact is FactoryTechnicalFact => fact !== null));
+}
+
+function persistedTechnicalStage(
+  execution: FactoryExecutionSource,
+  stageId: FactoryTechnicalStageId,
+) {
+  if (stageId === 'WORKSPACE') {
+    const plan = factoryResultStage(execution, 'WORKSPACE_PLAN');
+    const materialization = factoryResultStage(execution, 'WORKSPACE_MATERIALIZATION');
+    const release = factoryResultStage(execution, 'WORKSPACE_RELEASE');
+    const candidates = [plan, materialization, release].filter(
+      (stage): stage is NonNullable<typeof stage> => stage !== null,
+    );
+    if (candidates.length === 0) return null;
+    const failure = candidates.find((stage) => stage.status === 'FAILED');
+    const cancellation = candidates.find((stage) => stage.status === 'CANCELLED');
+    const active = failure ?? cancellation ?? materialization ?? plan ?? release!;
+    return {
+      ...active,
+      status:
+        failure?.status ??
+        cancellation?.status ??
+        (candidates.every((stage) => stage.status === 'SKIPPED') ? 'SKIPPED' : active.status),
+      startedAt: plan?.startedAt ?? materialization?.startedAt ?? release?.startedAt ?? null,
+      finishedAt: release?.finishedAt ?? materialization?.finishedAt ?? plan?.finishedAt ?? null,
+      durationMs: candidates.every((stage) => stage.durationMs === null)
+        ? null
+        : candidates.reduce((sum, stage) => sum + (stage.durationMs ?? 0), 0),
+      outputHash: materialization?.outputHash ?? plan?.outputHash ?? release?.outputHash ?? null,
+      failureCode: failure?.failureCode ?? cancellation?.failureCode ?? null,
+      resourceOutcome: failure?.resourceOutcome ?? cancellation?.resourceOutcome ?? null,
+    };
+  }
+  const persistedId =
+    stageId === 'CODE_GENERATOR'
+      ? 'CODE_GENERATOR'
+      : stageId === 'SANDBOX_PREPARE'
+        ? 'SANDBOX_PREPARE'
+        : stageId === 'SANDBOX_TYPECHECK'
+          ? 'SANDBOX_TYPECHECK'
+          : stageId === 'SANDBOX_BUILD'
+            ? 'SANDBOX_BUILD'
+            : 'SANDBOX_TEST';
+  return factoryResultStage(execution, persistedId);
+}
+
+function createTechnicalStages(
+  execution: FactoryExecutionSource,
+  timeline: FactoryTimelineSource | null,
+): readonly FactoryTechnicalStage[] {
+  const factoryTimeline = timeline?.observabilityVersion === '2.0.0' ? timeline : null;
+  return freezeArray(
+    TECHNICAL_STAGE_DEFINITIONS.flatMap((definition) => {
+      const observed = factoryTimeline?.stages.find((stage) => stage.stageId === definition.id);
+      const persisted = persistedTechnicalStage(execution, definition.id);
+      if (observed === undefined && persisted === null) return [];
+      const source = observed ?? persisted!;
+      return [
+        Object.freeze({
+          ...definition,
+          status: toFactoryVisualStatus(source.status),
+          sourceStatus: source.status,
+          startedAt: source.startedAt,
+          finishedAt: source.finishedAt,
+          durationMs: source.durationMs,
+          outputHash: persisted?.outputHash ?? null,
+          failureCode: persisted?.failureCode ?? null,
+          resourceOutcome: persisted?.resourceOutcome ?? null,
+          evidenceSource:
+            observed === undefined ? ('FACTORY_RESULT' as const) : ('OBSERVABILITY_V2' as const),
+          facts: technicalFacts(execution, definition.id),
+        }),
+      ];
+    }),
+  );
+}
+
 function isBlockingStatus(status: FactoryVisualStatus): boolean {
   return ['FAILED', 'CANCELLED', 'SKIPPED', 'NOT_OBSERVED'].includes(status);
 }
@@ -486,19 +667,30 @@ function mapEventActivity(event: FactoryObservabilityEvent): FactoryActivity | n
     label = 'Execution started';
   } else if (
     event.type === 'execution.finished' &&
-    (event.stageId === 'EXECUTION' || event.stageId === 'WORKFLOW') &&
+    (event.stageId === 'EXECUTION' ||
+      event.stageId === 'WORKFLOW' ||
+      event.stageId === 'FACTORY') &&
     event.status === 'SUCCESS'
   ) {
     kind = 'EXECUTION_FINISHED';
-    label = 'Execution finished';
+    label = event.stageId === 'FACTORY' ? 'Factory pipeline finished' : 'Execution finished';
   } else if (
     event.type === 'execution.failed' &&
-    (event.stageId === 'EXECUTION' || event.stageId === 'WORKFLOW') &&
+    (event.stageId === 'EXECUTION' ||
+      event.stageId === 'WORKFLOW' ||
+      event.stageId === 'FACTORY') &&
     (event.status === 'FAILED' || event.status === 'CANCELLED')
   ) {
     const cancelled = event.status === 'CANCELLED';
     kind = cancelled ? 'EXECUTION_CANCELLED' : 'EXECUTION_FAILED';
-    label = cancelled ? 'Execution cancelled' : 'Execution failed';
+    label =
+      event.stageId === 'FACTORY'
+        ? cancelled
+          ? 'Factory pipeline cancelled'
+          : 'Factory pipeline failed'
+        : cancelled
+          ? 'Execution cancelled'
+          : 'Execution failed';
   } else if (event.type === 'stage.started' && event.status === 'RUNNING') {
     kind = 'STAGE_STARTED';
     label = event.stageId === 'KNOWLEDGE' ? 'Knowledge loading started' : `${stageLabel} started`;
@@ -611,6 +803,7 @@ function createActivity(
 }
 
 function overallStatus(execution: FactoryExecutionSource): FactoryExecutionStatus {
+  if (execution.factoryResult !== null) return execution.factoryResult.status;
   if (execution.status !== 'CREATED') return execution.status;
   return execution.job?.status ?? 'CREATED';
 }
@@ -624,6 +817,7 @@ function createProgress(
   timeline: FactoryTimelineSource | null,
   knowledge: FactorySystemStage,
   agents: readonly FactoryAgent[],
+  technicalStages: readonly FactoryTechnicalStage[],
 ): FactoryProgress {
   return Object.freeze({
     status: overallStatus(execution),
@@ -633,6 +827,12 @@ function createProgress(
     completedAgentCount: agents.filter((agent) => agent.status === 'COMPLETED').length,
     resolvedAgentCount: agents.filter((agent) => isResolved(agent.status)).length,
     totalAgentCount: 3,
+    activeTechnicalStageId: technicalStages.find((stage) => stage.status === 'WORKING')?.id ?? null,
+    failedTechnicalStageId: technicalStages.find((stage) => stage.status === 'FAILED')?.id ?? null,
+    completedTechnicalStageCount: technicalStages.filter((stage) => stage.status === 'COMPLETED')
+      .length,
+    resolvedTechnicalStageCount: technicalStages.filter((stage) => isResolved(stage.status)).length,
+    totalTechnicalStageCount: technicalStages.length,
     totalTokens: timeline?.summary?.totalTokens ?? null,
     totalCostEstimate:
       timeline?.summary?.totalCostEstimate === undefined ||
@@ -653,6 +853,7 @@ export function createFactoryViewModel({
   const handoffs = Object.freeze(
     HANDOFF_DEFINITIONS.map((definition) => createHandoff(execution, agents, definition)),
   ) as readonly [FactoryHandoff, FactoryHandoff, FactoryHandoff];
+  const technicalStages = createTechnicalStages(execution, timeline);
   const executionView = Object.freeze({
     executionId: execution.executionId,
     workflowId: execution.workflowId,
@@ -673,8 +874,9 @@ export function createFactoryViewModel({
     execution: executionView,
     knowledge,
     agents,
+    technicalStages,
     handoffs,
     activity: createActivity(execution, timeline),
-    progress: createProgress(execution, timeline, knowledge, agents),
+    progress: createProgress(execution, timeline, knowledge, agents, technicalStages),
   });
 }

@@ -15,6 +15,7 @@ import {
   workspaceMaterializationResultSchema,
   workspacePlanRequestSchema,
   workspacePlanSchema,
+  workspaceReleaseResultSchema,
 } from './schemas';
 import { createWorkspacePlan } from './workspace-planner';
 import { createWorkspacePlanRequestFixture } from './testing/controlled-workspace-fixtures';
@@ -298,6 +299,26 @@ describe('controlled workspace schemas', () => {
         ...result,
         files: [...result.files].reverse(),
       }).success,
+    ).toBe(false);
+  });
+
+  it('keeps the release result metadata-only and strict', () => {
+    const plan = createWorkspacePlan(createWorkspacePlanRequestFixture());
+    const materialized = resultFromRehashedPlan(rehashPlan(plan, plan.files));
+    const release = {
+      workspaceId: materialized.workspaceId,
+      status: 'RELEASED',
+      planHash: materialized.metadata.planHash,
+      workspaceHash: materialized.metadata.workspaceHash,
+    };
+
+    expect(workspaceReleaseResultSchema.safeParse(release).success).toBe(true);
+    expect(
+      workspaceReleaseResultSchema.safeParse({ ...release, rootPath: '/private/workspace' })
+        .success,
+    ).toBe(false);
+    expect(
+      workspaceReleaseResultSchema.safeParse({ ...release, workspaceHash: 'invalid' }).success,
     ).toBe(false);
   });
 });

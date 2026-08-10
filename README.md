@@ -50,7 +50,8 @@ brq-ai-factory/
 │   │   ├── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
 │   │   ├── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
 │   │   ├── ADR-032-CODE-GENERATION-BOUNDARY.md
-│   │   └── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
+│   │   ├── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
+│   │   └── ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -101,7 +102,8 @@ brq-ai-factory/
 │   ├── 46-CODE_GENERATION_FLOW.md
 │   ├── 47-CONTROLLED_WORKSPACE_FLOW.md
 │   ├── 48-SANDBOX_RUNNER_FLOW.md
-│   └── 49-SANDBOX_SECURITY_MODEL.md
+│   ├── 49-SANDBOX_SECURITY_MODEL.md
+│   └── 50-FACTORY_PIPELINE_FLOW.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -112,6 +114,7 @@ brq-ai-factory/
 │   ├── execution-worker/
 │   ├── prompt-inspector/
 │   ├── controlled-workspace/
+│   ├── factory-pipeline/
 │   └── sandbox-runner/
 ├── agents/
 │   ├── product-owner/
@@ -165,6 +168,33 @@ exata em `BRQ_APP_ORIGIN`. O seed local é explícito e exige `BRQ_SEED_ADMIN_PA
 desenvolvimento `admin@example.local` e `user@example.local`. Não execute o seed com credenciais
 reais ou reutilizadas. O comando carrega o arquivo `.env` da raiz do repositório quando ele existe,
 preservando variáveis já definidas no processo.
+
+Execuções completas da Factory exigem o adapter Docker explicitamente configurado. O host não
+substitui uma configuração ausente ou inválida por `FakeSandboxRunner`. A imagem operacional da
+Factory é separada da fixture de integração da Sprint 23 e deve ser construída e carregada pelo
+operador:
+
+```bash
+SOURCE_DATE_EPOCH=0 BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker buildx build \
+  --platform linux/arm64 \
+  --tag brq-ai-factory/factory-sandbox:sprint24-local \
+  --load --network=none --provenance=false --sbom=false \
+  apps/web/docker/factory-sandbox
+```
+
+Depois do build, configure `BRQ_FACTORY_WORKSPACE_ROOT`,
+`BRQ_FACTORY_SANDBOX_DOCKER_EXECUTABLE`, `BRQ_FACTORY_SANDBOX_DOCKER_HOST`, a referência por
+repository digest, o image ID imutável e a plataforma. Os nomes completos estão em `.env.example`.
+O root do Controlled Workspace e o root lido pelo Sandbox devem ser exatamente o mesmo caminho
+absoluto. Nenhuma dessas variáveis autoriza bind mount, rede, shell ou execução no host.
+
+Com a imagem já carregada e todas as variáveis `BRQ_FACTORY_*` exportadas, a integração real do
+profile pode ser executada explicitamente. Ela permanece fora de `test` e `test:coverage`, não faz
+pull/build automático e falha fechada quando o opt-in ou a configuração não estão presentes:
+
+```bash
+BRQ_FACTORY_SANDBOX_INTEGRATION=1 npm run test:factory:integration
+```
 
 ## Persistência
 
@@ -325,9 +355,10 @@ manifest, lineage, provenance e hashes calculados server-side. O modelo não for
 autoridade de filesystem. O Agent não importa AI Provider concreto, Artifact Generator,
 filesystem, Orchestrator, Engine, Worker, Repository ou aplicações.
 
-O Code Generator não integra o workflow atual nesta Sprint. Uma capability futura deverá receber a
-`TechnicalSpecification` enquanto ela ainda estiver disponível em memória; o Execution Repository
-persiste somente seu hash.
+A Sprint 24 conecta essa capability somente pelo `FactoryPipelineCoordinator`, depois de uma
+execução PO → Developer → QA bem-sucedida e QA `READY`. A projeção recebe a
+`TechnicalSpecification` enquanto ela ainda existe em memória; o resultado público e o Execution
+Repository preservam somente metadata e hashes, nunca a specification ou o código gerado.
 
 [Fluxo visual do Code Generator](knowledge/46-CODE_GENERATION_FLOW.md) ·
 [ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
@@ -344,9 +375,10 @@ Paths absolutos, traversal, backslashes, drives/UNC, null bytes, normalização 
 arquivos sensíveis e colisões exatas, case-insensitive, Unicode ou arquivo/diretório são rejeitados.
 Nenhum destino existente é sobrescrito e nenhum arquivo recebe permissão executável.
 
-Código materializado continua sendo dado não confiável. A Sprint 22 não instala dependências, não
-executa package manager, build, testes, shell, rede, preview ou deploy e não persiste conteúdo ou
-metadata no Execution Repository.
+Código materializado continua sendo dado não confiável. O lifecycle aditivo aceita o mesmo
+`AbortSignal`, executa rollback em falha/cancelamento e expõe `release()` com ownership verificado,
+remoção limitada por deadline e resultado metadata-only. O coordinator é o owner do release e o
+executa após qualquer resultado de Sandbox; workspaces não são retidos em SUCCESS ou FAILED.
 
 [Fluxo visual do Controlled Workspace](knowledge/47-CONTROLLED_WORKSPACE_FLOW.md) ·
 [ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
@@ -375,8 +407,9 @@ sanitizados e resumidos; logs estruturados nunca carregam código ou conteúdo d
 
 A suíte padrão usa executor Docker fake. A integração real é exclusivamente opt-in por
 `npm run test:sandbox:integration`, exige daemon e imagem digest-pinned preparados explicitamente e
-nunca realiza pull ou build automático. A Sprint 23 não conecta o Runner ao workflow, API,
-Repository, Observability, Factory View ou Preview.
+nunca realiza pull ou build automático. A Sprint 24 o conecta somente pela API pública ao
+`FactoryPipelineCoordinator`; o Runner continua sem conhecer workflow, agentes, API, Repository,
+Observability, Factory View ou Preview.
 
 O contexto mínimo versionado, o build explícito da imagem local e as variáveis exigidas pelo teste
 estão documentados no [README do Sandbox Runner](core/sandbox-runner/README.md).
@@ -384,6 +417,28 @@ estão documentados no [README do Sandbox Runner](core/sandbox-runner/README.md)
 [Fluxo visual do Sandbox Runner](knowledge/48-SANDBOX_RUNNER_FLOW.md) ·
 [Modelo de segurança](knowledge/49-SANDBOX_SECURITY_MODEL.md) ·
 [ADR-033](knowledge/ADR/ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md)
+
+## Factory Pipeline
+
+O workspace `@brq/factory-pipeline` implementa a composição externa e aditiva
+`Execution Engine → Code Generator → Controlled Workspace → Sandbox Runner`. O
+`FactoryPipelineCoordinator` depende somente das APIs públicas dessas quatro fronteiras; o
+Orchestrator e o Execution Engine mantêm seus contratos e comportamentos funcionais intactos.
+
+`FactoryExecutionResult` preserva `ExecutionResult` e `WorkflowResult` existentes e publica apenas
+status, durações, hashes, lineage, provenance e metadata segura. O resultado é `SUCCESS` somente
+quando PO, Developer, QA, Code Generator, planejamento/materialização do workspace, `PREPARE`,
+`TYPECHECK`, `BUILD`, `TEST` e release confirmado terminam com sucesso. Falhas funcionais são
+resultados terminais normais, preservam as etapas anteriores e marcam downstream como `SKIPPED`;
+não são convertidas em erro HTTP genérico.
+
+O Worker de produção consome o pipeline completo, enquanto seu port legado de Execution Engine é
+mantido para compatibilidade. Cancelamento propaga o mesmo `AbortSignal`; a Sandbox continua dona
+de stop/remoção do container e o coordinator continua dono do release do workspace. Não existe
+retry, fallback automático, retenção de código, preview, servidor, porta ou deploy.
+
+[Fluxo visual do Factory Pipeline](knowledge/50-FACTORY_PIPELINE_FLOW.md) ·
+[ADR-034](knowledge/ADR/ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md)
 
 ## Orchestrator
 
@@ -426,8 +481,8 @@ identidade da execução.
 
 ## HTTP API
 
-A API permanece um adapter em Next.js 16 Route Handlers. A versão `3.0.0` adiciona a fronteira de
-autenticação do host e preserva os contratos assíncronos introduzidos na versão `2.0.0`:
+A API permanece um adapter em Next.js 16 Route Handlers. A versão aditiva `3.1.0` preserva a
+fronteira autenticada `3.0.0` e os contratos assíncronos introduzidos na versão `2.0.0`:
 `POST /api/executions` valida a entrada, delega ao `ExecutionDispatcher` e devolve imediatamente
 `202 Accepted` com `executionId`, `jobId` e status `QUEUED`; o workflow não mantém a conexão HTTP
 aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`, `SUCCESS`,
@@ -435,7 +490,9 @@ aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`
 
 `GET /api/health` continua sem consultar banco, IA ou workflow. `GET /api/executions`,
 `GET /api/executions/[id]` e `GET /api/executions/[id]/timeline` continuam consultando o
-Execution Repository, com paginação, filtros e read models públicos já aprovados.
+Execution Repository, com paginação, filtros e read models públicos já aprovados. O detalhe pode
+incluir `factoryResult` minimizado, e a timeline aceita snapshots históricos `1.0.0` e snapshots
+Factory `2.0.0`; registros históricos sem esses campos permanecem válidos.
 
 `POST /api/auth/login` e `POST /api/auth/logout` usam envelopes públicos próprios e nunca expõem o
 token interno do adapter. Todas as rotas de execução, histórico, timeline e job exigem sessão; o
@@ -448,7 +505,9 @@ requisição HTTP não controla o job: cancelamento e shutdown pertencem ao Work
 allowlists sanitizadas e todas as respostas recebem headers mínimos de segurança.
 
 O composition root fica no host em `apps/web/src/server/runtime.ts`. Ele monta factories públicas
-de forma lazy e fornece Engine persistente/observado, repository, fila local, dispatcher e Worker;
+de forma lazy e fornece o Factory Pipeline persistente/observado, repository, fila local,
+dispatcher e Worker; o Engine continua sendo composto internamente sem receber responsabilidades
+de geração, filesystem ou Sandbox;
 nenhum workspace de runtime foi criado no domínio. A API não conhece agentes, Prisma ou
 componentes internos do workflow.
 
@@ -503,13 +562,19 @@ O polling é phase-aware, sequencial e somente leitura. A Factory não cria endp
 workspace, dependência, evento, persistência ou acesso ao runtime de IA. Ownership continua sendo
 aplicado pela API e pelo Execution Repository.
 
+A Sprint 24 acrescenta uma linha técnica, sem novos personagens, para Code Generator, Workspace,
+Prepare, Typecheck, Build e Test. Todos os estados continuam derivados exclusivamente de Timeline
+`2.0.0` e `factoryResult` persistido; execuções históricas `1.0.0` mantêm a visualização anterior.
+Release do workspace aparece somente como metadata de lifecycle, não como atividade simulada.
+
 [Fluxo visual da Factory](knowledge/45-FACTORY_VISUALIZATION_FLOW.md) ·
 [ADR-031](knowledge/ADR/ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md)
 
 ## Execution History & Observability
 
-A Sprint 16 implementa o workspace `@brq/observability` em `core/observability`. Ele decora somente
-a API pública do Execution Engine, normaliza logs técnicos sanitizados em eventos tipados e
+A Sprint 16 implementa o workspace `@brq/observability` em `core/observability`. A versão `1.0.0`
+continua disponível: ela decora somente a API pública do Execution Engine, normaliza logs técnicos
+sanitizados em eventos tipados e
 imutáveis e mantém snapshots minimizados em um store bounded, local ao processo e sem
 persistência.
 
@@ -527,6 +592,11 @@ workflow e para em resultado terminal ou unmount.
 O reducer em memória da Sprint 16 continua sendo a projeção síncrona e fail-open dos eventos. A
 Sprint 17 projeta esses snapshots no repository durável; falhas observacionais intermediárias
 continuam best-effort, enquanto a gravação terminal faz parte da fronteira persistente do host.
+
+A versão aditiva `2.0.0` observa também Code Generator, Workspace e as quatro etapas reais da
+Sandbox. Ela inicia e termina na fronteira externa da Factory para que o sucesso intermediário do
+Execution Engine não terminalize a timeline. Não há eventos inventados, conteúdo funcional ou
+alteração de hashes; snapshots `1.0.0` permanecem válidos pela união discriminada versionada.
 
 [Fluxo visual da Observabilidade](knowledge/40-OBSERVABILITY_FLOW.md) · [ADR-026](knowledge/ADR/ADR-026-OBSERVABILITY-BOUNDARY.md)
 
@@ -547,6 +617,11 @@ O Frontend adiciona `/executions` e `/executions/[id]`, consumindo apenas read m
 minimizados. A listagem aceita `status`, `readiness`, `createdAfter`, `createdBefore`, `limit` e
 `cursor`. Nenhum componente React importa o repository, Prisma ou o núcleo da AI Factory.
 
+A Sprint 24 adiciona tabelas normalizadas opcionais para resultado, etapas, lineage, provenance e
+toolchains da Factory. Somente metadata allowlisted é persistida: status, durações, hashes,
+resource outcomes, versões, policy e identidade imutável da imagem. Código, prompts,
+specifications, output bruto, filesystem, secrets e `AbortSignal` não entram no banco.
+
 [Fluxo visual do Execution Repository](knowledge/41-EXECUTION_REPOSITORY_FLOW.md) ·
 [ADR-027](knowledge/ADR/ADR-027-EXECUTION-REPOSITORY-BOUNDARY.md)
 
@@ -557,8 +632,9 @@ substituível, contratos, schemas, eventos, métricas e o adapter local `InMemor
 contém o dispatcher e o único consumidor sequencial, que chama exclusivamente a API pública do
 Execution Engine.
 
-O fluxo é `HTTP → Dispatcher → JobQueue → Execution Worker → Execution Engine → Repository`. A
-fila usa FIFO, um consumidor, `attempt: 1` e a máquina
+O fluxo de produção é `HTTP → Dispatcher → JobQueue → Execution Worker → Factory Pipeline →
+Repository`; o port legado do Worker para `ExecutionEngine` permanece compatível. A fila usa FIFO,
+um consumidor, `attempt: 1` e a máquina
 `QUEUED → RUNNING → SUCCESS | FAILED | CANCELLED`, além de `QUEUED → CANCELLED`. Não existem
 retry, requeue, backoff, scheduler, concorrência ou worker externo. Os eventos imutáveis
 `job.created`, `job.started`, `job.finished`, `job.failed` e `job.cancelled` contêm somente

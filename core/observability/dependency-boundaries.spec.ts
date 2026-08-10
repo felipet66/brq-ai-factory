@@ -18,7 +18,7 @@ function imports(source: string): readonly string[] {
 }
 
 describe('Observability dependency boundaries', () => {
-  it('depende apenas das APIs públicas do Engine e Shared', () => {
+  it('depende apenas das APIs públicas do Engine, Factory Pipeline e Shared', () => {
     const violations: string[] = [];
     for (const path of productionFiles(MODULE_ROOT)) {
       for (const specifier of imports(readFileSync(path, 'utf8'))) {
@@ -56,6 +56,7 @@ describe('Observability dependency boundaries', () => {
     };
     expect(Object.keys(packageJson.dependencies).sort()).toEqual([
       '@brq/execution-engine',
+      '@brq/factory-pipeline',
       '@brq/shared',
       'zod',
     ]);

@@ -1,4 +1,8 @@
-import type { ExecutionObservabilitySnapshot } from '@brq/observability';
+import type { FactoryExecutionResult } from '@brq/factory-pipeline';
+import type {
+  ExecutionObservabilitySnapshot,
+  FactoryExecutionObservabilitySnapshot,
+} from '@brq/observability';
 
 import type {
   ExecutionRecord,
@@ -8,8 +12,8 @@ import type {
   ExecutionRecordListQuery,
   ExecutionRecordPage,
   ExecutionRecordQueuedInput,
-  ExecutionRecordRepository,
   ExecutionRecordRunningInput,
+  FactoryExecutionRecordRepository,
 } from '../contracts';
 import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from '../errors';
 import { immutableClone } from '../immutability';
@@ -20,6 +24,7 @@ import {
   projectJobTerminalExecutionRecord,
   projectObservedExecutionRecord,
   projectRunningExecutionRecord,
+  projectTerminalFactoryExecutionRecord,
   projectTerminalExecutionRecord,
 } from '../mapper';
 import {
@@ -66,7 +71,7 @@ function parseRunning(input: ExecutionRecordRunningInput) {
   return parsed.data;
 }
 
-export function createInMemoryExecutionRecordRepository(): ExecutionRecordRepository {
+export function createInMemoryExecutionRecordRepository(): FactoryExecutionRecordRepository {
   const records = new Map<string, ExecutionRecord>();
   const executionIds = new Map<string, string>();
   const jobIds = new Map<string, string>();
@@ -219,6 +224,29 @@ export function createInMemoryExecutionRecordRepository(): ExecutionRecordReposi
         throw conflict('O registro já possui um resultado terminal divergente.');
       }
       return store(projectTerminalExecutionRecord(record, result, snapshot));
+    },
+
+    async completeFactory(
+      workflowId: string,
+      result: FactoryExecutionResult,
+      snapshot: FactoryExecutionObservabilitySnapshot | null,
+    ): Promise<ExecutionRecord> {
+      const record = records.get(workflowId);
+      if (record === undefined) throw notFound(workflowId);
+      if (
+        record.status === 'SUCCESS' ||
+        record.status === 'FAILED' ||
+        record.status === 'CANCELLED'
+      ) {
+        if (
+          record.executionId === result.executionId &&
+          record.factoryResult?.hashes.factoryResultHash === result.hashes.factoryResultHash
+        ) {
+          return immutableClone(record);
+        }
+        throw conflict('O registro já possui um resultado terminal da Factory divergente.');
+      }
+      return store(projectTerminalFactoryExecutionRecord(record, result, snapshot));
     },
 
     async findByExecutionId(executionId: string): Promise<ExecutionRecord | null> {

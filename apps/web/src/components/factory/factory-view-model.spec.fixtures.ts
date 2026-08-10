@@ -1,4 +1,9 @@
 import type {
+  ExecutionHistoryFactoryResult,
+  ExecutionHistoryTimelineV2,
+} from '@/api/execution-history-contracts';
+
+import type {
   FactoryExecutionSource,
   FactoryObservabilityEvent,
   FactoryTimelineSource,
@@ -32,6 +37,102 @@ const TIMESTAMPS = Object.freeze({
   developerFinished: '2026-08-08T10:00:00.200Z',
   qaFinished: '2026-08-08T10:00:00.250Z',
 });
+
+export function factoryResultFixture(
+  overrides: Partial<ExecutionHistoryFactoryResult> = {},
+): ExecutionHistoryFactoryResult {
+  const stageIds = [
+    'PRODUCT_OWNER',
+    'DEVELOPER',
+    'QA',
+    'CODE_GENERATOR',
+    'WORKSPACE_PLAN',
+    'WORKSPACE_MATERIALIZATION',
+    'SANDBOX_PREPARE',
+    'SANDBOX_TYPECHECK',
+    'SANDBOX_BUILD',
+    'SANDBOX_TEST',
+    'WORKSPACE_RELEASE',
+  ] as const;
+  return {
+    factoryVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    status: 'SUCCESS',
+    terminalStage: 'WORKSPACE_RELEASE',
+    startedAt: TIMESTAMPS.executionStarted,
+    finishedAt: '2026-08-08T10:00:01.100Z',
+    durationMs: 1_100,
+    readiness: 'READY',
+    generationStatus: 'SUCCESS',
+    generatedFileCount: 4,
+    generatedTotalBytes: 2_048,
+    workspaceId: `workspace-${'a'.repeat(32)}`,
+    workspaceFileCount: 4,
+    workspaceTotalBytes: 2_048,
+    workspaceReleaseStatus: 'RELEASED',
+    sandboxStatus: 'SUCCESS',
+    sandboxRunId: `sandbox-${'b'.repeat(32)}`,
+    sandboxResourceOutcome: 'NONE',
+    hashes: {
+      lineageHash: plainHash('a'),
+      provenanceHash: plainHash('b'),
+      factoryResultHash: plainHash('c'),
+    },
+    failure: null,
+    stages: stageIds.map((stageId, index) => ({
+      stageId,
+      status: 'SUCCESS',
+      startedAt: `2026-08-08T10:00:0${Math.min(index, 9)}.000Z`,
+      finishedAt: `2026-08-08T10:00:0${Math.min(index, 9)}.010Z`,
+      durationMs: 10,
+      outputHash: plainHash(String((index % 9) + 1)),
+      failureCode: null,
+      resourceOutcome: stageId.startsWith('SANDBOX_') ? 'NONE' : null,
+    })),
+    lineage: {
+      productOwnerSpecificationHash: FACTORY_HASHES.productOwnerSpecification,
+      technicalSpecificationHash: FACTORY_HASHES.technicalSpecification,
+      qaSpecificationHash: FACTORY_HASHES.qaSpecification,
+      executionHash: FACTORY_HASHES.common,
+      workflowHash: FACTORY_HASHES.common,
+      generationHash: plainHash('d'),
+      bundleHash: plainHash('e'),
+      bundleContentHash: plainHash('f'),
+      workspacePlanHash: plainHash('a'),
+      workspaceHash: plainHash('b'),
+      sandboxRequestHash: plainHash('c'),
+      sandboxResultHash: plainHash('d'),
+      factoryResultHash: plainHash('c'),
+    },
+    provenance: {
+      codeGeneratorAgentVersion: '1.0.0',
+      codeGeneratorContractVersion: '1.0.0',
+      codeGeneratorAssetBundleHash: plainHash('e'),
+      workspaceVersion: '1.0.0',
+      workspaceContractVersion: '1.0.0',
+      workspacePolicyHash: plainHash('f'),
+      workspaceConfigurationHash: plainHash('a'),
+      sandboxRunnerVersion: '1.0.0',
+      sandboxContractVersion: '1.0.0',
+      sandboxSanitizerVersion: '1.0.0',
+      sandboxHelperAbiVersion: '1.0.0',
+      sandboxDependencySnapshotHash: plainHash('b'),
+      sandboxPolicyId: 'NODE_TYPESCRIPT_24_V1',
+      sandboxPolicyVersion: '1.0.0',
+      sandboxPolicyHash: plainHash('c'),
+      sandboxCommandPolicyHash: plainHash('d'),
+      sandboxLimitsHash: plainHash('e'),
+      sandboxAdapter: 'DOCKER',
+      sandboxImageDigest: contentHash('f'),
+      sandboxImageId: 'sha256:factory-image-id',
+      sandboxPlatform: 'linux/arm64',
+      sandboxRuntimeName: 'node',
+      sandboxRuntimeVersion: '24.19.0',
+      toolchainVersions: { node: '24.19.0', typescript: '6.0.3' },
+    },
+    ...overrides,
+  };
+}
 
 function event(
   sequence: number,
@@ -152,6 +253,7 @@ export function factoryExecutionFixture(
         },
       ],
     },
+    factoryResult: null,
     ...overrides,
   };
 }
@@ -356,6 +458,48 @@ export function factoryTimelineFixture(
         provenanceHash: FACTORY_HASHES.common,
         executionHash: FACTORY_HASHES.common,
       },
+    },
+    ...overrides,
+  };
+}
+
+export function factoryTimelineV2Fixture(
+  overrides: Partial<ExecutionHistoryTimelineV2> = {},
+): ExecutionHistoryTimelineV2 {
+  const legacy = factoryTimelineFixture();
+  const technical = [
+    ['CODE_GENERATOR', 'Code Generator'],
+    ['WORKSPACE', 'Controlled Workspace'],
+    ['SANDBOX_PREPARE', 'Prepare'],
+    ['SANDBOX_TYPECHECK', 'Typecheck'],
+    ['SANDBOX_BUILD', 'Build'],
+    ['SANDBOX_TEST', 'Test'],
+  ] as const;
+  const technicalStages = technical.map(([stageId, stageName], index) => ({
+    stageId,
+    stageName,
+    status: 'SUCCESS' as const,
+    startedAt: `2026-08-08T10:00:00.${300 + index * 100}Z`,
+    finishedAt: `2026-08-08T10:00:00.${350 + index * 100}Z`,
+    durationMs: 50,
+    requestId: 'request-factory-001',
+    executionId: FACTORY_EXECUTION_ID,
+  }));
+  const stages = [...legacy.stages, ...technicalStages] as ExecutionHistoryTimelineV2['stages'];
+
+  return {
+    ...legacy,
+    observabilityVersion: '2.0.0',
+    revision: 22,
+    updatedAt: '2026-08-08T10:00:00.850Z',
+    events: legacy.events,
+    stages,
+    summary: {
+      ...legacy.summary!,
+      executedStages: stages.map((stage) => stage.stageId),
+      skippedStages: [],
+      factoryStatus: 'SUCCESS',
+      factoryResultHash: plainHash('c'),
     },
     ...overrides,
   };

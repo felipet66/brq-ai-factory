@@ -134,6 +134,173 @@ export const persistedProvenanceSchema = z
   .object({ stages: z.array(persistedProvenanceStageSchema).max(3) })
   .strict();
 
+export const persistedFactoryStageIdSchema = z.enum([
+  'PRODUCT_OWNER',
+  'DEVELOPER',
+  'QA',
+  'CODE_GENERATOR',
+  'WORKSPACE_PLAN',
+  'WORKSPACE_MATERIALIZATION',
+  'SANDBOX_PREPARE',
+  'SANDBOX_TYPECHECK',
+  'SANDBOX_BUILD',
+  'SANDBOX_TEST',
+  'WORKSPACE_RELEASE',
+]);
+
+export const persistedFactoryStageSchema = z
+  .object({
+    stageId: persistedFactoryStageIdSchema,
+    status: z.enum(['SUCCESS', 'FAILED', 'CANCELLED', 'SKIPPED']),
+    startedAt: isoDateTimeSchema.nullable(),
+    finishedAt: isoDateTimeSchema.nullable(),
+    durationMs: z.number().int().nonnegative().nullable(),
+    outputHash: nullableHashSchema,
+    failureCode: z.string().min(1).max(128).nullable(),
+    resourceOutcome: z
+      .enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN'])
+      .nullable(),
+  })
+  .strict();
+
+export const persistedFactoryLineageSchema = z
+  .object({
+    productOwnerSpecificationHash: nullableKnowledgeHashSchema,
+    technicalSpecificationHash: nullableKnowledgeHashSchema,
+    qaSpecificationHash: nullableKnowledgeHashSchema,
+    executionHash: z.string().regex(HASH_PATTERN),
+    workflowHash: nullableHashSchema,
+    generationHash: nullableHashSchema,
+    bundleHash: nullableHashSchema,
+    bundleContentHash: nullableHashSchema,
+    workspacePlanHash: nullableHashSchema,
+    workspaceHash: nullableHashSchema,
+    sandboxRequestHash: nullableHashSchema,
+    sandboxResultHash: nullableHashSchema,
+    factoryResultHash: z.string().regex(HASH_PATTERN),
+  })
+  .strict();
+
+export const persistedFactoryProvenanceSchema = z
+  .object({
+    codeGeneratorAgentVersion: semanticVersionSchema,
+    codeGeneratorContractVersion: semanticVersionSchema.nullable(),
+    codeGeneratorAssetBundleHash: nullableHashSchema,
+    workspaceVersion: semanticVersionSchema.nullable(),
+    workspaceContractVersion: semanticVersionSchema.nullable(),
+    workspacePolicyHash: nullableHashSchema,
+    workspaceConfigurationHash: nullableHashSchema,
+    sandboxRunnerVersion: semanticVersionSchema.nullable(),
+    sandboxContractVersion: semanticVersionSchema.nullable(),
+    sandboxSanitizerVersion: semanticVersionSchema.nullable(),
+    sandboxHelperAbiVersion: semanticVersionSchema.nullable(),
+    sandboxDependencySnapshotHash: nullableHashSchema,
+    sandboxPolicyId: z.string().min(1).max(64).nullable(),
+    sandboxPolicyVersion: semanticVersionSchema.nullable(),
+    sandboxPolicyHash: nullableHashSchema,
+    sandboxCommandPolicyHash: nullableHashSchema,
+    sandboxLimitsHash: nullableHashSchema,
+    sandboxAdapter: z.string().min(1).max(64).nullable(),
+    sandboxImageDigest: nullableKnowledgeHashSchema,
+    sandboxImageId: z.string().min(1).max(256).nullable(),
+    sandboxPlatform: z.string().min(1).max(128).nullable(),
+    sandboxRuntimeName: z.string().min(1).max(128).nullable(),
+    sandboxRuntimeVersion: z.string().min(1).max(128).nullable(),
+    toolchainVersions: z.record(z.string().min(1).max(128), z.string().min(1).max(128)).readonly(),
+  })
+  .strict();
+
+export const persistedFactoryResultSchema = z
+  .object({
+    factoryVersion: semanticVersionSchema,
+    contractVersion: semanticVersionSchema,
+    status: terminalExecutionRecordStatusSchema,
+    terminalStage: z.union([
+      persistedFactoryStageIdSchema,
+      z.literal('EXECUTION'),
+      z.literal('SANDBOX'),
+    ]),
+    startedAt: isoDateTimeSchema,
+    finishedAt: isoDateTimeSchema,
+    durationMs: z.number().int().nonnegative(),
+    readiness: z.string().min(1).max(64).nullable(),
+    generationStatus: z.enum(['SUCCESS', 'FAILED', 'CANCELLED', 'SKIPPED']),
+    generatedFileCount: z.number().int().positive().nullable(),
+    generatedTotalBytes: z.number().int().positive().nullable(),
+    workspaceId: z
+      .string()
+      .regex(/^workspace-[a-f0-9]{32}$/)
+      .nullable(),
+    workspaceFileCount: z.number().int().positive().nullable(),
+    workspaceTotalBytes: z.number().int().nonnegative().nullable(),
+    workspaceReleaseStatus: z.enum(['RELEASED', 'FAILED', 'NOT_REQUIRED']),
+    sandboxStatus: z.enum(['SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED', 'SKIPPED']),
+    sandboxRunId: z
+      .string()
+      .regex(/^sandbox-[a-f0-9]{32}$/)
+      .nullable(),
+    sandboxResourceOutcome: z.enum([
+      'NONE',
+      'OOM',
+      'PID_LIMIT',
+      'DISK_LIMIT',
+      'OUTPUT_LIMIT',
+      'UNKNOWN',
+    ]),
+    hashes: z
+      .object({
+        lineageHash: z.string().regex(HASH_PATTERN),
+        provenanceHash: z.string().regex(HASH_PATTERN),
+        factoryResultHash: z.string().regex(HASH_PATTERN),
+      })
+      .strict(),
+    failure: z
+      .object({
+        kind: z.literal('FACTORY_PIPELINE'),
+        code: z.string().min(1).max(128),
+        sourceCode: z.string().min(1).max(128).nullable(),
+        stageId: z.union([
+          persistedFactoryStageIdSchema,
+          z.literal('EXECUTION'),
+          z.literal('SANDBOX'),
+        ]),
+      })
+      .strict()
+      .nullable(),
+    stages: z.array(persistedFactoryStageSchema).length(11),
+    lineage: persistedFactoryLineageSchema,
+    provenance: persistedFactoryProvenanceSchema,
+  })
+  .strict()
+  .superRefine((result, context) => {
+    if (Date.parse(result.finishedAt) < Date.parse(result.startedAt)) {
+      context.addIssue({ code: 'custom', path: ['finishedAt'], message: 'Término inválido.' });
+    }
+    result.stages.forEach((stage, index) => {
+      if (stage.stageId !== persistedFactoryStageIdSchema.options[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'stageId'],
+          message: 'As etapas persistidas devem preservar a ordem canônica.',
+        });
+      }
+    });
+    if (result.hashes.factoryResultHash !== result.lineage.factoryResultHash) {
+      context.addIssue({
+        code: 'custom',
+        path: ['lineage', 'factoryResultHash'],
+        message: 'O lineage deve preservar o hash terminal da Factory.',
+      });
+    }
+    if ((result.status === 'SUCCESS') !== (result.failure === null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure'],
+        message: 'Somente resultados não bem-sucedidos possuem falha terminal.',
+      });
+    }
+  });
+
 export const executionRecordFailureSchema = z
   .object({
     kind: z.string().min(1).max(64),
@@ -181,6 +348,7 @@ const executionRecordBaseShape = {
   failure: executionRecordFailureSchema.nullable(),
   lineage: persistedLineageSchema.nullable(),
   provenance: persistedProvenanceSchema.nullable(),
+  factoryResult: persistedFactoryResultSchema.nullable(),
   observation: executionObservabilitySnapshotSchema.nullable(),
   lifecycle: z.array(executionRecordLifecycleEventSchema).min(1).max(3),
   revision: z.number().int().nonnegative(),

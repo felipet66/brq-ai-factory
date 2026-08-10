@@ -1,6 +1,7 @@
+import type { Stats } from 'node:fs';
 import path from 'node:path';
 
-import type { WorkspacePlan } from '../contracts';
+import type { WorkspaceMaterializationResult, WorkspacePlan } from '../contracts';
 import {
   CONTROLLED_WORKSPACE_ERROR_CODES,
   CONTROLLED_WORKSPACE_ERROR_STAGES,
@@ -9,6 +10,7 @@ import {
 } from '../errors';
 import { calculateWorkspaceContentHash } from '../hashing';
 import { resolveContainedWorkspacePath } from '../path-safety';
+import { removeWorkspaceWithDeadline } from './cleanup';
 import {
   NODE_WORKSPACE_FILE_SYSTEM,
   filesystemErrorCode,
@@ -17,6 +19,24 @@ import {
 
 const NOT_FOUND = 'ENOENT';
 const DESTINATION_CONFLICT_CODES = new Set(['EEXIST', 'ENOTEMPTY']);
+
+export interface MaterializedWorkspaceOwnership {
+  readonly rootRealPath: string;
+  readonly rootDevice: number;
+  readonly rootInode: number;
+  readonly destinationPath: string;
+  readonly destinationDevice: number;
+  readonly destinationInode: number;
+}
+
+interface MaterializationOptions {
+  readonly signal?: AbortSignal;
+  readonly cleanupTimeoutMs: number;
+}
+
+type ExpectedWorkspaceFile = WorkspaceMaterializationResult['files'][number] & {
+  readonly content?: string;
+};
 
 function fail(
   message: string,
@@ -33,12 +53,26 @@ function fail(
   });
 }
 
+function throwIfAborted(
+  signal: AbortSignal | undefined,
+  stage: ControlledWorkspaceErrorStage,
+  workspaceId: string,
+): void {
+  if (signal?.aborted !== true) return;
+  throw fail(
+    'A materialização do workspace foi cancelada.',
+    CONTROLLED_WORKSPACE_ERROR_CODES.CANCELLED,
+    stage,
+    workspaceId,
+  );
+}
+
 async function assertDirectoryWithoutSymlink(
   fileSystem: WorkspaceFileSystem,
   targetPath: string,
   workspaceId: string,
   stage: ControlledWorkspaceErrorStage,
-): Promise<void> {
+): Promise<Stats> {
   const stats = await fileSystem.lstat(targetPath);
   if (stats.isSymbolicLink()) {
     throw fail(
@@ -56,6 +90,7 @@ async function assertDirectoryWithoutSymlink(
       workspaceId,
     );
   }
+  return stats;
 }
 
 async function assertDestinationAvailable(
@@ -97,12 +132,16 @@ async function discoverFiles(
   rootPath: string,
   currentPath: string,
   workspaceId: string,
+  signal?: AbortSignal,
 ): Promise<string[]> {
+  throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
   const entries = await fileSystem.readdir(currentPath);
+  throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
   const discovered: string[] = [];
   for (const entry of [...entries].sort((left, right) =>
     left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
   )) {
+    throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
     if (entry.isSymbolicLink()) {
       throw fail(
         'Links simbólicos não são permitidos no workspace materializado.',
@@ -113,7 +152,9 @@ async function discoverFiles(
     }
     const childPath = path.join(currentPath, entry.name);
     if (entry.isDirectory()) {
-      discovered.push(...(await discoverFiles(fileSystem, rootPath, childPath, workspaceId)));
+      discovered.push(
+        ...(await discoverFiles(fileSystem, rootPath, childPath, workspaceId, signal)),
+      );
     } else if (entry.isFile()) {
       discovered.push(path.relative(rootPath, childPath).split(path.sep).join('/'));
     } else {
@@ -128,20 +169,23 @@ async function discoverFiles(
   return discovered;
 }
 
-async function verifyStaging(
+async function verifyWorkspaceFiles(
   fileSystem: WorkspaceFileSystem,
-  stagingPath: string,
-  plan: WorkspacePlan,
+  workspacePath: string,
+  expectedFiles: readonly ExpectedWorkspaceFile[],
+  workspaceId: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   await assertDirectoryWithoutSymlink(
     fileSystem,
-    stagingPath,
-    plan.workspaceId,
+    workspacePath,
+    workspaceId,
     CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION,
   );
-  const expectedPaths = plan.files.map((file) => file.path);
+  throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
+  const expectedPaths = expectedFiles.map((file) => file.path);
   const discoveredPaths = (
-    await discoverFiles(fileSystem, stagingPath, stagingPath, plan.workspaceId)
+    await discoverFiles(fileSystem, workspacePath, workspacePath, workspaceId, signal)
   ).sort();
   if (
     expectedPaths.length !== discoveredPaths.length ||
@@ -151,19 +195,20 @@ async function verifyStaging(
       'A estrutura escrita não corresponde ao plano autorizado.',
       CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
       CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION,
-      plan.workspaceId,
+      workspaceId,
     );
   }
 
-  for (const file of plan.files) {
-    const filePath = resolveContainedWorkspacePath(stagingPath, file.path);
+  for (const file of expectedFiles) {
+    throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
+    const filePath = resolveContainedWorkspacePath(workspacePath, file.path);
     const stats = await fileSystem.lstat(filePath);
     if (stats.isSymbolicLink()) {
       throw fail(
         'Links simbólicos não são permitidos no workspace materializado.',
         CONTROLLED_WORKSPACE_ERROR_CODES.SYMLINK_NOT_ALLOWED,
         CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION,
-        plan.workspaceId,
+        workspaceId,
       );
     }
     if (!stats.isFile()) {
@@ -171,24 +216,33 @@ async function verifyStaging(
         'O item materializado não é um arquivo regular.',
         CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
         CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION,
-        plan.workspaceId,
+        workspaceId,
       );
     }
     const bytes = await fileSystem.readFile(filePath);
-    const content = bytes.toString('utf8');
+    throwIfAborted(signal, CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION, workspaceId);
     if (
       bytes.byteLength !== file.byteLength ||
-      !bytes.equals(Buffer.from(file.content, 'utf8')) ||
-      calculateWorkspaceContentHash(content) !== file.contentHash
+      calculateWorkspaceContentHash(bytes.toString('utf8')) !== file.contentHash ||
+      (file.content !== undefined && !bytes.equals(Buffer.from(file.content, 'utf8')))
     ) {
       throw fail(
         'O conteúdo materializado não corresponde ao hash planejado.',
         CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
         CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION,
-        plan.workspaceId,
+        workspaceId,
       );
     }
   }
+}
+
+async function verifyStaging(
+  fileSystem: WorkspaceFileSystem,
+  stagingPath: string,
+  plan: WorkspacePlan,
+  signal?: AbortSignal,
+): Promise<void> {
+  await verifyWorkspaceFiles(fileSystem, stagingPath, plan.files, plan.workspaceId, signal);
 }
 
 function translateFailure(
@@ -224,20 +278,117 @@ function translateFailure(
   );
 }
 
+function ownershipFailure(workspaceId: string, sourceCode?: string): ControlledWorkspaceError {
+  return fail(
+    'O workspace não pertence a esta instância controlada.',
+    CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED,
+    CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+    workspaceId,
+    sourceCode,
+  );
+}
+
+async function readOwnedDirectory(
+  fileSystem: WorkspaceFileSystem,
+  targetPath: string,
+  expectedDevice: number,
+  expectedInode: number,
+  workspaceId: string,
+): Promise<Stats> {
+  let stats: Stats;
+  try {
+    stats = await fileSystem.lstat(targetPath);
+  } catch (error) {
+    throw ownershipFailure(workspaceId, filesystemErrorCode(error));
+  }
+  if (
+    stats.isSymbolicLink() ||
+    !stats.isDirectory() ||
+    stats.dev !== expectedDevice ||
+    stats.ino !== expectedInode
+  ) {
+    throw ownershipFailure(workspaceId);
+  }
+  return stats;
+}
+
+export async function verifyOwnedMaterializedWorkspace(
+  ownership: MaterializedWorkspaceOwnership,
+  result: WorkspaceMaterializationResult,
+  fileSystem: WorkspaceFileSystem = NODE_WORKSPACE_FILE_SYSTEM,
+): Promise<void> {
+  await readOwnedDirectory(
+    fileSystem,
+    ownership.rootRealPath,
+    ownership.rootDevice,
+    ownership.rootInode,
+    result.workspaceId,
+  );
+  let currentRootRealPath: string;
+  try {
+    currentRootRealPath = await fileSystem.realpath(ownership.rootRealPath);
+  } catch (error) {
+    throw ownershipFailure(result.workspaceId, filesystemErrorCode(error));
+  }
+  if (currentRootRealPath !== ownership.rootRealPath) {
+    throw ownershipFailure(result.workspaceId);
+  }
+  const expectedDestination = resolveContainedWorkspacePath(
+    ownership.rootRealPath,
+    result.workspaceId,
+  );
+  if (expectedDestination !== ownership.destinationPath) {
+    throw ownershipFailure(result.workspaceId);
+  }
+  await readOwnedDirectory(
+    fileSystem,
+    ownership.destinationPath,
+    ownership.destinationDevice,
+    ownership.destinationInode,
+    result.workspaceId,
+  );
+  try {
+    await verifyWorkspaceFiles(
+      fileSystem,
+      ownership.destinationPath,
+      result.files,
+      result.workspaceId,
+    );
+  } catch (error) {
+    if (error instanceof ControlledWorkspaceError) throw error;
+    throw fail(
+      'Não foi possível verificar o workspace antes do cleanup.',
+      CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
+      CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+      result.workspaceId,
+      filesystemErrorCode(error),
+    );
+  }
+}
+
 export async function materializeWorkspaceAtomically(
   plan: WorkspacePlan,
   configuredRootPath: string,
+  options: MaterializationOptions,
   fileSystem: WorkspaceFileSystem = NODE_WORKSPACE_FILE_SYSTEM,
-): Promise<void> {
+): Promise<MaterializedWorkspaceOwnership> {
   let stage: ControlledWorkspaceErrorStage = CONTROLLED_WORKSPACE_ERROR_STAGES.ROOT_VALIDATION;
-  let authorizedStagingPath: string | undefined;
-  let publishedPath: string | undefined;
+  let cleanupPath: string | undefined;
   try {
+    throwIfAborted(options.signal, stage, plan.workspaceId);
     await assertDirectoryWithoutSymlink(fileSystem, configuredRootPath, plan.workspaceId, stage);
+    throwIfAborted(options.signal, stage, plan.workspaceId);
     const rootRealPath = await fileSystem.realpath(configuredRootPath);
-    await assertDirectoryWithoutSymlink(fileSystem, rootRealPath, plan.workspaceId, stage);
+    throwIfAborted(options.signal, stage, plan.workspaceId);
+    const rootStats = await assertDirectoryWithoutSymlink(
+      fileSystem,
+      rootRealPath,
+      plan.workspaceId,
+      stage,
+    );
     const destinationPath = resolveContainedWorkspacePath(rootRealPath, plan.workspaceId);
     await assertDestinationAvailable(fileSystem, destinationPath, plan.workspaceId);
+    throwIfAborted(options.signal, stage, plan.workspaceId);
 
     stage = CONTROLLED_WORKSPACE_ERROR_STAGES.STAGING;
     const createdStagingPath = await fileSystem.mkdtemp(
@@ -256,7 +407,8 @@ export async function materializeWorkspaceAtomically(
       );
     }
     await assertDirectoryWithoutSymlink(fileSystem, createdStagingPath, plan.workspaceId, stage);
-    authorizedStagingPath = createdStagingPath;
+    cleanupPath = createdStagingPath;
+    throwIfAborted(options.signal, stage, plan.workspaceId);
     const stagingRealPath = await fileSystem.realpath(createdStagingPath);
     const expectedStagingPath = resolveContainedWorkspacePath(
       rootRealPath,
@@ -271,45 +423,60 @@ export async function materializeWorkspaceAtomically(
       );
     }
     await assertDirectoryWithoutSymlink(fileSystem, stagingRealPath, plan.workspaceId, stage);
+    throwIfAborted(options.signal, stage, plan.workspaceId);
 
     stage = CONTROLLED_WORKSPACE_ERROR_STAGES.MATERIALIZATION;
     for (const directory of plannedDirectories(plan)) {
+      throwIfAborted(options.signal, stage, plan.workspaceId);
       await fileSystem.mkdir(resolveContainedWorkspacePath(stagingRealPath, directory));
+      throwIfAborted(options.signal, stage, plan.workspaceId);
     }
     for (const file of plan.files) {
+      throwIfAborted(options.signal, stage, plan.workspaceId);
       await fileSystem.writeFile(
         resolveContainedWorkspacePath(stagingRealPath, file.path),
         file.content,
       );
+      throwIfAborted(options.signal, stage, plan.workspaceId);
     }
 
     stage = CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION;
-    await verifyStaging(fileSystem, stagingRealPath, plan);
+    await verifyStaging(fileSystem, stagingRealPath, plan, options.signal);
 
     stage = CONTROLLED_WORKSPACE_ERROR_STAGES.COMMIT;
+    throwIfAborted(options.signal, stage, plan.workspaceId);
     await assertDestinationAvailable(fileSystem, destinationPath, plan.workspaceId);
     await fileSystem.rename(stagingRealPath, destinationPath);
-    authorizedStagingPath = undefined;
-    publishedPath = destinationPath;
+    cleanupPath = destinationPath;
+    throwIfAborted(options.signal, stage, plan.workspaceId);
 
     stage = CONTROLLED_WORKSPACE_ERROR_STAGES.VERIFICATION;
-    await verifyStaging(fileSystem, destinationPath, plan);
-    publishedPath = undefined;
+    await verifyStaging(fileSystem, destinationPath, plan, options.signal);
+    const destinationStats = await assertDirectoryWithoutSymlink(
+      fileSystem,
+      destinationPath,
+      plan.workspaceId,
+      stage,
+    );
+    throwIfAborted(options.signal, stage, plan.workspaceId);
+    cleanupPath = undefined;
+    return Object.freeze({
+      rootRealPath,
+      rootDevice: rootStats.dev,
+      rootInode: rootStats.ino,
+      destinationPath,
+      destinationDevice: destinationStats.dev,
+      destinationInode: destinationStats.ino,
+    });
   } catch (error) {
     const translated = translateFailure(error, stage, plan.workspaceId);
-    if (authorizedStagingPath !== undefined) {
-      try {
-        await fileSystem.rm(authorizedStagingPath);
-      } catch {
-        // Cleanup is best effort; the authoritative failure remains sanitized and unchanged.
-      }
-    }
-    if (publishedPath !== undefined) {
-      try {
-        await fileSystem.rm(publishedPath);
-      } catch {
-        // Cleanup is best effort; the authoritative failure remains sanitized and unchanged.
-      }
+    if (cleanupPath !== undefined) {
+      await removeWorkspaceWithDeadline(
+        fileSystem,
+        cleanupPath,
+        options.cleanupTimeoutMs,
+        plan.workspaceId,
+      );
     }
     throw translated;
   }

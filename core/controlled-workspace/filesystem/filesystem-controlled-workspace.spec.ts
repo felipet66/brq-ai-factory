@@ -5,8 +5,9 @@ import path from 'node:path';
 import type { Logger } from '@brq/shared/logger/logger';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { WorkspacePlan } from '../contracts';
+import type { WorkspaceMaterializationResult, WorkspacePlan } from '../contracts';
 import { CONTROLLED_WORKSPACE_ERROR_CODES, ControlledWorkspaceError } from '../errors';
+import { MAX_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS } from '../lifecycle';
 import { createWorkspacePlanRequestFixture } from '../testing/controlled-workspace-fixtures';
 import {
   NODE_WORKSPACE_FILE_SYSTEM,
@@ -89,6 +90,398 @@ describe('filesystem controlled workspace', () => {
       (await lstat(path.join(root, result.workspaceId, 'src/index.ts'))).mode & 0o777;
     expect(directoryMode & 0o077).toBe(0);
     expect(fileMode & 0o077).toBe(0);
+  });
+
+  it('honors a pre-aborted materialization without touching the filesystem', async () => {
+    const root = await temporaryRoot();
+    const controller = new AbortController();
+    controller.abort(new Error('private cancellation reason'));
+    let lstatCalls = 0;
+    const records: Array<{ event: string; context?: Record<string, unknown> }> = [];
+    const record = (event: string, context?: Record<string, unknown>) =>
+      records.push(context === undefined ? { event } : { event, context });
+    const logger: Logger = { debug: record, info: record, warn: record, error: record };
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      lstat: async (targetPath) => {
+        lstatCalls += 1;
+        return NODE_WORKSPACE_FILE_SYSTEM.lstat(targetPath);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root, logger },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+
+    const error = await expectControlledRejection(
+      workspace.materialize(plan, { signal: controller.signal }),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CANCELLED,
+    );
+
+    expect(lstatCalls).toBe(0);
+    expect(error.message).not.toContain('private cancellation reason');
+    const serialized = JSON.stringify(records);
+    expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain('private cancellation reason');
+    expect(serialized).toContain(CONTROLLED_WORKSPACE_ERROR_CODES.CANCELLED);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('rolls staging back exactly once when cancellation is observed during writes', async () => {
+    const root = await temporaryRoot();
+    const controller = new AbortController();
+    let removeCalls = 0;
+    let writeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      writeFile: async (targetPath, content) => {
+        writeCalls += 1;
+        await NODE_WORKSPACE_FILE_SYSTEM.writeFile(targetPath, content);
+        if (writeCalls === 1) controller.abort();
+      },
+      rm: async (targetPath) => {
+        removeCalls += 1;
+        await NODE_WORKSPACE_FILE_SYSTEM.rm(targetPath);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+
+    await expectControlledRejection(
+      workspace.materialize(plan, { signal: controller.signal }),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CANCELLED,
+    );
+
+    expect(writeCalls).toBe(1);
+    expect(removeCalls).toBe(1);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('rolls the published workspace back exactly once when cancellation follows commit', async () => {
+    const root = await temporaryRoot();
+    const controller = new AbortController();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rename: async (source, destination) => {
+        await NODE_WORKSPACE_FILE_SYSTEM.rename(source, destination);
+        controller.abort();
+      },
+      rm: async (targetPath) => {
+        removeCalls += 1;
+        await NODE_WORKSPACE_FILE_SYSTEM.rm(targetPath);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+
+    await expectControlledRejection(
+      workspace.materialize(plan, { signal: controller.signal }),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CANCELLED,
+    );
+
+    expect(removeCalls).toBe(1);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('uses cleanup failure as the terminal error when cancelled rollback cannot complete', async () => {
+    const root = await temporaryRoot();
+    const controller = new AbortController();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      writeFile: async (targetPath, content) => {
+        await NODE_WORKSPACE_FILE_SYSTEM.writeFile(targetPath, content);
+        controller.abort();
+      },
+      rm: async () => {
+        removeCalls += 1;
+        throw Object.assign(new Error(`cannot remove ${root}`), { code: 'EIO' });
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+
+    const error = await expectControlledRejection(
+      workspace.materialize(plan, { signal: controller.signal }),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    );
+
+    expect(removeCalls).toBe(1);
+    expect(error.message).not.toContain(root);
+  });
+
+  it('releases an owned workspace with an immutable metadata-only result', async () => {
+    const root = await temporaryRoot();
+    const workspace = createFilesystemControlledWorkspace({ rootPath: root });
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+
+    const released = await workspace.release(materialized);
+
+    expect(released).toEqual({
+      workspaceId: materialized.workspaceId,
+      status: 'RELEASED',
+      planHash: materialized.metadata.planHash,
+      workspaceHash: materialized.metadata.workspaceHash,
+    });
+    expect(Object.isFrozen(released)).toBe(true);
+    expect('rootPath' in released).toBe(false);
+    expect('files' in released).toBe(false);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('shares concurrent and repeated release outcomes while removing exactly once', async () => {
+    const root = await temporaryRoot();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rm: async (targetPath) => {
+        removeCalls += 1;
+        await NODE_WORKSPACE_FILE_SYSTEM.rm(targetPath);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+
+    const [first, concurrent] = await Promise.all([
+      workspace.release(materialized),
+      workspace.release(materialized),
+    ]);
+    const repeated = await workspace.release(materialized);
+
+    expect(first).toEqual(concurrent);
+    expect(repeated).toBe(first);
+    expect(removeCalls).toBe(1);
+  });
+
+  it('rejects release from another adapter instance without deleting its workspace', async () => {
+    const ownerRoot = await temporaryRoot();
+    const otherRoot = await temporaryRoot();
+    const owner = createFilesystemControlledWorkspace({ rootPath: ownerRoot });
+    const other = createFilesystemControlledWorkspace({ rootPath: otherRoot });
+    const plan = owner.plan(createWorkspacePlanRequestFixture());
+    const materialized = await owner.materialize(plan);
+
+    await expectControlledRejection(
+      other.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED,
+    );
+
+    expect(
+      await readFile(path.join(ownerRoot, materialized.workspaceId, 'src/index.ts'), 'utf8'),
+    ).toBe('export const ready = true;\n');
+    await owner.release(materialized);
+  });
+
+  it('rejects a tampered release result before cleanup and preserves the owned workspace', async () => {
+    const root = await temporaryRoot();
+    const workspace = createFilesystemControlledWorkspace({ rootPath: root });
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+    const tampered = {
+      ...materialized,
+      metadata: { ...materialized.metadata, workspaceHash: 'f'.repeat(64) },
+    } as WorkspaceMaterializationResult;
+
+    await expectControlledRejection(
+      workspace.release(tampered),
+      CONTROLLED_WORKSPACE_ERROR_CODES.INVALID_REQUEST,
+    );
+
+    expect(await readFile(path.join(root, materialized.workspaceId, 'src/index.ts'), 'utf8')).toBe(
+      'export const ready = true;\n',
+    );
+    await workspace.release(materialized);
+  });
+
+  it('removes an owned workspace but reports verification failure when its bytes were tampered', async () => {
+    const root = await temporaryRoot();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rm: async (targetPath) => {
+        removeCalls += 1;
+        await NODE_WORKSPACE_FILE_SYSTEM.rm(targetPath);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+    const filePath = path.join(root, materialized.workspaceId, 'src/index.ts');
+    await NODE_WORKSPACE_FILE_SYSTEM.rm(filePath);
+    await NODE_WORKSPACE_FILE_SYSTEM.writeFile(filePath, 'tampered');
+
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
+    );
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.VERIFICATION_FAILED,
+    );
+
+    expect(removeCalls).toBe(1);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('does not delete a replacement directory whose filesystem identity is not owned', async () => {
+    const root = await temporaryRoot();
+    const workspace = createFilesystemControlledWorkspace({ rootPath: root });
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+    const destination = path.join(root, materialized.workspaceId);
+    await NODE_WORKSPACE_FILE_SYSTEM.rm(destination);
+    await mkdir(destination);
+    await NODE_WORKSPACE_FILE_SYSTEM.writeFile(
+      path.join(destination, 'replacement.txt'),
+      'not owned',
+    );
+
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED,
+    );
+
+    expect(await readFile(path.join(destination, 'replacement.txt'), 'utf8')).toBe('not owned');
+  });
+
+  it('does not delete through a configured root whose filesystem identity changed', async () => {
+    const root = await temporaryRoot();
+    const movedRoot = `${root}-moved`;
+    roots.push(movedRoot);
+    const workspace = createFilesystemControlledWorkspace({ rootPath: root });
+    const plan = workspace.plan(createWorkspacePlanRequestFixture());
+    const materialized = await workspace.materialize(plan);
+    await NODE_WORKSPACE_FILE_SYSTEM.rename(root, movedRoot);
+    await mkdir(root);
+    const replacement = path.join(root, materialized.workspaceId);
+    await mkdir(replacement);
+    await NODE_WORKSPACE_FILE_SYSTEM.writeFile(
+      path.join(replacement, 'replacement.txt'),
+      'not owned',
+    );
+
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.WORKSPACE_NOT_OWNED,
+    );
+
+    expect(await readFile(path.join(replacement, 'replacement.txt'), 'utf8')).toBe('not owned');
+    expect(
+      await readFile(path.join(movedRoot, materialized.workspaceId, 'src/index.ts'), 'utf8'),
+    ).toBe('export const ready = true;\n');
+  });
+
+  it('caches release cleanup failures and never retries deletion implicitly', async () => {
+    const root = await temporaryRoot();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rm: async () => {
+        removeCalls += 1;
+        throw Object.assign(new Error(`denied ${root}`), { code: 'EACCES' });
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const materialized = await workspace.materialize(
+      workspace.plan(createWorkspacePlanRequestFixture()),
+    );
+
+    const first = await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    );
+    const repeated = await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    );
+
+    expect(first).toBe(repeated);
+    expect(first.message).not.toContain(root);
+    expect(removeCalls).toBe(1);
+  });
+
+  it('fails release when an adapter reports removal without removing the owned directory', async () => {
+    const root = await temporaryRoot();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rm: async () => {
+        removeCalls += 1;
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root },
+      { fileSystem },
+    );
+    const materialized = await workspace.materialize(
+      workspace.plan(createWorkspacePlanRequestFixture()),
+    );
+
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    );
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+    );
+
+    expect(removeCalls).toBe(1);
+    expect(await readFile(path.join(root, materialized.workspaceId, 'src/index.ts'), 'utf8')).toBe(
+      'export const ready = true;\n',
+    );
+  });
+
+  it('bounds release cleanup by the host deadline and records no implicit retry', async () => {
+    const root = await temporaryRoot();
+    let removeCalls = 0;
+    const fileSystem: WorkspaceFileSystem = {
+      ...NODE_WORKSPACE_FILE_SYSTEM,
+      rm: async () => {
+        removeCalls += 1;
+        await new Promise<void>(() => undefined);
+      },
+    };
+    const workspace = createFilesystemControlledWorkspaceWithDependencies(
+      { rootPath: root, cleanupTimeoutMs: 1 },
+      { fileSystem },
+    );
+    const materialized = await workspace.materialize(
+      workspace.plan(createWorkspacePlanRequestFixture()),
+    );
+
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_TIMEOUT,
+    );
+    await expectControlledRejection(
+      workspace.release(materialized),
+      CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_TIMEOUT,
+    );
+
+    expect(removeCalls).toBe(1);
   });
 
   it('never overwrites an existing workspace', async () => {
@@ -433,6 +826,15 @@ describe('filesystem controlled workspace', () => {
     expect(() => createFilesystemControlledWorkspace({ rootPath: '/' })).toThrowError(
       ControlledWorkspaceError,
     );
+    expect(() =>
+      createFilesystemControlledWorkspace({ rootPath: '/tmp/output', cleanupTimeoutMs: 0 }),
+    ).toThrowError(ControlledWorkspaceError);
+    expect(() =>
+      createFilesystemControlledWorkspace({
+        rootPath: '/tmp/output',
+        cleanupTimeoutMs: MAX_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS + 1,
+      }),
+    ).toThrowError(ControlledWorkspaceError);
   });
 
   it('logs only sanitized metadata and deterministic hashes', async () => {
@@ -478,6 +880,45 @@ describe('filesystem controlled workspace', () => {
     expect(await readFile(path.join(root, result.workspaceId, 'package.json'), 'utf8')).toContain(
       'generated-app',
     );
+  });
+
+  it('logs release lifecycle with metadata only and tolerates logger failures', async () => {
+    const root = await temporaryRoot();
+    const records: Array<{ event: string; context?: Record<string, unknown> }> = [];
+    const record = (event: string, context?: Record<string, unknown>) =>
+      records.push(context === undefined ? { event } : { event, context });
+    const logger: Logger = { debug: record, info: record, warn: record, error: record };
+    const workspace = createFilesystemControlledWorkspace({ rootPath: root, logger });
+    const result = await workspace.materialize(workspace.plan(createWorkspacePlanRequestFixture()));
+
+    await workspace.release(result);
+
+    expect(records.map((entry) => entry.event).slice(-2)).toEqual([
+      'controlled_workspace.release.started',
+      'controlled_workspace.release.completed',
+    ]);
+    const serialized = JSON.stringify(records.slice(-2));
+    expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain('src/index.ts');
+    expect(serialized).not.toContain('export const ready');
+    expect(serialized).toContain(result.metadata.workspaceHash);
+
+    const throwing = () => {
+      throw new Error('sink unavailable');
+    };
+    const failingLogger: Logger = {
+      debug: throwing,
+      info: throwing,
+      warn: throwing,
+      error: throwing,
+    };
+    const secondRoot = await temporaryRoot();
+    const second = createFilesystemControlledWorkspace({
+      rootPath: secondRoot,
+      logger: failingLogger,
+    });
+    const secondResult = await second.materialize(second.plan(createWorkspacePlanRequestFixture()));
+    await expect(second.release(secondResult)).resolves.toMatchObject({ status: 'RELEASED' });
   });
 
   it('does not depend on shell or network execution primitives', async () => {

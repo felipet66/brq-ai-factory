@@ -1,11 +1,18 @@
 // @vitest-environment node
 
 import { FakeAIProvider } from '@brq/ai-provider/fake';
+import type { CodeGeneratorAgent } from '@brq/code-generator-agent';
+import type { ControlledWorkspace } from '@brq/controlled-workspace';
 import { FakeKnowledgeSource } from '@brq/knowledge-loader/testing';
+import type { SandboxRunner } from '@brq/sandbox-runner';
 import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it } from 'vitest';
 
-import { createApplicationRuntime, getExecutionEngine } from './runtime';
+import {
+  createApplicationFactoryRuntime,
+  createApplicationRuntime,
+  getExecutionEngine,
+} from './runtime';
 
 describe('application composition root', () => {
   it('creates the Execution Engine using only public component factories', async () => {
@@ -44,5 +51,44 @@ describe('application composition root', () => {
 
     expect(first).toBe(second);
     await expect(first).rejects.toThrow();
+  });
+
+  it('composes the full Factory only with explicitly injected execution boundaries in tests', async () => {
+    const pipeline = await createApplicationFactoryRuntime({
+      aiProvider: new FakeAIProvider(),
+      knowledgeSource: new FakeKnowledgeSource(),
+      codeGeneratorAgent: {
+        execute: async () => Promise.reject(new Error('not executed')),
+      } as CodeGeneratorAgent,
+      controlledWorkspace: {
+        plan: () => {
+          throw new Error('not executed');
+        },
+        materialize: async () => Promise.reject(new Error('not executed')),
+        release: async () => Promise.reject(new Error('not executed')),
+      } as ControlledWorkspace,
+      sandboxRunner: {
+        run: async () => Promise.reject(new Error('not executed')),
+      } as SandboxRunner,
+      environment: { NODE_ENV: 'test' },
+      logger: createLogger({ sink: () => undefined }),
+      now: () => 0,
+    });
+
+    expect(pipeline.execute).toBeTypeOf('function');
+  });
+
+  it('fails closed when production Factory Docker configuration is absent', async () => {
+    await expect(
+      createApplicationFactoryRuntime({
+        aiProvider: new FakeAIProvider(),
+        knowledgeSource: new FakeKnowledgeSource(),
+        codeGeneratorAgent: {
+          execute: async () => Promise.reject(new Error('not executed')),
+        } as CodeGeneratorAgent,
+        environment: { NODE_ENV: 'test' },
+        logger: createLogger({ sink: () => undefined }),
+      }),
+    ).rejects.toThrow('configuração Docker explícita');
   });
 });

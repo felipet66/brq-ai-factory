@@ -1,7 +1,11 @@
 // @vitest-environment node
 
 import type { ExecutionRecord, ExecutionRecordRepository } from '@brq/execution-repository';
-import type { ExecutionObservabilitySnapshot, ExecutionStageMetrics } from '@brq/observability';
+import type {
+  ExecutionObservabilitySnapshot,
+  ExecutionStageMetrics,
+  FactoryExecutionObservabilitySnapshot,
+} from '@brq/observability';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -114,6 +118,32 @@ const SNAPSHOT = {
   summary: null,
 } as const satisfies ExecutionObservabilitySnapshot;
 
+const FACTORY_SNAPSHOT = {
+  ...SNAPSHOT,
+  observabilityVersion: '2.0.0',
+  revision: 4,
+  stages: [
+    ...SNAPSHOT.stages,
+    ...[
+      ['CODE_GENERATOR', 'Code Generator'],
+      ['WORKSPACE', 'Controlled Workspace'],
+      ['SANDBOX_PREPARE', 'Prepare'],
+      ['SANDBOX_TYPECHECK', 'Typecheck'],
+      ['SANDBOX_BUILD', 'Build'],
+      ['SANDBOX_TEST', 'Test'],
+    ].map(([stageId, stageName]) => ({
+      stageId,
+      stageName,
+      status: 'PENDING' as const,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      requestId: FIXED_REQUEST_ID,
+      executionId: EXECUTION_ID,
+    })),
+  ],
+} as FactoryExecutionObservabilitySnapshot;
+
 function record(snapshot: ExecutionObservabilitySnapshot = SNAPSHOT): ExecutionRecord {
   return { observation: snapshot } as ExecutionRecord;
 }
@@ -155,7 +185,7 @@ describe('execution timeline HTTP adapter', () => {
       data: SNAPSHOT,
       metadata: {
         requestId: FIXED_REQUEST_ID,
-        apiVersion: '3.0.0',
+        apiVersion: '3.1.0',
         executionId: EXECUTION_ID,
       },
       errors: [],
@@ -182,6 +212,35 @@ describe('execution timeline HTTP adapter', () => {
     expect(logs).not.toContain(WORKFLOW_ID);
     expect(logs).not.toContain('Knowledge');
     expect(logs).not.toContain('stageMetrics');
+  });
+
+  it('returns the additive Observability v2 snapshot through the same endpoint', async () => {
+    const repository = fakeRepository();
+    repository.findByExecutionId.mockResolvedValueOnce(record(FACTORY_SNAPSHOT));
+    const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline`),
+      context(EXECUTION_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.observabilityVersion).toBe('2.0.0');
+    expect(body.data.stages).toHaveLength(10);
+    expect(body.data.stages.map((stage: { stageId: string }) => stage.stageId).slice(4)).toEqual([
+      'CODE_GENERATOR',
+      'WORKSPACE',
+      'SANDBOX_PREPARE',
+      'SANDBOX_TYPECHECK',
+      'SANDBOX_BUILD',
+      'SANDBOX_TEST',
+    ]);
   });
 
   it('looks up an active timeline by its workflowId alias', async () => {
@@ -226,7 +285,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toEqual({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.0.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.1.0' },
       errors: [
         {
           code: 'EXECUTION_TIMELINE_NOT_FOUND',
@@ -293,7 +352,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toMatchObject({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.0.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.1.0' },
       errors: [{ code: 'METHOD_NOT_ALLOWED' }],
     });
     expect(repository.findByExecutionId).not.toHaveBeenCalled();

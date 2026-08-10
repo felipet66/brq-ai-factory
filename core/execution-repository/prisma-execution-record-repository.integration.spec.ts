@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createInMemoryExecutionHistory } from '@brq/observability';
+import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
+import {
+  createInMemoryExecutionHistory,
+  createInMemoryFactoryExecutionHistory,
+} from '@brq/observability';
 
 import {
   createDatabaseTestContext,
@@ -192,6 +196,58 @@ describe('Prisma execution record repository', () => {
     const artifactContent =
       result.workflowResult?.results.productOwner?.artifacts[0]?.draft.content;
     if (artifactContent !== undefined) expect(serialized).not.toContain(artifactContent);
+  });
+
+  it('round-trips Factory metadata normalizada sem persistir payloads gerados', async () => {
+    const repository = ownerRepository(context);
+    const request = createObservabilityRequest();
+    const result = createFactoryExecutionResultFixture({
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      workflowId: request.workflowId,
+    });
+    const history = createInMemoryFactoryExecutionHistory({
+      now: () => Date.parse(result.finishedAt),
+    });
+    history.beginFactory(request);
+    history.completeFactory(result);
+    const snapshot = history.get(result.executionId);
+    expect(snapshot).not.toBeNull();
+
+    await repository.create({
+      workflowId: request.workflowId,
+      requestId: request.requestId ?? null,
+      traceId: request.traceId ?? null,
+      projectName: request.demand.title,
+      createdAt: result.startedAt,
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markRunning({
+      workflowId: request.workflowId,
+      startedAt: result.startedAt,
+    });
+    const completed = await repository.completeFactory(request.workflowId, result, snapshot);
+    const restored = await ownerRepository(context).findByExecutionId(result.executionId);
+
+    expect(restored).toEqual(completed);
+    expect(restored?.factoryResult).toMatchObject({
+      status: 'SUCCESS',
+      generationStatus: 'SUCCESS',
+      workspaceReleaseStatus: 'RELEASED',
+      sandboxStatus: 'SUCCESS',
+      hashes: { factoryResultHash: result.hashes.factoryResultHash },
+    });
+    expect(restored?.observation?.observabilityVersion).toBe('2.0.0');
+    expect(await context.client.executionFactoryResult.count()).toBe(1);
+    expect(await context.client.executionFactoryStageResult.count()).toBe(11);
+    expect(await context.client.executionFactoryLineage.count()).toBe(1);
+    expect(await context.client.executionFactoryProvenance.count()).toBe(1);
+    expect(await context.client.executionFactoryToolchainVersion.count()).toBeGreaterThan(0);
+    expect(await context.client.executionObservedStage.count()).toBe(10);
+    expect(await context.client.executionStageMetric.count()).toBe(3);
+    const serialized = JSON.stringify(restored?.factoryResult);
+    expect(serialized).not.toMatch(
+      /"(?:imageReference|containerId|prompt|content|path|stdout|stderr)"\s*:/,
+    );
   });
 
   it('persists observation revisions by replacing normalized children atomically', async () => {

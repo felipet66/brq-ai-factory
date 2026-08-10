@@ -1,4 +1,5 @@
 import { ExecutionEngineError, type ExecutionResult } from '@brq/execution-engine';
+import { FactoryPipelineError, type FactoryExecutionResult } from '@brq/factory-pipeline';
 import type { ClaimedJob, JobFailure, JobRecord } from '@brq/job-queue';
 
 import type { CreateExecutionWorkerOptions, ExecutionWorker } from './contracts';
@@ -6,6 +7,7 @@ import { EXECUTION_WORKER_ERROR_CODES, ExecutionWorkerError } from './errors';
 import { logWorkerEvent } from './logging';
 
 function assertOptions(options: CreateExecutionWorkerOptions): void {
+  const executor = 'pipeline' in options ? options.pipeline : options.engine;
   if (
     typeof options.queue?.claimNext !== 'function' ||
     typeof options.queue?.subscribe !== 'function' ||
@@ -16,7 +18,7 @@ function assertOptions(options: CreateExecutionWorkerOptions): void {
     typeof options.queue?.cancel !== 'function' ||
     typeof options.queue?.shutdown !== 'function' ||
     typeof options.queue?.isShutdown !== 'function' ||
-    typeof options.engine?.execute !== 'function' ||
+    typeof executor?.execute !== 'function' ||
     typeof options.repository?.markJobRunning !== 'function' ||
     typeof options.repository?.markJobTerminal !== 'function'
   ) {
@@ -30,7 +32,9 @@ function failure(code: string, message: string): JobFailure {
   return Object.freeze({ code, message });
 }
 
-function resultFailure(result: ExecutionResult): JobFailure {
+type TerminalExecutionResult = ExecutionResult | FactoryExecutionResult;
+
+function resultFailure(result: TerminalExecutionResult): JobFailure {
   return failure(
     result.failure?.code ?? EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
     result.status === 'CANCELLED' ? 'A execução foi cancelada.' : 'A execução terminou com falha.',
@@ -39,6 +43,7 @@ function resultFailure(result: ExecutionResult): JobFailure {
 
 export function createExecutionWorker(options: CreateExecutionWorkerOptions): ExecutionWorker {
   assertOptions(options);
+  const executor = 'pipeline' in options ? options.pipeline : options.engine;
   let started = false;
   let stopping = false;
   let drainRequested = false;
@@ -68,7 +73,7 @@ export function createExecutionWorker(options: CreateExecutionWorkerOptions): Ex
     });
   };
 
-  const settleQueue = async (job: ClaimedJob, result: ExecutionResult): Promise<void> => {
+  const settleQueue = async (job: ClaimedJob, result: TerminalExecutionResult): Promise<void> => {
     const terminal =
       result.status === 'SUCCESS'
         ? await options.queue.complete(job.record.jobId)
@@ -117,10 +122,13 @@ export function createExecutionWorker(options: CreateExecutionWorkerOptions): Ex
     }
 
     try {
-      const result = await options.engine.execute(job.request, { signal: controller.signal });
+      const result = await executor.execute(job.request, { signal: controller.signal });
       await settleQueue(job, result);
     } catch (error) {
-      if (error instanceof ExecutionEngineError && error.result !== undefined) {
+      if (
+        (error instanceof ExecutionEngineError || error instanceof FactoryPipelineError) &&
+        error.result !== undefined
+      ) {
         await settleQueue(job, error.result);
       } else {
         const failed = await options.queue.fail(

@@ -9,6 +9,7 @@ import { resolveAgentVisualState, type AgentVisualPresentation } from './agent-v
 import { ExecutionHeader } from './execution-header';
 import { FactoryActivityFeed } from './factory-activity-feed';
 import { FactoryProgress } from './factory-progress';
+import { FactoryTechnicalPipeline } from './factory-technical-pipeline';
 import type { FactoryAgentId, FactoryViewModel } from './factory-view-model';
 import { KnowledgeStage } from './knowledge-stage';
 import styles from './factory.module.css';
@@ -101,6 +102,8 @@ export function FactoryWorkspace({
         </ol>
       </section>
 
+      <FactoryTechnicalPipeline stages={model.technicalStages} />
+
       <div className={styles.operationsGrid}>
         <FactoryActivityFeed activity={model.activity} />
         <AgentDetailPanel
@@ -112,9 +115,11 @@ export function FactoryWorkspace({
       </div>
 
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        {model.progress.activeAgentId === null
-          ? `Factory status ${model.progress.status}`
-          : `${model.agents.find((agent) => agent.id === model.progress.activeAgentId)?.name} working`}
+        {model.progress.activeAgentId !== null
+          ? `${model.agents.find((agent) => agent.id === model.progress.activeAgentId)?.name} working`
+          : model.progress.activeTechnicalStageId !== null
+            ? `${model.technicalStages.find((stage) => stage.id === model.progress.activeTechnicalStageId)?.name} working`
+            : `Factory status ${model.progress.status}`}
       </p>
 
       {updateError === null ? null : (

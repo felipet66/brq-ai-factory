@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFactoryViewModel } from './factory-view-model';
 import {
   factoryExecutionFixture,
+  factoryResultFixture,
   factoryTimelineFixture,
+  factoryTimelineV2Fixture,
 } from './factory-view-model.spec.fixtures';
 import { FactoryWorkspace } from './factory-workspace';
 
@@ -24,6 +26,8 @@ describe('FactoryWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'Factory progress' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Knowledge system preflight' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Factory Floor' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Code to verified workspace' })).toBeVisible();
+    expect(screen.getByText(/No Factory Pipeline evidence/)).toBeVisible();
     expect(screen.getByRole('list', { name: 'Agent production line' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: /station,/ })).toHaveLength(3);
     expect(screen.getByRole('img', { name: 'Product Owner visual state: SUCCESS' })).toBeVisible();
@@ -42,6 +46,34 @@ describe('FactoryWorkspace', () => {
     expect(container).not.toHaveTextContent('story.md');
     expect(container).not.toHaveTextContent('architecture.md');
     expect(container).not.toHaveTextContent('test-plan.md');
+  });
+
+  it('renders the evidence-backed technical production rail without source or command output', () => {
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ factoryResult: factoryResultFixture() }),
+      timeline: factoryTimelineV2Fixture(),
+    });
+    const { container } = render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    const pipeline = screen.getByRole('list', { name: 'Factory technical pipeline' });
+    expect(within(pipeline).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(pipeline).getByText('Code Generator')).toBeVisible();
+    expect(within(pipeline).getByText('Controlled Workspace')).toBeVisible();
+    expect(within(pipeline).getByText('Typecheck')).toBeVisible();
+    expect(within(pipeline).getByText('Build')).toBeVisible();
+    expect(within(pipeline).getByText('Test')).toBeVisible();
+    expect(within(pipeline).getByText('RELEASED')).toBeVisible();
+    expect(container).not.toHaveTextContent('stdout');
+    expect(container).not.toHaveTextContent('stderr');
+    expect(container).not.toHaveTextContent('containerId');
+    expect(container).not.toHaveTextContent('console.log');
   });
 
   it('selects stations with pointer and arrow-key navigation', () => {

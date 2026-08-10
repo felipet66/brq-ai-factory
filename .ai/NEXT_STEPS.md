@@ -2,44 +2,38 @@
 
 ## Sprint atual
 
-Sprint 23 — Docker Sandbox Build & Test Runner implementada localmente após aprovação do plano.
-`core/sandbox-runner` mantém um port provider-neutral e expõe Docker somente em adapter explícito.
-O Runner recebe o resultado público do Controlled Workspace, verifica uma cópia limitada por stdin
-e executa somente `PREPARE → TYPECHECK → BUILD → TEST` por policy confiável em container
-descartável. Gerar código, materializar código e executar código permanecem três autoridades
-independentes.
+Sprint 24 — End-to-End Factory Pipeline Integration implementada localmente após aprovação do
+plano. `@brq/factory-pipeline` compõe externamente `Execution Engine → Code Generator → Controlled
+Workspace → Sandbox Runner` sem alterar funcionalmente Orchestrator ou Execution Engine.
 
-A imagem mínima de integração permanece versionada em `core/sandbox-runner/integration/image`,
-com Node 24.19.0, TypeScript 6.0.3 e helpers fixos pinados. O teste Docker opt-in foi executado com
-sucesso no Docker Desktop 4.42.0 / Engine 28.2.2, incluindo typecheck, build, teste e confirmação de
-cleanup; ele continua fora dos quality gates normais e nunca constrói ou baixa a imagem
-automaticamente.
+`FactoryExecutionResult` é aditivo e terminaliza a Factory somente depois de
+`PREPARE → TYPECHECK → BUILD → TEST` e do release confirmado do workspace. Observability `2.0.0`,
+persistência normalizada opcional e a linha técnica da Factory View preservam compatibilidade com
+execuções históricas `1.0.0`.
 
 ## Próximas ações
 
-1. Aguardar aprovação humana da Sprint 23 antes de criar qualquer commit.
-2. Não integrar Code Generator, Controlled Workspace ou Sandbox Runner ao workflow, API, Frontend,
-   Factory View, Repository ou Observability sem uma Sprint e contratos próprios.
-3. Manter o adapter Docker sem execução direta no host, bind mount, rede, privileged, Docker socket,
-   comandos da IA, package scripts, lifecycle scripts, instalação online ou retry.
-4. Manter `test:sandbox:integration` explicitamente opt-in, fora dos quality gates normais, sem
-   pull ou build automático e dependente de imagem digest-pinned preparada pelo host.
-5. Definir ownership, retenção, recuperação de staging órfão e limpeza de workspaces antes de uso
-   operacional prolongado.
-6. Definir ownership durável e orphan recovery de containers antes de execução operacional ou
-   distribuída; cleanup in-process não cobre crash do host ou daemon.
-7. Preservar a `TechnicalSpecification` aprovada em uma futura integração confiável: o Execution
-   Repository atual guarda somente hashes e não permite reconstruí-la por ID.
-8. Tratar Preview Runner como fronteira futura independente: build bem-sucedido não autoriza
-   servidor, porta, URL, container persistente, artifact export ou deploy.
-9. Manter testes e validações locais do Code Generator exclusivamente sobre `FakeAIProvider`, sem
-   chamadas reais à OpenAI.
-10. Planejar, em evolução contratual própria, rate limiting/lockout antes de exposição pública do
-    login.
-11. Planejar, em evolução contratual própria, a geração server-side dos identificadores técnicos
-    ainda fornecidos pelo frontend; até lá, a unicidade global de `workflowId` permanece um risco
-    residual documentado, sem exposição dos dados de outro owner.
-12. Manter qualquer edição/versionamento de prompts, registry, A/B testing, evaluation framework e
-    execução de provider fora do Playground até uma decisão arquitetural futura explícita.
-13. Evoluir filename, media type e timestamps autoritativos de handoff somente por contrato e
-    persistência próprios; a Factory atual não deve inferir esses dados.
+1. Aguardar aprovação humana da Sprint 24 antes de criar qualquer commit.
+2. Não iniciar Preview Runner, servidor do projeto gerado, iframe, portas, deploy ou qualquer item
+   da Sprint 25 sem planejamento e aprovação próprios.
+3. Manter `gerar código ≠ materializar código ≠ executar código`; nenhuma dessas fronteiras deve
+   receber internals da anterior.
+4. Manter Docker real explicitamente configurado e digest-pinned, sem fallback automático para
+   fake, pull/build automático, rede, privileged, bind mount, Docker socket ou execução no host.
+5. Manter testes Docker e do Factory Pipeline real exclusivamente opt-in, fora de `test`,
+   `test:coverage` e `build`.
+6. Definir recovery explícito para processo/host que caia durante staging, workspace materializado
+   ou container; a Sprint 24 garante cleanup in-process, não recuperação distribuída.
+7. Não persistir código, prompts, specifications completas, respostas, stdout/stderr ou
+   filesystem; novas necessidades de inspeção exigem contrato e threat model próprios.
+8. Preservar Observability `1.0.0` e read models históricos; mudanças futuras devem ser
+   versionadas e aditivas.
+9. Manter falha de build/test como resultado funcional `FAILED`, transportado normalmente pela
+   API, e não como erro HTTP de infraestrutura.
+10. Manter testes e validações locais dos agentes exclusivamente com `FakeAIProvider`, sem chamadas
+    reais à OpenAI.
+11. Planejar rate limiting/lockout antes de exposição pública do login.
+12. Planejar geração server-side dos identificadores técnicos ainda fornecidos pelo frontend; a
+    unicidade global de `workflowId` continua um risco residual conhecido.
+13. Não adicionar retry, self-healing ou correção autônoma de código sem uma decisão arquitetural
+    futura explícita.

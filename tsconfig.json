@@ -13,6 +13,7 @@
     "core/artifact-generator/**/*.ts",
     "core/controlled-workspace/**/*.ts",
     "core/sandbox-runner/**/*.ts",
+    "core/factory-pipeline/**/*.ts",
     "core/execution-engine/**/*.ts",
     "core/execution-repository/**/*.ts",
     "core/execution-worker/**/*.ts",

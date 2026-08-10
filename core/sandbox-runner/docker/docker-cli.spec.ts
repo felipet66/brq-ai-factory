@@ -72,6 +72,7 @@ describe('Node Docker command executor', () => {
           DOCKER_HOST: 'unix:///var/run/docker.sock',
           LANG: 'C',
           LC_ALL: 'C',
+          NODE_ENV: 'production',
         },
         stdio: ['pipe', 'pipe', 'pipe'],
       },

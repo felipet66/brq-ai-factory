@@ -60,5 +60,20 @@ export function toExecutionHistoryDetail(record: ExecutionRecord) {
               },
             })),
           },
+    factoryResult:
+      record.factoryResult === null
+        ? null
+        : {
+            ...record.factoryResult,
+            hashes: { ...record.factoryResult.hashes },
+            failure:
+              record.factoryResult.failure === null ? null : { ...record.factoryResult.failure },
+            stages: record.factoryResult.stages.map((stage) => ({ ...stage })),
+            lineage: { ...record.factoryResult.lineage },
+            provenance: {
+              ...record.factoryResult.provenance,
+              toolchainVersions: { ...record.factoryResult.provenance.toolchainVersions },
+            },
+          },
   });
 }

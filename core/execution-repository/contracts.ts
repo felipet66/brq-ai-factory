@@ -1,8 +1,16 @@
 import type { ExecutionEngine, ExecutionRequest, ExecutionResult } from '@brq/execution-engine';
 import type {
+  FactoryExecutionResult,
+  FactoryPipelineCoordinator,
+  FactoryPipelineRunOptions,
+} from '@brq/factory-pipeline';
+import type {
+  FactoryExecutionHistoryRecorder,
+  FactoryExecutionObservabilitySnapshot,
   ExecutionHistoryReader,
   ExecutionHistoryRecorder,
   ExecutionObservabilitySnapshot,
+  FactoryExecutionHistoryReader,
 } from '@brq/observability';
 import type { Logger } from '@brq/shared/logger/logger';
 import type { z } from 'zod';
@@ -18,6 +26,10 @@ import type {
   executionRecordRunningInputSchema,
   executionRecordSchema,
   executionRecordStatusSchema,
+  persistedFactoryLineageSchema,
+  persistedFactoryProvenanceSchema,
+  persistedFactoryResultSchema,
+  persistedFactoryStageSchema,
   persistedLineageSchema,
   persistedProvenanceSchema,
 } from './schemas';
@@ -36,6 +48,12 @@ export type ExecutionRecordLifecycleEvent = DeepReadonly<
 >;
 export type PersistedLineage = DeepReadonly<z.infer<typeof persistedLineageSchema>>;
 export type PersistedProvenance = DeepReadonly<z.infer<typeof persistedProvenanceSchema>>;
+export type PersistedFactoryStage = DeepReadonly<z.infer<typeof persistedFactoryStageSchema>>;
+export type PersistedFactoryLineage = DeepReadonly<z.infer<typeof persistedFactoryLineageSchema>>;
+export type PersistedFactoryProvenance = DeepReadonly<
+  z.infer<typeof persistedFactoryProvenanceSchema>
+>;
+export type PersistedFactoryResult = DeepReadonly<z.infer<typeof persistedFactoryResultSchema>>;
 export type ExecutionRecord = DeepReadonly<z.infer<typeof executionRecordSchema>>;
 export type ExecutionRecordCreatedInput = DeepReadonly<
   z.input<typeof executionRecordCreatedInputSchema>
@@ -76,7 +94,19 @@ export interface ExecutionRecordRepository {
   list(query?: ExecutionRecordListQuery): Promise<ExecutionRecordPage>;
 }
 
+export interface FactoryExecutionRecordRepository extends ExecutionRecordRepository {
+  completeFactory(
+    workflowId: string,
+    result: FactoryExecutionResult,
+    snapshot: FactoryExecutionObservabilitySnapshot | null,
+  ): Promise<ExecutionRecord>;
+}
+
 export interface PersistentExecutionHistory extends ExecutionHistoryRecorder {
+  flush(workflowId: string): Promise<void>;
+}
+
+export interface PersistentFactoryExecutionHistory extends FactoryExecutionHistoryRecorder {
   flush(workflowId: string): Promise<void>;
 }
 
@@ -92,6 +122,21 @@ export interface CreatePersistentExecutionEngineOptions {
   readonly history: PersistentExecutionHistory & ExecutionHistoryReader;
   readonly logger?: Logger;
   readonly now?: () => number;
+}
+
+export interface CreatePersistentFactoryPipelineOptions {
+  readonly pipeline: FactoryPipelineCoordinator;
+  readonly repository: FactoryExecutionRecordRepository;
+  readonly history: PersistentFactoryExecutionHistory & FactoryExecutionHistoryReader;
+  readonly logger?: Logger;
+  readonly now?: () => number;
+}
+
+export interface PersistentFactoryPipeline {
+  execute(
+    request: ExecutionRequest,
+    options?: FactoryPipelineRunOptions,
+  ): Promise<FactoryExecutionResult>;
 }
 
 export interface ExecutionRecordProjection {

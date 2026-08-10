@@ -12,6 +12,7 @@ import type {
   workspacePlanFileSchema,
   workspacePlanRequestSchema,
   workspacePlanSchema,
+  workspaceReleaseResultSchema,
   workspaceSourceHashesSchema,
 } from './schemas';
 
@@ -37,13 +38,22 @@ export type MaterializedWorkspaceFile = DeepReadonly<
 export type WorkspaceMaterializationResult = DeepReadonly<
   z.infer<typeof workspaceMaterializationResultSchema>
 >;
+export type WorkspaceReleaseResult = DeepReadonly<z.infer<typeof workspaceReleaseResultSchema>>;
+
+export interface WorkspaceMaterializationOptions {
+  readonly signal?: AbortSignal;
+}
 
 export interface ControlledWorkspacePlanner {
   plan(request: WorkspacePlanRequest): WorkspacePlan;
 }
 
 export interface ControlledWorkspace extends ControlledWorkspacePlanner {
-  materialize(plan: WorkspacePlan): Promise<WorkspaceMaterializationResult>;
+  materialize(
+    plan: WorkspacePlan,
+    options?: WorkspaceMaterializationOptions,
+  ): Promise<WorkspaceMaterializationResult>;
+  release(result: WorkspaceMaterializationResult): Promise<WorkspaceReleaseResult>;
 }
 
 export interface CreateControlledWorkspacePlannerOptions {
@@ -52,6 +62,7 @@ export interface CreateControlledWorkspacePlannerOptions {
 
 export interface CreateFilesystemControlledWorkspaceOptions extends CreateControlledWorkspacePlannerOptions {
   readonly rootPath: string;
+  readonly cleanupTimeoutMs?: number;
   readonly logger?: Logger;
   readonly now?: () => number;
 }

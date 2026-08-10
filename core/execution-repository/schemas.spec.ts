@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 
+import { projectPersistedFactoryResult } from './mapper';
 import { createExecutionRecordFixture } from './testing/execution-record-fixtures';
 import {
   executionRecordCreatedInputSchema,
@@ -7,6 +9,7 @@ import {
   executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
   executionRecordSchema,
+  persistedFactoryResultSchema,
 } from './schemas';
 
 describe('execution record schemas', () => {
@@ -95,5 +98,24 @@ describe('execution record schemas', () => {
         finishedAt: '2026-08-07T12:00:00.010Z',
       }).success,
     ).toBe(true);
+  });
+
+  it('mantém o FactoryResult persistido estrito, ordenado e sem payload sensível', () => {
+    const factory = projectPersistedFactoryResult(
+      createFactoryExecutionResultFixture({
+        executionId: `execution-${'f'.repeat(32)}`,
+        workflowId: 'workflow-factory',
+      }),
+    );
+    expect(persistedFactoryResultSchema.safeParse(factory).success).toBe(true);
+    expect(
+      persistedFactoryResultSchema.safeParse({ ...factory, prompt: 'must-not-persist' }).success,
+    ).toBe(false);
+    const stages = factory.stages.map((stage, index, source) => {
+      if (index === 3) return source[4]!;
+      if (index === 4) return source[3]!;
+      return stage;
+    });
+    expect(persistedFactoryResultSchema.safeParse({ ...factory, stages }).success).toBe(false);
   });
 });

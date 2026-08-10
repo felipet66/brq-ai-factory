@@ -64,6 +64,7 @@ export function createNodeDockerCommandExecutor(
             DOCKER_HOST: options.dockerHost,
             LANG: 'C',
             LC_ALL: 'C',
+            NODE_ENV: 'production',
           }),
           stdio: ['pipe', 'pipe', 'pipe'],
         });

@@ -9,13 +9,14 @@ import {
   authenticateRequestFixture,
   capturedLogger,
 } from '@/test/api-fixtures';
+import { historyFactoryResult } from '@/test/history-fixtures';
 
 import { createExecutionLookupHandler } from './execution-lookup-handler';
 
 const HASH = '1'.repeat(64);
 const KNOWLEDGE_HASH = `sha256:${'2'.repeat(64)}`;
 
-function executionRecord(): ExecutionRecord {
+function executionRecord(overrides: Partial<ExecutionRecord> = {}): ExecutionRecord {
   return {
     storageId: 'storage-private',
     workflowId: 'workflow-001',
@@ -84,6 +85,7 @@ function executionRecord(): ExecutionRecord {
         },
       ],
     },
+    factoryResult: null,
     observation: null,
     lifecycle: [
       {
@@ -109,6 +111,7 @@ function executionRecord(): ExecutionRecord {
       },
     ],
     revision: 3,
+    ...overrides,
   };
 }
 
@@ -188,6 +191,41 @@ describe('execution lookup HTTP adapter', () => {
     expect(serialized).not.toContain('lifecycle');
     expect(serialized).not.toContain('observation');
     expect(JSON.stringify(records)).not.toContain('Portal do cliente');
+  });
+
+  it('exposes only the safe additive Factory result metadata', async () => {
+    const repository = fakeRepository(executionRecord({ factoryResult: historyFactoryResult() }));
+    const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}`),
+      context(),
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(body.data.factoryResult).toMatchObject({
+      factoryVersion: '1.0.0',
+      status: 'SUCCESS',
+      generationStatus: 'SUCCESS',
+      workspaceReleaseStatus: 'RELEASED',
+      sandboxStatus: 'SUCCESS',
+      stages: expect.arrayContaining([
+        expect.objectContaining({ stageId: 'SANDBOX_BUILD', status: 'SUCCESS' }),
+      ]),
+      provenance: {
+        sandboxAdapter: 'DOCKER',
+        sandboxPlatform: 'linux/arm64',
+        toolchainVersions: { node: '24.19.0', typescript: '6.0.3' },
+      },
+    });
+    expect(serialized).not.toMatch(/stdout|stderr|containerId|workspacePath|generatedFiles/);
   });
 
   it('returns 404 for an unknown execution', async () => {

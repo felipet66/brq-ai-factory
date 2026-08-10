@@ -33,6 +33,7 @@ export default defineConfig({
         'src/components/history/**/*.tsx',
         'src/components/playground/**/*.tsx',
         'src/server/ai-factory-runtime-configuration.ts',
+        'src/server/factory-sandbox-runtime-configuration.ts',
         'src/server/auth/**/*.ts',
         'src/server/playground/**/*.ts',
         'src/server/runtime.ts',

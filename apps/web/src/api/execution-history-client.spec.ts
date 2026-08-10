@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { historyFactoryResult } from '@/test/history-fixtures';
+
 import { getExecution, getExecutionTimeline, listExecutions } from './execution-history-client';
 
 const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
@@ -103,6 +105,7 @@ function detailData(overrides: Record<string, unknown> = {}) {
         },
       ],
     },
+    factoryResult: null,
     rawResponse: 'must not cross the presentation boundary',
     ...overrides,
   };
@@ -195,6 +198,53 @@ function timelineData(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function timelineV2Data(overrides: Record<string, unknown> = {}) {
+  const legacy = timelineData();
+  const technicalStages = [
+    ['CODE_GENERATOR', 'Code Generator'],
+    ['WORKSPACE', 'Controlled Workspace'],
+    ['SANDBOX_PREPARE', 'Prepare'],
+    ['SANDBOX_TYPECHECK', 'Typecheck'],
+    ['SANDBOX_BUILD', 'Build'],
+    ['SANDBOX_TEST', 'Test'],
+  ].map(([stageId, stageName]) => ({
+    stageId,
+    stageName,
+    status: 'SUCCESS',
+    startedAt: '2026-08-07T10:00:00.250Z',
+    finishedAt: '2026-08-07T10:00:00.300Z',
+    durationMs: 50,
+    requestId: 'request-001',
+    executionId: EXECUTION_ID,
+  }));
+  return {
+    ...legacy,
+    observabilityVersion: '2.0.0',
+    revision: 15,
+    updatedAt: '2026-08-07T10:00:00.300Z',
+    stages: [...(legacy.stages as unknown[]), ...technicalStages],
+    summary: {
+      ...(legacy.summary as Record<string, unknown>),
+      executedStages: [
+        'KNOWLEDGE',
+        'PRODUCT_OWNER',
+        'DEVELOPER',
+        'QA',
+        'CODE_GENERATOR',
+        'WORKSPACE',
+        'SANDBOX_PREPARE',
+        'SANDBOX_TYPECHECK',
+        'SANDBOX_BUILD',
+        'SANDBOX_TEST',
+      ],
+      skippedStages: [],
+      factoryStatus: 'SUCCESS',
+      factoryResultHash: '3'.repeat(64),
+    },
+    ...overrides,
+  };
+}
+
 describe('execution history HTTP client', () => {
   it('builds the canonical list query and projects immutable list items', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>(async () =>
@@ -280,6 +330,48 @@ describe('execution history HTTP client', () => {
     expect(Object.isFrozen(detail.provenance?.stages[0]?.hashes.artifactHashes)).toBe(true);
   });
 
+  it('projects immutable safe Factory metadata and rejects non-canonical sensitive fields', async () => {
+    const factoryResult = historyFactoryResult();
+    const validFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          detailData({ factoryResult, generatedSource: 'not projected' }),
+          EXECUTION_ID,
+        ),
+      ),
+    );
+
+    const detail = await getExecution(EXECUTION_ID, { fetchImplementation: validFetch });
+
+    expect(detail.factoryResult).toMatchObject({
+      status: 'SUCCESS',
+      workspaceReleaseStatus: 'RELEASED',
+      sandboxStatus: 'SUCCESS',
+      hashes: { factoryResultHash: '3'.repeat(64) },
+    });
+    expect(detail).not.toHaveProperty('generatedSource');
+    expect(Object.isFrozen(detail.factoryResult)).toBe(true);
+    expect(Object.isFrozen(detail.factoryResult?.stages)).toBe(true);
+    expect(Object.isFrozen(detail.factoryResult?.provenance.toolchainVersions)).toBe(true);
+    expect(JSON.stringify(detail.factoryResult)).not.toMatch(
+      /stdout|stderr|sourceCodeText|filesystem/,
+    );
+
+    const invalidFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          detailData({
+            factoryResult: { ...factoryResult, stdout: 'private command output' },
+          }),
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: invalidFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+
   it('rejects an uncorrelated detail and an invalid execution identifier', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>(async () =>
       jsonResponse(successEnvelope(detailData({ executionId: OTHER_EXECUTION_ID }))),
@@ -321,6 +413,40 @@ describe('execution history HTTP client', () => {
     expect(Object.isFrozen(timeline.events)).toBe(true);
     expect(Object.isFrozen(timeline.events[0])).toBe(true);
     expect(Object.isFrozen(timeline.stages)).toBe(true);
+  });
+
+  it('accepts Observability v2 while retaining the v1 browser contract', async () => {
+    const v2Fetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(timelineV2Data(), EXECUTION_ID)),
+    );
+
+    const timeline = await getExecutionTimeline(EXECUTION_ID, { fetchImplementation: v2Fetch });
+
+    expect(timeline.observabilityVersion).toBe('2.0.0');
+    expect(timeline.stages).toHaveLength(10);
+    expect(timeline.stages.map((stage) => stage.stageId).slice(4)).toEqual([
+      'CODE_GENERATOR',
+      'WORKSPACE',
+      'SANDBOX_PREPARE',
+      'SANDBOX_TYPECHECK',
+      'SANDBOX_BUILD',
+      'SANDBOX_TEST',
+    ]);
+    expect(timeline.summary).toMatchObject({
+      factoryStatus: 'SUCCESS',
+      factoryResultHash: '3'.repeat(64),
+    });
+    expect(Object.isFrozen(timeline.stages)).toBe(true);
+
+    const invalidOrderFetch = vi.fn<FetchImplementation>(async () => {
+      const invalid = timelineV2Data();
+      const stages = [...(invalid.stages as unknown[])];
+      [stages[4], stages[5]] = [stages[5], stages[4]];
+      return jsonResponse(successEnvelope({ ...invalid, stages }, EXECUTION_ID));
+    });
+    await expect(
+      getExecutionTimeline(EXECUTION_ID, { fetchImplementation: invalidOrderFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 
   it('surfaces a sanitized API error with request correlation', async () => {

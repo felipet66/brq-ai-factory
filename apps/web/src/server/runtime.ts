@@ -2,13 +2,23 @@ import { createAgentRunner } from '@brq/agent-runner';
 import type { AIProvider } from '@brq/ai-provider';
 import { OpenAIProvider } from '@brq/ai-provider/openai';
 import { createArtifactGenerator } from '@brq/artifact-generator';
+import {
+  createCodeGeneratorAgent,
+  loadCodeGeneratorPromptAssets,
+  type CodeGeneratorAgent,
+} from '@brq/code-generator-agent';
+import type { ControlledWorkspace } from '@brq/controlled-workspace';
+import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/filesystem';
 import { createDeveloperAgent, loadDeveloperPromptAssets } from '@brq/developer-agent';
 import { createExecutionEngine, type ExecutionEngine } from '@brq/execution-engine';
 import {
+  createPersistentFactoryPipeline,
   createInMemoryExecutionRecordRepository,
   createPersistentExecutionEngine,
+  createRepositoryBackedFactoryExecutionHistory,
   createRepositoryBackedExecutionHistory,
   type ExecutionRecordRepository,
+  type FactoryExecutionRecordRepository,
 } from '@brq/execution-repository';
 import { PrismaExecutionRecordRepository } from '@brq/execution-repository/prisma';
 import {
@@ -17,13 +27,21 @@ import {
   type ExecutionDispatcher,
   type ExecutionWorker,
 } from '@brq/execution-worker';
+import {
+  createFactoryPipelineCoordinator,
+  type FactoryPipelineConfiguration,
+  type FactoryPipelineCoordinator,
+} from '@brq/factory-pipeline';
 import { createKnowledgeLoader, type KnowledgeSource } from '@brq/knowledge-loader';
 import {
   createInMemoryExecutionHistory,
+  createInMemoryFactoryExecutionHistory,
   createObservabilityLogger,
   createObservedExecutionEngine,
+  createObservedFactoryPipeline,
   type ExecutionHistoryReader,
   type ExecutionHistoryRecorder,
+  type FactoryExecutionHistoryRecorder,
 } from '@brq/observability';
 import { createOrchestrator } from '@brq/orchestrator';
 import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
@@ -32,6 +50,8 @@ import { createPromptBuilder } from '@brq/prompt-builder';
 import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
 import { createDevelopmentResponseValidator } from '@brq/response-validator/development';
+import type { SandboxRunner } from '@brq/sandbox-runner';
+import { createDockerSandboxRunner } from '@brq/sandbox-runner/docker';
 import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
@@ -41,6 +61,10 @@ import {
   createAIFactoryKnowledgeSource,
   resolveAIFactoryKnowledgeRoot,
 } from './ai-factory-runtime-configuration';
+import {
+  FACTORY_PIPELINE_CONFIGURATION,
+  resolveFactorySandboxRuntimeConfiguration,
+} from './factory-sandbox-runtime-configuration';
 
 export interface ApplicationRuntimeOptions {
   readonly aiProvider?: AIProvider;
@@ -51,6 +75,18 @@ export interface ApplicationRuntimeOptions {
   readonly executionRepository?: ExecutionRecordRepository;
   readonly logger?: Logger;
   readonly now?: () => number;
+}
+
+export interface ApplicationFactoryRuntimeOptions extends Omit<
+  ApplicationRuntimeOptions,
+  'executionRepository'
+> {
+  readonly executionRepository?: FactoryExecutionRecordRepository;
+  readonly factoryExecutionHistory?: FactoryExecutionHistoryRecorder;
+  readonly codeGeneratorAgent?: CodeGeneratorAgent;
+  readonly controlledWorkspace?: ControlledWorkspace;
+  readonly sandboxRunner?: SandboxRunner;
+  readonly factoryConfiguration?: FactoryPipelineConfiguration;
 }
 
 export interface ApplicationQueueRuntime {
@@ -64,13 +100,18 @@ export interface ApplicationWorkerRuntime {
   readonly worker: ExecutionWorker;
 }
 
-export interface ApplicationQueueRuntimeOptions {
-  readonly engine: ExecutionEngine;
+interface ApplicationQueueRuntimeBaseOptions {
   readonly repository: ExecutionRecordRepository;
   readonly queue?: JobQueue;
   readonly logger?: Logger;
   readonly now?: () => number;
 }
+
+export type ApplicationQueueRuntimeOptions = ApplicationQueueRuntimeBaseOptions &
+  (
+    | { readonly engine: ExecutionEngine; readonly pipeline?: never }
+    | { readonly pipeline: FactoryPipelineCoordinator; readonly engine?: never }
+  );
 
 export interface PrincipalExecutionDispatcherOptions {
   readonly principal: AuthenticatedPrincipal;
@@ -105,7 +146,7 @@ function composeApplicationWorkerRuntime(
     });
   const worker = createExecutionWorker({
     queue,
-    engine: options.engine,
+    ...('pipeline' in options ? { pipeline: options.pipeline } : { engine: options.engine }),
     repository: options.repository,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
@@ -120,19 +161,12 @@ export function createApplicationWorkerRuntime(
   return runtime;
 }
 
-export async function createApplicationRuntime(
-  options: ApplicationRuntimeOptions = {},
-): Promise<ExecutionEngine> {
-  const now = options.now ?? Date.now;
-  const baseLogger = options.logger ?? createLogger();
-  const repository = options.executionRepository ?? createInMemoryExecutionRecordRepository();
-  const memoryHistory = options.executionHistory ?? createInMemoryExecutionHistory({ now });
-  const executionHistory = createRepositoryBackedExecutionHistory({
-    history: memoryHistory,
-    repository,
-    logger: baseLogger,
-  });
-  const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
+async function composeExecutionCore(
+  options: ApplicationRuntimeOptions,
+  logger: Logger,
+  baseLogger: Logger,
+  now: () => number,
+) {
   const environment = options.environment ?? process.env;
   const knowledgeRoot = resolveAIFactoryKnowledgeRoot(environment, options.knowledgeRoot);
   const aiProvider =
@@ -192,7 +226,28 @@ export async function createApplicationRuntime(
     logger,
     now,
   });
-  const engine = createExecutionEngine({ orchestrator, logger, now });
+  return Object.freeze({
+    engine: createExecutionEngine({ orchestrator, logger, now }),
+    knowledgeLoader,
+    agentRunner,
+    responseValidator,
+  });
+}
+
+export async function createApplicationRuntime(
+  options: ApplicationRuntimeOptions = {},
+): Promise<ExecutionEngine> {
+  const now = options.now ?? Date.now;
+  const baseLogger = options.logger ?? createLogger();
+  const repository = options.executionRepository ?? createInMemoryExecutionRecordRepository();
+  const memoryHistory = options.executionHistory ?? createInMemoryExecutionHistory({ now });
+  const executionHistory = createRepositoryBackedExecutionHistory({
+    history: memoryHistory,
+    repository,
+    logger: baseLogger,
+  });
+  const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
+  const { engine } = await composeExecutionCore(options, logger, baseLogger, now);
   const observedEngine = createObservedExecutionEngine({ engine, history: executionHistory });
   return createPersistentExecutionEngine({
     engine: observedEngine,
@@ -203,12 +258,102 @@ export async function createApplicationRuntime(
   });
 }
 
+function resolveFactoryBoundaries(
+  options: ApplicationFactoryRuntimeOptions,
+  logger: Logger,
+  now: () => number,
+): { readonly workspace: ControlledWorkspace; readonly sandboxRunner: SandboxRunner } {
+  const hasWorkspace = options.controlledWorkspace !== undefined;
+  const hasSandbox = options.sandboxRunner !== undefined;
+  if (hasWorkspace !== hasSandbox) {
+    throw new TypeError(
+      'Controlled Workspace e Sandbox Runner devem ser injetados juntos na composição da Factory.',
+    );
+  }
+  if (options.controlledWorkspace !== undefined && options.sandboxRunner !== undefined) {
+    return Object.freeze({
+      workspace: options.controlledWorkspace,
+      sandboxRunner: options.sandboxRunner,
+    });
+  }
+
+  const configuration = resolveFactorySandboxRuntimeConfiguration(
+    options.environment ?? process.env,
+  );
+  return Object.freeze({
+    workspace: createFilesystemControlledWorkspace({
+      rootPath: configuration.workspaceRoot,
+      logger,
+      now,
+    }),
+    sandboxRunner: createDockerSandboxRunner({
+      workspaceRoot: configuration.workspaceRoot,
+      dockerExecutable: configuration.dockerExecutable,
+      dockerHost: configuration.dockerHost,
+      image: configuration.image,
+      policies: Object.freeze([configuration.policy]),
+      logger,
+      now,
+    }),
+  });
+}
+
+export async function createApplicationFactoryRuntime(
+  options: ApplicationFactoryRuntimeOptions = {},
+): Promise<FactoryPipelineCoordinator> {
+  const now = options.now ?? Date.now;
+  const baseLogger = options.logger ?? createLogger();
+  const repository = options.executionRepository ?? createInMemoryExecutionRecordRepository();
+  const memoryHistory =
+    options.factoryExecutionHistory ?? createInMemoryFactoryExecutionHistory({ now });
+  const executionHistory = createRepositoryBackedFactoryExecutionHistory({
+    history: memoryHistory,
+    repository,
+    logger: baseLogger,
+  });
+  const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
+  const core = await composeExecutionCore(options, logger, baseLogger, now);
+  const codeGeneratorAgent =
+    options.codeGeneratorAgent ??
+    createCodeGeneratorAgent({
+      knowledgeLoader: core.knowledgeLoader,
+      agentRunner: core.agentRunner,
+      responseValidator: core.responseValidator,
+      promptAssets: loadCodeGeneratorPromptAssets(),
+      logger,
+      now,
+    });
+  const boundaries = resolveFactoryBoundaries(options, logger, now);
+  const coordinator = createFactoryPipelineCoordinator({
+    executionEngine: core.engine,
+    codeGeneratorAgent,
+    workspace: boundaries.workspace,
+    sandboxRunner: boundaries.sandboxRunner,
+    configuration: options.factoryConfiguration ?? FACTORY_PIPELINE_CONFIGURATION,
+    logger,
+    now,
+  });
+  const observedPipeline = createObservedFactoryPipeline({
+    pipeline: coordinator,
+    history: executionHistory,
+  });
+  return createPersistentFactoryPipeline({
+    pipeline: observedPipeline,
+    repository,
+    history: executionHistory,
+    logger: baseLogger,
+    now,
+  });
+}
+
 interface ApplicationRuntimeState {
   runtime: Promise<ExecutionEngine> | undefined;
+  factoryRuntime: Promise<FactoryPipelineCoordinator> | undefined;
   queueRuntime: Promise<ApplicationWorkerRuntime> | undefined;
   readonly executionHistory: ExecutionHistoryRecorder;
+  readonly factoryExecutionHistory: FactoryExecutionHistoryRecorder;
   readonly logger: Logger;
-  executionRepository: ExecutionRecordRepository | undefined;
+  executionRepository: FactoryExecutionRecordRepository | undefined;
   jobQueue: JobQueue | undefined;
   prismaClient: DatabaseClient | undefined;
 }
@@ -218,8 +363,10 @@ const runtimeGlobal = globalThis as typeof globalThis & {
 };
 const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
   runtime: undefined,
+  factoryRuntime: undefined,
   queueRuntime: undefined,
   executionHistory: createInMemoryExecutionHistory(),
+  factoryExecutionHistory: createInMemoryFactoryExecutionHistory(),
   logger: createLogger(),
   executionRepository: undefined,
   jobQueue: undefined,
@@ -235,6 +382,17 @@ export function getExecutionEngine(): Promise<ExecutionEngine> {
     }),
   );
   return runtimeState.runtime;
+}
+
+export function getFactoryPipeline(): Promise<FactoryPipelineCoordinator> {
+  runtimeState.factoryRuntime ??= getExecutionRepository().then((executionRepository) =>
+    createApplicationFactoryRuntime({
+      factoryExecutionHistory: runtimeState.factoryExecutionHistory,
+      executionRepository,
+      logger: runtimeState.logger,
+    }),
+  );
+  return runtimeState.factoryRuntime;
 }
 
 export function getJobQueue(): JobQueue {
@@ -274,10 +432,10 @@ export function createPrincipalExecutionDispatcher(
 }
 
 function getApplicationWorkerRuntime(): Promise<ApplicationWorkerRuntime> {
-  runtimeState.queueRuntime ??= Promise.all([getExecutionEngine(), getExecutionRepository()]).then(
-    ([engine, repository]) =>
+  runtimeState.queueRuntime ??= Promise.all([getFactoryPipeline(), getExecutionRepository()]).then(
+    ([pipeline, repository]) =>
       createApplicationWorkerRuntime({
-        engine,
+        pipeline,
         repository,
         queue: getJobQueue(),
         logger: runtimeState.logger,
@@ -286,7 +444,7 @@ function getApplicationWorkerRuntime(): Promise<ApplicationWorkerRuntime> {
   return runtimeState.queueRuntime;
 }
 
-export async function getExecutionRepository(): Promise<ExecutionRecordRepository> {
+export async function getExecutionRepository(): Promise<FactoryExecutionRecordRepository> {
   if (runtimeState.executionRepository === undefined) {
     runtimeState.executionRepository = new PrismaExecutionRecordRepository(getDatabaseClient(), {
       access: 'INTERNAL',

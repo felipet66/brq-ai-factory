@@ -2,6 +2,7 @@ import { executionRequestSchema } from '@brq/execution-engine';
 import {
   executionRecordListQuerySchema,
   executionRecordStatusSchema,
+  persistedFactoryResultSchema,
 } from '@brq/execution-repository';
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
 import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
@@ -297,6 +298,7 @@ export const executionHistoryDetailSchema = executionHistoryItemSchema
     hashes: executionHistoryHashesSchema,
     lineage: executionHistoryLineageSchema.nullable(),
     provenance: executionHistoryProvenanceSchema.nullable(),
+    factoryResult: persistedFactoryResultSchema.nullable(),
   })
   .strict();
 

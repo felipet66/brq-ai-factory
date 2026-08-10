@@ -452,3 +452,12 @@ export const workspaceMaterializationResultSchema = z
       });
     }
   });
+
+export const workspaceReleaseResultSchema = z
+  .object({
+    workspaceId: z.string().regex(/^workspace-[a-f0-9]{32}$/u),
+    status: z.literal('RELEASED'),
+    planHash: controlledWorkspaceHashSchema,
+    workspaceHash: controlledWorkspaceHashSchema,
+  })
+  .strict();

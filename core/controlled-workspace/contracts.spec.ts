@@ -4,7 +4,13 @@ import type {
   WorkspaceMaterializationResult,
   WorkspacePlan,
   WorkspacePlanRequest,
+  WorkspaceReleaseResult,
 } from './contracts';
+import {
+  DEFAULT_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS,
+  MAX_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS,
+  workspaceReleaseResultSchema,
+} from './index';
 import { createWorkspacePlanRequestFixture } from './testing/controlled-workspace-fixtures';
 import { createWorkspacePlan } from './workspace-planner';
 
@@ -36,6 +42,15 @@ function assertPublicInputIsDeeplyReadonly(request: WorkspacePlanRequest): void 
 void assertPublicOutputsAreDeeplyReadonly;
 void assertPublicInputIsDeeplyReadonly;
 
+function assertReleaseOutputIsReadonly(result: WorkspaceReleaseResult): void {
+  // @ts-expect-error -- Release metadata is an immutable public output.
+  result.status = 'RELEASED';
+  // @ts-expect-error -- Correlation hashes cannot be reassigned by callers.
+  result.workspaceHash = 'mutated';
+}
+
+void assertReleaseOutputIsReadonly;
+
 describe('controlled workspace public output types', () => {
   it('matches the compile-time readonly contract with runtime deep freezing', () => {
     const plan = createWorkspacePlan(createWorkspacePlanRequestFixture());
@@ -43,5 +58,11 @@ describe('controlled workspace public output types', () => {
     expect(Object.isFrozen(plan.metadata)).toBe(true);
     expect(Object.isFrozen(plan.files)).toBe(true);
     expect(Object.isFrozen(plan.source)).toBe(true);
+  });
+
+  it('exports the additive lifecycle contract from the public barrel', () => {
+    expect(DEFAULT_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS).toBe(10_000);
+    expect(MAX_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS).toBe(30_000);
+    expect(workspaceReleaseResultSchema).toBeDefined();
   });
 });

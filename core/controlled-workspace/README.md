@@ -8,7 +8,8 @@ map their public output to `WorkspacePlanRequest` using source hashes and declar
 
 ```text
 WorkspacePlanRequest -> plan(request) -> immutable WorkspacePlan
-WorkspacePlan        -> materialize(plan) -> immutable WorkspaceMaterializationResult
+WorkspacePlan        -> materialize(plan, { signal? }) -> immutable WorkspaceMaterializationResult
+MaterializationResult -> release(result) -> immutable WorkspaceReleaseResult
 ```
 
 Planning recalculates every file byte length and content hash, the ordered bundle content hash,
@@ -42,7 +43,18 @@ references remain allowed.
 Files are written exclusively into a private staging directory, verified byte-for-byte, atomically
 renamed, and verified again. Existing destinations are never overwritten. Symlinks and non-regular
 filesystem entries are rejected, and failed staging or post-rename verification is cleaned up.
-The module never invokes a shell or network operation.
+Materialization observes cancellation cooperatively at filesystem boundaries and rolls back the
+owned staging or published directory before returning a cancellation. Cleanup uses a separate,
+host-configured deadline (10 seconds by default, at most 30 seconds) and is never retried
+implicitly. The module never invokes a shell or network operation.
+
+`release(result)` is the only public deletion capability. It accepts no path, uses only ownership
+recorded by the adapter instance, revalidates root and destination filesystem identities, and
+verifies the public plan/workspace hashes plus on-disk file hashes before deletion. Successful,
+concurrent, and repeated releases share one immutable metadata-only outcome. A failed cleanup is
+also retained and is not retried implicitly. If owned file bytes were tampered, release removes the
+owned directory but reports the verification failure; if ownership identity changed, it deletes
+nothing.
 
 ## Public entry points
 
@@ -62,7 +74,12 @@ import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/f
 
 const workspace = createFilesystemControlledWorkspace({ rootPath: hostOwnedRoot });
 const plan = workspace.plan(mappedWorkspacePlanRequest);
-const result = await workspace.materialize(plan);
+const result = await workspace.materialize(plan, { signal });
+try {
+  // Pass result to the next explicit boundary.
+} finally {
+  await workspace.release(result);
+}
 ```
 
 The caller owns only the public mapping. It cannot provide a destination path, and materialization
@@ -73,14 +90,17 @@ does not execute, install, build, test, or otherwise evaluate the generated file
 The adapter emits `controlled_workspace.plan.created`,
 `controlled_workspace.materialization.started`,
 `controlled_workspace.materialization.completed`, and
-`controlled_workspace.materialization.failed`. Records contain only identifiers, hashes, counts,
-byte totals, duration, and sanitized error code/stage. They never contain root paths, relative file
-paths, content, credentials, prompts, specifications, artifacts, or model responses. Logging is
-best effort and cannot change planning or materialization outcomes.
+`controlled_workspace.materialization.failed`, plus `controlled_workspace.release.started`,
+`controlled_workspace.release.completed`, and `controlled_workspace.release.failed`. Records
+contain only identifiers, hashes, counts, byte totals, duration, and sanitized error code/stage.
+They never contain root paths, relative file paths, content, credentials, prompts, specifications,
+artifacts, cancellation reasons, or model responses. Logging is best effort and cannot change
+planning, materialization, or release outcomes.
 
 ## Exclusions
 
 This workspace does not generate code, call agents/providers, execute commands, access the network,
 install dependencies, persist execution history, overwrite an existing destination, accept binary
-files, or expose a general-purpose filesystem API. Lifecycle orchestration remains outside this
-boundary.
+files, or expose a general-purpose filesystem API. The host still owns lifecycle orchestration;
+this boundary owns only safe materialization rollback and explicit release of directories it
+created.
