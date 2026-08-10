@@ -13,6 +13,7 @@ import {
 } from '../../core/ai-provider/fake/fake-ai-provider';
 import { FakeKnowledgeSource } from '../../core/knowledge-loader/testing/fake-knowledge-source';
 import { createTechnicalSpecification } from '../developer/testing/developer-fixtures';
+import { QA_BUSINESS_VALIDATION_ISSUE_CODES } from './business-validation';
 import { QA_AGENT_ERROR_CODES, QAAgentError } from './errors';
 import { createQAAgent } from './qa-agent';
 import { loadQAPromptAssets } from './prompt-assets';
@@ -211,6 +212,67 @@ describe('QAAgent', () => {
     const result = await agent.execute(request);
     expect(result.outcome).toBe('GENERATED');
     expect(result.readiness).toBe('PARTIALLY_READY');
+  });
+
+  it('gera artifacts quando uma dúvida própria não bloqueante declara readiness parcial', async () => {
+    const specification = createQASpecification({
+      readiness: 'PARTIALLY_READY',
+      openQuestions: [
+        {
+          id: 'QQ-001',
+          question: 'Qual será o volume esperado em produção?',
+          impact: 'NON_BLOCKING',
+        },
+      ],
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createQAAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(createQARequest());
+
+    expect(result.outcome).toBe('GENERATED');
+    expect(result.readiness).toBe('PARTIALLY_READY');
+    expect(result.artifacts).toHaveLength(3);
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it('rejeita category e readiness incoerentes sem retry ou autocorreção', async () => {
+    const base = createQASpecification();
+    const specification = createQASpecification({
+      readiness: 'READY',
+      openQuestions: [
+        {
+          id: 'QQ-001',
+          question: 'Qual será o volume esperado em produção?',
+          impact: 'NON_BLOCKING',
+        },
+      ],
+      traceability: {
+        ...base.traceability,
+        functionalCoverage: [{ sourceId: 'AC-001', scenarioIds: ['QAN-001'] }],
+      },
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createQAAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(createQARequest());
+
+    expect(result.outcome).toBe('VALIDATION_REJECTED');
+    expect(result.outcome === 'VALIDATION_REJECTED' ? result.rejectedAt : null).toBe(
+      'BUSINESS_VALIDATION',
+    );
+    expect(result.validation.business?.expectedReadiness).toBe('PARTIALLY_READY');
+    expect(result.validation.business?.issues.map(({ code }) => code)).toEqual(
+      expect.arrayContaining([
+        QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+        QA_BUSINESS_VALIDATION_ISSUE_CODES.READINESS_MISMATCH,
+      ]),
+    );
+    expect(result.artifacts).toEqual([]);
+    expect(result.metadata.generation).toBeNull();
+    expect(provider.calls).toHaveLength(1);
   });
 
   it.each([

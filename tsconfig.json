@@ -23,13 +23,16 @@
     "core/orchestrator/**/*.ts",
     "core/prompt-builder/**/*.ts",
     "core/prompt-inspector/**/*.ts",
+    "core/preview-artifact/**/*.ts",
+    "core/preview-runner/**/*.ts",
     "core/response-validator/**/*.ts",
     "prisma.config.ts",
     "prisma/**/*.ts",
     "shared/**/*.ts",
     "vitest.config.ts",
     "vitest.ai-live.config.ts",
-    "vitest.sandbox-integration.config.ts"
+    "vitest.sandbox-integration.config.ts",
+    "vitest.preview-integration.config.ts"
   ],
   "exclude": ["node_modules", "apps"]
 }

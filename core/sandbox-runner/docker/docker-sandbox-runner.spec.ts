@@ -15,6 +15,7 @@ import type {
   DockerCommandRequest,
   DockerCommandResult,
 } from './docker-cli';
+import type { DockerSandboxArtifactSink } from './artifact-capture';
 import { resolveDockerSandboxRunnerOptions } from './docker-configuration';
 import { createDockerSandboxRunner } from './docker-sandbox-runner';
 import { createDockerSandboxRunnerWithDependencies } from './internal-factory';
@@ -53,6 +54,16 @@ class FakeDockerExecutor implements DockerCommandExecutor {
   readonly stepResults: DockerCommandResult[] = [];
   startResult: DockerCommandResult = commandResult();
   readinessResult: DockerCommandResult = commandResult();
+  artifactExportResult: DockerCommandResult = commandResult({
+    stdout: capture(
+      JSON.stringify({
+        abiVersion: '1.0.0',
+        profileId: 'NODE_WEB_PREVIEW_24_V1',
+        exporterVersion: '1.0.0',
+        files: [{ path: 'index.html', content: '<main>ready</main>', mediaType: 'text/html' }],
+      }),
+    ),
+  });
   cleanupResult: DockerCommandResult = commandResult();
   imageOverride: Record<string, unknown> = {};
   containerOverride: Record<string, unknown> = {};
@@ -182,6 +193,7 @@ class FakeDockerExecutor implements DockerCommandExecutor {
     }
     if (args[0] === 'container' && args[1] === 'exec') {
       if (args.includes('/opt/brq/runner/ready.mjs')) return this.readinessResult;
+      if (args.includes('/opt/brq/runner/export.mjs')) return this.artifactExportResult;
       return this.stepResults.shift() ?? commandResult();
     }
     if (args[0] === 'container' && args[1] === 'rm') {
@@ -196,6 +208,7 @@ async function createHarness(
   overrides: {
     readonly executor?: FakeDockerExecutor;
     readonly policy?: ReturnType<typeof createSandboxExecutionPolicyFixture>;
+    readonly artifactSink?: DockerSandboxArtifactSink;
   } = {},
 ) {
   const workspaceRoot = await realpath(
@@ -223,7 +236,10 @@ async function createHarness(
     policies: [policy],
     now: () => tick++,
   });
-  const runner = createDockerSandboxRunnerWithDependencies(options, { executor });
+  const runner = createDockerSandboxRunnerWithDependencies(options, {
+    executor,
+    ...(overrides.artifactSink === undefined ? {} : { artifactSink: overrides.artifactSink }),
+  });
   const request: SandboxRunRequest = {
     context: { executionId: 'execution-sandbox-test' },
     workspace,
@@ -237,6 +253,68 @@ afterEach(async () => {
 });
 
 describe('DockerSandboxRunner', () => {
+  it('captures an opt-in canonical artifact after TEST and before cleanup', async () => {
+    const captured: Parameters<DockerSandboxArtifactSink['captured']>[0][] = [];
+    const unavailable: Parameters<DockerSandboxArtifactSink['unavailable']>[0][] = [];
+    const artifactSink: DockerSandboxArtifactSink = {
+      captured: (artifact) => {
+        captured.push(artifact);
+      },
+      unavailable: (outcome) => {
+        unavailable.push(outcome);
+      },
+    };
+    const { runner, request, executor } = await createHarness({ artifactSink });
+
+    const result = await runner.run(request);
+
+    expect(result.status).toBe('SUCCESS');
+    expect(captured).toHaveLength(1);
+    expect(unavailable).toEqual([]);
+    expect(captured[0]).toMatchObject({
+      executionId: request.context.executionId,
+      workspaceId: request.workspace.workspaceId,
+      workspaceHash: request.workspace.metadata.workspaceHash,
+      policyId: request.policyId,
+      sandboxRequestHash: result.hashes.sandboxRequestHash,
+    });
+    expect(JSON.parse(captured[0]!.envelope)).toMatchObject({
+      abiVersion: '1.0.0',
+      profileId: 'NODE_WEB_PREVIEW_24_V1',
+    });
+    const exportIndex = executor.requests.findIndex((call) =>
+      call.args.includes('/opt/brq/runner/export.mjs'),
+    );
+    const cleanupIndex = executor.requests.findIndex(
+      (call) => call.args[0] === 'container' && call.args[1] === 'rm',
+    );
+    expect(exportIndex).toBeGreaterThan(-1);
+    expect(exportIndex).toBeLessThan(cleanupIndex);
+    expect(result).not.toHaveProperty('artifact');
+  });
+
+  it('keeps the Sandbox outcome authoritative when optional artifact export is invalid', async () => {
+    const unavailable: Parameters<DockerSandboxArtifactSink['unavailable']>[0][] = [];
+    const executor = new FakeDockerExecutor();
+    executor.artifactExportResult = commandResult({ stdout: capture('{}') });
+    const { runner, request } = await createHarness({
+      executor,
+      artifactSink: {
+        captured: () => undefined,
+        unavailable: (outcome) => {
+          unavailable.push(outcome);
+        },
+      },
+    });
+
+    const result = await runner.run(request);
+
+    expect(result.status).toBe('SUCCESS');
+    expect(unavailable).toHaveLength(1);
+    expect(unavailable[0]?.code).toBe('EXPORT_INVALID_OUTPUT');
+    expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(1);
+  });
+
   it('runs the fixed pipeline with a stdin workspace envelope and no host mount', async () => {
     const { runner, request, executor, workspaceRoot } = await createHarness();
 

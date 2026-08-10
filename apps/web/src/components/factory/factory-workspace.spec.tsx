@@ -10,6 +10,12 @@ import {
 } from './factory-view-model.spec.fixtures';
 import { FactoryWorkspace } from './factory-workspace';
 
+vi.mock('./preview-control', () => ({
+  PreviewControl: ({ factoryApproved }: { readonly factoryApproved: boolean }) => (
+    <section aria-label="preview control">{factoryApproved ? 'APPROVED' : 'UNAVAILABLE'}</section>
+  ),
+}));
+
 afterEach(cleanup);
 
 describe('FactoryWorkspace', () => {
@@ -27,6 +33,9 @@ describe('FactoryWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'Knowledge system preflight' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Factory Floor' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Code to verified workspace' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'preview control' })).toHaveTextContent(
+      'UNAVAILABLE',
+    );
     expect(screen.getByText(/No Factory Pipeline evidence/)).toBeVisible();
     expect(screen.getByRole('list', { name: 'Agent production line' })).toBeVisible();
     expect(screen.getAllByRole('button', { name: /station,/ })).toHaveLength(3);
@@ -70,6 +79,7 @@ describe('FactoryWorkspace', () => {
     expect(within(pipeline).getByText('Build')).toBeVisible();
     expect(within(pipeline).getByText('Test')).toBeVisible();
     expect(within(pipeline).getByText('RELEASED')).toBeVisible();
+    expect(screen.getByRole('region', { name: 'preview control' })).toHaveTextContent('APPROVED');
     expect(container).not.toHaveTextContent('stdout');
     expect(container).not.toHaveTextContent('stderr');
     expect(container).not.toHaveTextContent('containerId');

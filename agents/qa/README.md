@@ -39,10 +39,11 @@ Artifacts canônicos:
 ## Garantias
 
 - uma chamada ao provider por execução;
-- assets `prompts/qa/1.0.0` validados e pinados por hash;
+- assets ativos `prompts/qa/1.0.1` validados e pinados por hash, com o release histórico `1.0.0` preservado;
 - três contextos `INPUT/UNTRUSTED`;
 - cobertura obrigatória de `AC`, `BR`, `DEC` e `DOD`;
-- readiness recalculado;
+- consistência relacional entre coverage, matriz e referências dos cenários orientada pelo prompt e validada autoritativamente pela Business Validation;
+- readiness derivado pela tabela ordenada das duas fontes, bloqueios, dúvidas e premissas;
 - logs allowlisted;
 - resultado profundamente imutável;
 - ausência de retry, workflow, código, Playwright e execução de testes.

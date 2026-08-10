@@ -36,8 +36,8 @@ describe('inspection-only Playground runtime', () => {
     ]);
     expect(catalog.agents.map(({ versions }) => versions.promptVersion)).toEqual([
       '1.0.1',
-      '1.0.2',
-      '1.0.0',
+      '1.0.3',
+      '1.0.1',
     ]);
     expect(catalog.agents.every(({ examples }) => examples.length > 0)).toBe(true);
     expect(catalog.agents.every(({ examples }) => examples[0]?.candidate !== undefined)).toBe(true);
@@ -76,6 +76,11 @@ describe('inspection-only Playground runtime', () => {
       expect(result.outputContract.format).toBe('JSON_SCHEMA');
       expect(result.outputContract.summary.totalNodes).toBeGreaterThan(0);
       expect(result.outputContract.schemaHash).toMatch(/^[a-f0-9]{64}$/);
+      if (descriptor.agent === 'QA') {
+        expect(result.prompt.instructions).toContain('blockingItems.length > 0');
+        expect(result.prompt.instructions).toContain('functionalCoverage');
+        expect(result.prompt.instructions).toContain('ao menos um functionalSourceId da linha');
+      }
     }
   });
 

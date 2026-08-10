@@ -131,6 +131,40 @@ export function rejectRequestBody(request: Request): void {
   }
 }
 
+/**
+ * Accepts a genuinely empty body even when the Next.js Node adapter represents an HTTP POST with
+ * `Content-Length: 0` as an empty ReadableStream. Any observed byte still fails closed.
+ */
+export async function requireEmptyRequestBody(request: Request): Promise<void> {
+  const contentLength = request.headers.get('content-length');
+  if (contentLength !== null && (!/^\d+$/u.test(contentLength) || contentLength !== '0')) {
+    throw new HttpApiError('A requisição não aceita corpo.', {
+      code: API_ERROR_CODES.INVALID_REQUEST,
+      status: 400,
+      path: 'body',
+    });
+  }
+  if (request.body === null) return;
+
+  const reader = request.body.getReader();
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value.byteLength > 0) {
+        await reader.cancel().catch(() => undefined);
+        throw new HttpApiError('A requisição não aceita corpo.', {
+          code: API_ERROR_CODES.INVALID_REQUEST,
+          status: 400,
+          path: 'body',
+        });
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export function readExecutionListQuery(request: Request): ExecutionListQueryHttp {
   const search = new URL(request.url).searchParams;
   const query: Record<string, string> = {};

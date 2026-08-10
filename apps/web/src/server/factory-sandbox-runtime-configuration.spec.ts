@@ -46,7 +46,7 @@ describe('Factory Sandbox host configuration', () => {
     expect(configuration.policy.policyId).toBe(FACTORY_SANDBOX_POLICY_ID);
     expect(configuration.image.reference).toContain('@sha256:');
     expect(configuration.image.requiredLabels).toEqual({
-      'org.brq.sandbox.factory-profile': 'node-typescript-24-v1',
+      'org.brq.sandbox.factory-profile': 'node-web-preview-24-v1',
     });
   });
 

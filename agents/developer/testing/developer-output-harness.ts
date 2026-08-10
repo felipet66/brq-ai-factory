@@ -110,7 +110,7 @@ function diagnosticRunResult(candidate: JsonValue, outputContractHash: string): 
       metadata: {
         promptId: 'prompt:developer',
         agent: 'DEVELOPER',
-        version: '1.0.2',
+        version: '1.0.3',
         schemaVersion: '1.0.0',
         templateHash: DIAGNOSTIC_HASH_A,
         promptHash: DIAGNOSTIC_HASH_B,

@@ -336,18 +336,27 @@ describe('AI Factory host Prompt Builder budget', () => {
     });
     expect(developerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 259_235,
-      instructionsBytes: 55_146,
+      usedBytes: 262_035,
+      instructionsBytes: 57_320,
       inputBytes: 182_980,
-      outputContractBytes: 21_109,
+      outputContractBytes: 21_735,
     });
+    expect(developerPrompt.rendered.instructions).toContain(
+      'openQuestions.length > 0 OR qualquer assumptions[].requiresValidation === true',
+    );
+    expect(developerPrompt.rendered.instructions).toContain(
+      'Confirme que o campo readiness é exatamente igual ao resultado derivado',
+    );
     expect(qaPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 405_797,
-      instructionsBytes: 33_886,
+      usedBytes: 412_211,
+      instructionsBytes: 38_775,
       inputBytes: 362_258,
-      outputContractBytes: 9_653,
+      outputContractBytes: 11_178,
     });
+    expect(qaPrompt.rendered.instructions).toContain('blockingItems.length > 0');
+    expect(qaPrompt.rendered.instructions).toContain('functionalCoverage');
+    expect(qaPrompt.rendered.instructions).toContain('ao menos um functionalSourceId da linha');
     expect(qaPrompt.budget.usedBytes).toBeLessThan(AI_FACTORY_PROMPT_BUILDER_MAX_BYTES);
   });
 
@@ -400,7 +409,8 @@ describe('AI Factory host Prompt Builder budget', () => {
       expect(promptRecords.find((record) => record.agent === 'PRODUCT_OWNER')?.version).toBe(
         '1.0.1',
       );
-      expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.2');
+      expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.3');
+      expect(promptRecords.find((record) => record.agent === 'QA')?.version).toBe('1.0.1');
       expect(promptRecords.every((record) => record.maxBytes === 512 * 1024)).toBe(true);
       expect(
         promptRecords.find((record) => record.agent === 'DEVELOPER')?.usedBytes,

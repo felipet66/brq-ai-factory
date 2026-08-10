@@ -4,6 +4,12 @@ import type { ExecutionObservabilitySnapshot } from '@brq/observability';
 import type { z } from 'zod';
 
 import type { AuthenticatedUser } from '@/api/auth-contracts';
+import {
+  executionPreviewControlSchema,
+  previewSessionViewSchema,
+  type ExecutionPreviewControl,
+  type PreviewSessionView,
+} from '@/api/preview-contracts';
 
 import { HTTP_API_VERSION } from './constants';
 import { jsonResponse } from './response-foundation';
@@ -148,4 +154,42 @@ export function executionTimelineResponse(
     errors: [],
   });
   return jsonResponse(body, { status: 200, requestId });
+}
+
+export function previewControlResponse(
+  control: ExecutionPreviewControl,
+  requestId: string,
+  executionId: string,
+): Response {
+  const data = executionPreviewControlSchema.parse(control);
+  return jsonResponse(
+    {
+      success: true,
+      data,
+      metadata: { requestId, apiVersion: HTTP_API_VERSION, executionId },
+      errors: [],
+    },
+    { status: 200, requestId },
+  );
+}
+
+export function previewSessionResponse(
+  session: PreviewSessionView,
+  requestId: string,
+  status: 200 | 201,
+): Response {
+  const data = previewSessionViewSchema.parse(session);
+  return jsonResponse(
+    {
+      success: true,
+      data,
+      metadata: {
+        requestId,
+        apiVersion: HTTP_API_VERSION,
+        executionId: data.executionId,
+      },
+      errors: [],
+    },
+    { status, requestId },
+  );
 }

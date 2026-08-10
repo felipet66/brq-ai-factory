@@ -558,9 +558,9 @@ export function createInMemoryFactoryExecutionHistory(
       const record = aliases.get(result.executionId) ?? aliases.get(result.workflowId);
       if (record === undefined) return;
       attachExecutionId(record, result.executionId);
-      const at = Math.max(record.lastTimestampMs, Date.parse(result.finishedAt));
-      record.lastTimestampMs = at;
-      record.updatedAtMs = at;
+      const terminalObservedAt = Math.max(record.lastTimestampMs, Date.parse(result.finishedAt));
+      record.lastTimestampMs = terminalObservedAt;
+      record.updatedAtMs = terminalObservedAt;
       record.status = result.status;
 
       const byStage = new Map(result.stages.map((stage) => [stage.stageId, stage]));
@@ -600,7 +600,7 @@ export function createInMemoryFactoryExecutionHistory(
           .sort((left, right) => right - left)[0];
         const wasActive = stage.status === 'PENDING' || stage.status === 'RUNNING';
         if (status === 'SKIPPED') {
-          if (wasActive) finishStage(record, stageId, 'SKIPPED', at);
+          if (wasActive) finishStage(record, stageId, 'SKIPPED', terminalObservedAt);
           stage.status = 'SKIPPED';
           stage.startedAtMs = null;
           stage.finishedAtMs = null;
@@ -608,8 +608,8 @@ export function createInMemoryFactoryExecutionHistory(
           continue;
         }
         if (wasActive) {
-          if (stage.status === 'PENDING') startStage(record, stageId, at);
-          finishStage(record, stageId, status, at, terminal?.failure?.code ?? null);
+          if (stage.status === 'PENDING') startStage(record, stageId, terminalObservedAt);
+          finishStage(record, stageId, status, terminalObservedAt, terminal?.failure?.code ?? null);
         }
         const projected = record.stages.get(stageId)!;
         projected.status = status;
@@ -623,7 +623,7 @@ export function createInMemoryFactoryExecutionHistory(
 
       const knowledge = record.stages.get('KNOWLEDGE')!;
       if (knowledge.status === 'PENDING' || knowledge.status === 'RUNNING') {
-        finishStage(record, 'KNOWLEDGE', 'SKIPPED', at);
+        finishStage(record, 'KNOWLEDGE', 'SKIPPED', terminalObservedAt);
       }
       const stages = projectStages(record, result.executionId);
       const metrics = AGENT_STAGE_ORDER.map((stageId) => record.metrics.get(stageId)!);
@@ -649,10 +649,10 @@ export function createInMemoryFactoryExecutionHistory(
         result.status === 'SUCCESS' ? 'execution.finished' : 'execution.failed',
         'FACTORY',
         result.status,
-        at,
+        terminalObservedAt,
         {
           startedAtMs: Date.parse(result.startedAt),
-          finishedAtMs: Date.parse(result.finishedAt),
+          finishedAtMs: terminalObservedAt,
           durationMs: result.durationMs,
           errorCode: result.failure?.code ?? null,
         },

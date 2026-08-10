@@ -153,23 +153,63 @@ function validSpecification(
 }
 
 describe('Developer Business Validation', () => {
-  it('derives readiness without upgrading the Product Owner readiness', () => {
-    expect(deriveDeveloperReadiness('READY', [], [])).toBe('READY');
-    expect(deriveDeveloperReadiness('PARTIALLY_READY', [], [])).toBe('PARTIALLY_READY');
-    expect(deriveDeveloperReadiness('READY', [{ id: 'TQ-001', impact: 'NON_BLOCKING' }], [])).toBe(
+  it.each([
+    ['ready source without pending items', 'READY', [], [], 'READY'],
+    [
+      'non-blocking question',
+      'READY',
+      [{ id: 'TQ-001', impact: 'NON_BLOCKING' }],
+      [],
       'PARTIALLY_READY',
-    );
-    expect(
-      deriveDeveloperReadiness('READY', [], [{ id: 'TASM-001', requiresValidation: true }]),
-    ).toBe('PARTIALLY_READY');
-    expect(
-      deriveDeveloperReadiness(
-        'REQUIRES_CLARIFICATION',
-        [{ id: 'TQ-001', impact: 'BLOCKING' }],
-        [],
-      ),
-    ).toBe('REQUIRES_CLARIFICATION');
-  });
+    ],
+    [
+      'assumption requiring validation',
+      'READY',
+      [],
+      [{ id: 'TASM-001', requiresValidation: true }],
+      'PARTIALLY_READY',
+    ],
+    ['validated assumption', 'READY', [], [{ id: 'TASM-001', requiresValidation: false }], 'READY'],
+    ['partially ready source', 'PARTIALLY_READY', [], [], 'PARTIALLY_READY'],
+    [
+      'blocking question over partially ready source',
+      'PARTIALLY_READY',
+      [{ id: 'TQ-001', impact: 'BLOCKING' }],
+      [],
+      'REQUIRES_CLARIFICATION',
+    ],
+    [
+      'requires-clarification source without local questions',
+      'REQUIRES_CLARIFICATION',
+      [],
+      [],
+      'REQUIRES_CLARIFICATION',
+    ],
+    [
+      'blocking question over ready source',
+      'READY',
+      [{ id: 'TQ-001', impact: 'BLOCKING' }],
+      [],
+      'REQUIRES_CLARIFICATION',
+    ],
+    [
+      'blocking question takes precedence in a mixed list',
+      'READY',
+      [
+        { id: 'TQ-001', impact: 'NON_BLOCKING' },
+        { id: 'TQ-002', impact: 'BLOCKING' },
+      ],
+      [],
+      'REQUIRES_CLARIFICATION',
+    ],
+  ] as const)(
+    'derives readiness deterministically for %s',
+    (_case, sourceReadiness, openQuestions, assumptions, expectedReadiness) => {
+      expect(deriveDeveloperReadiness(sourceReadiness, openQuestions, assumptions)).toBe(
+        expectedReadiness,
+      );
+    },
+  );
 
   it('accepts a coherent specification and deeply freezes the report', () => {
     const specification = validSpecification();

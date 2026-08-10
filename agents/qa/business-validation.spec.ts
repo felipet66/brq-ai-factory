@@ -134,6 +134,72 @@ describe('QA Business Validation', () => {
       createTechnicalSpecification(),
     );
     expect(issueCodes(result)).toContain(QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+        path: ['traceability', 'functionalCoverage', 0, 'scenarioIds'],
+      }),
+    );
+  });
+
+  it('rejeita mapa técnico que aponta para cenário sem a mesma fonte', () => {
+    const base = createQASpecification();
+    const specification = createQASpecification({
+      traceability: {
+        ...base.traceability,
+        technicalCoverage: [
+          { sourceId: 'DEC-001', scenarioIds: ['QAE-001'] },
+          { sourceId: 'DOD-001', scenarioIds: ['QAP-001', 'QAE-001'] },
+        ],
+      },
+    });
+    const result = validateQABusinessRules(
+      specification,
+      createProductOwnerSpecification(),
+      createTechnicalSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+        path: ['traceability', 'technicalCoverage', 0, 'scenarioIds'],
+      }),
+    );
+  });
+
+  it('rejeita linha da matriz cujo cenário não declara nenhuma fonte relacionada', () => {
+    const base = createQASpecification();
+    const specification = createQASpecification({
+      traceability: {
+        ...base.traceability,
+        matrix: [
+          {
+            id: 'QTR-001',
+            functionalSourceIds: ['AC-001'],
+            technicalSourceIds: [],
+            scenarioIds: ['QAN-001'],
+          },
+          {
+            id: 'QTR-002',
+            functionalSourceIds: [],
+            technicalSourceIds: ['DEC-001', 'DOD-001'],
+            scenarioIds: ['QAP-001', 'QAN-001', 'QAE-001'],
+          },
+        ],
+      },
+    });
+    const result = validateQABusinessRules(
+      specification,
+      createProductOwnerSpecification(),
+      createTechnicalSpecification(),
+    );
+
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        code: QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+        path: ['traceability', 'matrix', 0, 'scenarioIds'],
+      }),
+    );
   });
 
   it('recalcula o resumo de cobertura', () => {
@@ -172,17 +238,46 @@ describe('QA Business Validation', () => {
     );
   });
 
-  it('deriva readiness com precedência determinística', () => {
+  it('deriva READY somente quando as fontes e coleções finais não possuem pendências', () => {
     expect(deriveQAReadiness('READY', 'READY', [], [], [])).toBe('READY');
+    expect(
+      deriveQAReadiness('READY', 'READY', [], [{ id: 'QASM-001', requiresValidation: false }], []),
+    ).toBe('READY');
+  });
+
+  it('deriva PARTIALLY_READY de qualquer fonte parcial, dúvida ou premissa pendente', () => {
+    expect(deriveQAReadiness('PARTIALLY_READY', 'READY', [], [], [])).toBe('PARTIALLY_READY');
+    expect(deriveQAReadiness('READY', 'PARTIALLY_READY', [], [], [])).toBe('PARTIALLY_READY');
     expect(
       deriveQAReadiness('READY', 'READY', [{ id: 'QQ-001', impact: 'NON_BLOCKING' }], [], []),
     ).toBe('PARTIALLY_READY');
     expect(
-      deriveQAReadiness('READY', 'READY', [], [], [{ id: 'QBLK-001', sourceIds: ['AC-001'] }]),
-    ).toBe('REQUIRES_CLARIFICATION');
+      deriveQAReadiness('READY', 'READY', [], [{ id: 'QASM-001', requiresValidation: true }], []),
+    ).toBe('PARTIALLY_READY');
+  });
+
+  it('deriva REQUIRES_CLARIFICATION com precedência para fontes, bloqueios e dúvidas bloqueantes', () => {
     expect(deriveQAReadiness('REQUIRES_CLARIFICATION', 'READY', [], [], [])).toBe(
       'REQUIRES_CLARIFICATION',
     );
+    expect(deriveQAReadiness('READY', 'REQUIRES_CLARIFICATION', [], [], [])).toBe(
+      'REQUIRES_CLARIFICATION',
+    );
+    expect(
+      deriveQAReadiness('READY', 'READY', [], [], [{ id: 'QBLK-001', sourceIds: ['AC-001'] }]),
+    ).toBe('REQUIRES_CLARIFICATION');
+    expect(
+      deriveQAReadiness('READY', 'READY', [{ id: 'QQ-001', impact: 'BLOCKING' }], [], []),
+    ).toBe('REQUIRES_CLARIFICATION');
+    expect(
+      deriveQAReadiness(
+        'PARTIALLY_READY',
+        'PARTIALLY_READY',
+        [{ id: 'QQ-001', impact: 'BLOCKING' }],
+        [{ id: 'QASM-001', requiresValidation: true }],
+        [],
+      ),
+    ).toBe('REQUIRES_CLARIFICATION');
   });
 
   it('rejeita readiness declarada diferente da derivada', () => {
@@ -191,6 +286,26 @@ describe('QA Business Validation', () => {
       createProductOwnerSpecification(),
       createTechnicalSpecification(),
     );
+    expect(issueCodes(result)).toContain(QA_BUSINESS_VALIDATION_ISSUE_CODES.READINESS_MISMATCH);
+  });
+
+  it('reproduz a regressão real quando uma dúvida não bloqueante exige readiness parcial', () => {
+    const result = validateQABusinessRules(
+      createQASpecification({
+        readiness: 'READY',
+        openQuestions: [
+          {
+            id: 'QQ-001',
+            question: 'Qual será o volume esperado em produção?',
+            impact: 'NON_BLOCKING',
+          },
+        ],
+      }),
+      createProductOwnerSpecification(),
+      createTechnicalSpecification(),
+    );
+
+    expect(result.expectedReadiness).toBe('PARTIALLY_READY');
     expect(issueCodes(result)).toContain(QA_BUSINESS_VALIDATION_ISSUE_CODES.READINESS_MISMATCH);
   });
 

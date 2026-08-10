@@ -51,7 +51,8 @@ brq-ai-factory/
 │   │   ├── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
 │   │   ├── ADR-032-CODE-GENERATION-BOUNDARY.md
 │   │   ├── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
-│   │   └── ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md
+│   │   ├── ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md
+│   │   └── ADR-035-PREVIEW-RUNNER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -103,7 +104,9 @@ brq-ai-factory/
 │   ├── 47-CONTROLLED_WORKSPACE_FLOW.md
 │   ├── 48-SANDBOX_RUNNER_FLOW.md
 │   ├── 49-SANDBOX_SECURITY_MODEL.md
-│   └── 50-FACTORY_PIPELINE_FLOW.md
+│   ├── 50-FACTORY_PIPELINE_FLOW.md
+│   ├── 51-PREVIEW_RUNNER_FLOW.md
+│   └── 52-PREVIEW_SECURITY_MODEL.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -115,7 +118,9 @@ brq-ai-factory/
 │   ├── prompt-inspector/
 │   ├── controlled-workspace/
 │   ├── factory-pipeline/
-│   └── sandbox-runner/
+│   ├── sandbox-runner/
+│   ├── preview-artifact/
+│   └── preview-runner/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -128,8 +133,11 @@ brq-ai-factory/
 │   ├── developer/
 │   │   ├── 1.0.0/
 │   │   ├── 1.0.1/
-│   │   └── 1.0.2/ (ativo)
-│   ├── qa/1.0.0/
+│   │   ├── 1.0.2/
+│   │   └── 1.0.3/ (ativo)
+│   ├── qa/
+│   │   ├── 1.0.0/
+│   │   └── 1.0.1/ (ativo)
 │   └── code-generator/1.0.0/
 ├── shared/
 ├── prisma/
@@ -171,15 +179,17 @@ preservando variáveis já definidas no processo.
 
 Execuções completas da Factory exigem o adapter Docker explicitamente configurado. O host não
 substitui uma configuração ausente ou inválida por `FakeSandboxRunner`. A imagem operacional da
-Factory é separada da fixture de integração da Sprint 23 e deve ser construída e carregada pelo
-operador:
+Factory é separada da fixture de integração da Sprint 23 e do runtime que serve o Preview. O host
+atual exige o profile estrito `NODE_WEB_PREVIEW_24_V1`, que preserva
+`PREPARE → TYPECHECK → BUILD → TEST` e somente depois de `TEST` permite ao adapter confiável
+exportar o envelope estático. Ela deve ser construída e carregada pelo operador:
 
 ```bash
 SOURCE_DATE_EPOCH=0 BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker buildx build \
   --platform linux/arm64 \
-  --tag brq-ai-factory/factory-sandbox:sprint24-local \
+  --tag brq-ai-factory/factory-web-preview:sprint25-local \
   --load --network=none --provenance=false --sbom=false \
-  apps/web/docker/factory-sandbox
+  apps/web/docker/factory-web-preview
 ```
 
 Depois do build, configure `BRQ_FACTORY_WORKSPACE_ROOT`,
@@ -194,6 +204,33 @@ pull/build automático e falha fechada quando o opt-in ou a configuração não 
 
 ```bash
 BRQ_FACTORY_SANDBOX_INTEGRATION=1 npm run test:factory:integration
+```
+
+O Preview usa uma imagem operacional própria, separada tanto do container de build/test da
+Factory quanto da fixture da Sprint 23. Ela serve exclusivamente o profile estático e fail-closed
+`NODE_WEB_PREVIEW_24_V1`; não executa comandos, servidores ou scripts provenientes do projeto
+gerado. O build e o load são sempre explícitos:
+
+```bash
+SOURCE_DATE_EPOCH=0 BUILDX_NO_DEFAULT_ATTESTATIONS=1 docker buildx build \
+  --platform linux/arm64 \
+  --tag brq-ai-factory/preview-runner:sprint25-local \
+  --load --network=none --provenance=false --sbom=false \
+  apps/web/docker/preview-runner
+```
+
+Configure `BRQ_PREVIEW_ARTIFACT_ROOT`, `BRQ_PREVIEW_ORIGIN_TEMPLATE`, o segredo exclusivo do
+cookie de Preview e a identidade imutável da imagem nas variáveis `BRQ_PREVIEW_*` descritas em
+`.env.example`. A raiz de artifacts é efêmera e deve ser absoluta, específica, privada e separada
+do Controlled Workspace. Em desenvolvimento local, o template recomendado é
+`http://{previewId}.preview.localhost:3000`; cada Preview recebe uma origin própria.
+
+A integração Docker real cobre `Artifact → Start → Health → conteúdo servido → Stop → Cleanup` e
+continua fora dos quality gates normais. Ela exige daemon e imagem digest-pinned já disponíveis,
+não faz pull/build automático e falha fechada sem opt-in ou configuração completa:
+
+```bash
+BRQ_PREVIEW_INTEGRATION=1 npm run test:preview:integration
 ```
 
 ## Persistência
@@ -214,6 +251,11 @@ A Sprint 19 adiciona `User`, `Session`, `Account` e `Verification` para o adapte
 torna `ExecutionRecord.userId` obrigatório. `ExecutionJob` herda o owner pela relação com o
 registro, sem duplicar `userId`. O seed de autenticação é opcional para o bootstrap do ambiente
 local e nunca possui senha versionada.
+
+A Sprint 25 adiciona tabelas normalizadas para descritores de `PreviewArtifact`, sessões, eventos,
+provenance e tickets de acesso de uso único. Somente metadata segura, hashes, lifecycle, limites,
+policy, identidade da imagem e o hash do ticket são persistidos. Código, filesystem, host paths,
+portas, container IDs, stdout/stderr, cookies e tickets em claro permanecem fora do banco.
 
 ## AI Provider
 
@@ -310,7 +352,11 @@ A saída é uma `TechnicalSpecification` declarativa com arquitetura, complexida
 
 O Developer atua como arquiteto: não gera código ou testes, não executa comandos, não persiste drafts, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator. O contexto `DEVELOPER` mantém seis documentos obrigatórios dentro do orçamento padrão de 64 KiB; documentos adicionais continuam opcionais e determinísticos.
 
-Os releases `prompts/developer/1.0.0` e `1.0.1` permanecem preservados. O bundle ativo `1.0.2` alinha o JSON Schema versionado ao schema Zod público: paths de módulos inseguros e valores `order` acima de `Number.MAX_SAFE_INTEGER` são rejeitados já no Response Validator. Normalização Unicode NFC e a diferença entre `maxLength` por code points e comprimento UTF-16 permanecem explicitadas no prompt e autoritativamente verificadas pelo Zod.
+Os releases `prompts/developer/1.0.0`, `1.0.1` e `1.0.2` permanecem preservados. O bundle ativo
+`1.0.3` mantém o JSON Schema público do `1.0.2` e explicita, em ordem normativa, a derivação de
+readiness a partir da specification funcional, de `openQuestions[].impact` e de
+`assumptions[].requiresValidation`. A instrução final exige conferir o valor declarado sobre as
+coleções finais; a Developer Business Validation permanece autoritativa e inalterada.
 
 O diagnóstico local do Structured Output não chama provider. Coloque uma resposta JSON capturada
 em `.ai/debug/structured-output/` — diretório ignorado pelo Git — e execute:
@@ -326,9 +372,11 @@ fixture canônica e marca `businessContextSource` como `DEFAULT_FIXTURE`; use o 
 reproduzir o handoff histórico. `candidateHash` identifica somente o JSON local e não equivale ao
 `responseHash` do envelope de produção. O arquivo pode conter dados funcionais: deve permanecer
 local, não deve conter segredos e nunca é capturado automaticamente, persistido ou enviado ao
-frontend. A auditoria do 1.0.2 não encontrou drift entre o output contract, o schema usado pelo
-Validator e o schema transportado por Agent Runner e OpenAI adapter; por isso, nenhum bundle
-1.0.3 é criado sem reproduzir a resposta histórica.
+frontend. A auditoria do `1.0.2` não encontrou drift entre o output contract, o schema usado pelo
+Validator e o schema transportado por Agent Runner e OpenAI adapter. Uma reprodução posterior
+confirmou `DEVELOPER_READINESS_MISMATCH`: o JSON era estruturalmente válido, mas não aplicava a
+tabela já exigida pela Business Validation. O `1.0.3` corrige somente essa orientação sem alterar o
+schema, o runtime ou a validação de negócio.
 
 [Fluxo visual do Developer Agent](knowledge/34-DEVELOPER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-020](knowledge/ADR/ADR-020-DEVELOPER-AGENT-BOUNDARY.md)
 
@@ -337,6 +385,8 @@ Validator e o schema transportado por Agent Runner e OpenAI adapter; por isso, n
 O workspace `agents/qa` implementa a terceira fachada concreta. O request recebe `ProductOwnerSpecification` e `TechnicalSpecification` pelos contratos públicos e valida a compatibilidade do par antes de carregar knowledge ou consumir IA. A fachada não executa nem chama os agentes anteriores.
 
 Cada tentativa projeta exatamente três contextos `INPUT/UNTRUSTED` e segue `Knowledge Loader → Agent Runner → Response Validator → QA Business Validation → Artifact Generator`. A Business Validation exige cobertura verificável de todos os IDs `AC`, `BR`, `DEC` e `DOD`, recalcula totais e readiness e rejeita referências inválidas sem corrigir a saída.
+
+O bundle ativo `prompts/qa/1.0.1` preserva o JSON Schema público do `1.0.0` e explicita as invariantes relacionais entre `functionalCoverage`, `technicalCoverage`, matriz e referências dos cenários, além da tabela ordenada de readiness. A Business Validation permanece a fonte autoritativa e fail-closed dessas regras.
 
 Uma saída aceita gera, nessa ordem, `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA Agent não recebe código, não executa testes, não gera Playwright, não persiste drafts, não retenta e não afirma aprovação operacional.
 
@@ -395,7 +445,13 @@ cópia limitada por stdin para um helper pinado. O container usa imagem por dige
 root filesystem read-only, rede desabilitada, capabilities removidas e limites de CPU, memória,
 PIDs, open files, bytes/inodes de tmpfs, output e tempo. Não há `--privileged`, Docker socket, host
 path, package script, lifecycle script, shell arbitrário, instalação online, retry ou exportação de
-build.
+build pelo contrato principal.
+
+Exclusivamente no profile `NODE_WEB_PREVIEW_24_V1`, a Sprint 25 compõe o adapter opcional de
+captura: depois de `TEST` bem-sucedido e antes do cleanup, um helper fixo exporta por canal privado
+somente os arquivos `PREVIEW` do build verificado. Essa cópia não altera o `SandboxRunResult`; uma
+falha de exportação torna o Preview indisponível sem transformar o resultado autoritativo da
+Sandbox.
 
 Após iniciar o processo idle, um helper fixo de readiness cria e verifica os diretórios no tmpfs
 antes do `PREPARE`, eliminando corrida de inicialização sem adicionar etapa pública, espera
@@ -435,10 +491,51 @@ não são convertidas em erro HTTP genérico.
 O Worker de produção consome o pipeline completo, enquanto seu port legado de Execution Engine é
 mantido para compatibilidade. Cancelamento propaga o mesmo `AbortSignal`; a Sandbox continua dona
 de stop/remoção do container e o coordinator continua dono do release do workspace. Não existe
-retry, fallback automático, retenção de código, preview, servidor, porta ou deploy.
+retry, fallback automático ou retenção do Controlled Workspace. O core da Factory não serve
+conteúdo nem abre portas; a Sprint 25 consome somente um `PreviewArtifact` aprovado por uma
+fronteira externa e aditiva.
 
 [Fluxo visual do Factory Pipeline](knowledge/50-FACTORY_PIPELINE_FLOW.md) ·
 [ADR-034](knowledge/ADR/ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md)
+
+## Preview Runner & View Build
+
+A Sprint 25 adiciona `@brq/preview-artifact` e `@brq/preview-runner` sem alterar as autoridades
+anteriores: gerar código, materializar um workspace, executar build/test, produzir um artifact e
+servir um Preview continuam operações independentes. Depois de `TEST`, o adapter confiável pode
+capturar uma cópia estática limitada como candidato efêmero. Ela somente muda para `APPROVED`
+depois que o resultado `Factory SUCCESS` já foi persistido, o Sandbox terminou com sucesso, os
+hashes foram correlacionados e o Controlled Workspace foi liberado normalmente. O workspace
+original nunca é retido para Preview.
+
+O profile inicial é exatamente `NODE_WEB_PREVIEW_24_V1`. Ele aceita apenas o envelope, os paths,
+media types, quantidade e bytes estáticos allowlisted e falha fechado para qualquer projeto
+incompatível. O container de Preview é distinto do container de build/test, usa imagem
+digest-pinned, usuário non-root, root filesystem read-only, tmpfs limitado, rede Docker interna sem
+egress, capabilities removidas e limites de CPU, memória, PIDs, arquivos, respostas e tempo. Não
+executa `package.json`, shell, install, código de bootstrap ou servidor proposto pela IA.
+
+A rede `--internal` não publica a porta do container. Em vez de bind/publish, um relay local
+host-only escuta exclusivamente em `127.0.0.1` e usa um helper fixo, allowlisted e limitado via
+`docker exec` para ler o servidor interno. O relay exige ainda um token efêmero e não persistido em
+cada chamada. Esse locator é capability privada do host: não entra em
+contratos HTTP, logs ou persistência e é removido junto do container, da network e do artifact.
+
+O browser abre o build em uma origin exclusiva derivada do `previewId`, nunca na origin da
+Factory. A sessão autenticada e o ownership da execução são verificados antes da emissão de um
+ticket curto e de uso único, persistido somente como hash. A troca cria um cookie Preview próprio,
+host-only, `HttpOnly` e assinado; cookies, DOM e storage da Factory não atravessam a fronteira. O
+gateway revalida cookie, sessão `RUNNING`, TTL e ownership técnico em toda requisição e encaminha
+somente `GET`/`HEAD` com headers e respostas allowlisted.
+
+Start, health, stop manual, expiração e reconciliação convergem para cleanup idempotente e
+confirmado. A implementação atual mantém scheduler, locator e conteúdo efêmero em um único host;
+DNS/TLS de produção, infraestrutura distribuída, deploy, recovery multi-host e Sprint 26 não fazem
+parte desta fronteira.
+
+[Fluxo visual do Preview Runner](knowledge/51-PREVIEW_RUNNER_FLOW.md) ·
+[Modelo de segurança do Preview](knowledge/52-PREVIEW_SECURITY_MODEL.md) ·
+[ADR-035](knowledge/ADR/ADR-035-PREVIEW-RUNNER-BOUNDARY.md)
 
 ## Orchestrator
 
@@ -481,7 +578,7 @@ identidade da execução.
 
 ## HTTP API
 
-A API permanece um adapter em Next.js 16 Route Handlers. A versão aditiva `3.1.0` preserva a
+A API permanece um adapter em Next.js 16 Route Handlers. A versão aditiva `3.2.0` preserva a
 fronteira autenticada `3.0.0` e os contratos assíncronos introduzidos na versão `2.0.0`:
 `POST /api/executions` valida a entrada, delega ao `ExecutionDispatcher` e devolve imediatamente
 `202 Accepted` com `executionId`, `jobId` e status `QUEUED`; o workflow não mantém a conexão HTTP
@@ -493,6 +590,12 @@ aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`
 Execution Repository, com paginação, filtros e read models públicos já aprovados. O detalhe pode
 incluir `factoryResult` minimizado, e a timeline aceita snapshots históricos `1.0.0` e snapshots
 Factory `2.0.0`; registros históricos sem esses campos permanecem válidos.
+
+`GET | POST /api/executions/[id]/preview` consulta elegibilidade ou inicia uma sessão;
+`GET | DELETE /api/previews/[id]` consulta ou encerra a sessão. O host valida autenticação,
+ownership e correlação com um `Factory SUCCESS` persistido antes de delegar ao Preview Runner.
+`POST /previews/[id]/launch` emite somente a ponte autenticada de uso único para a origin exclusiva;
+o gateway interno nunca expõe locator, porta, container, path físico ou artifact.
 
 `POST /api/auth/login` e `POST /api/auth/logout` usam envelopes públicos próprios e nunca expõem o
 token interno do adapter. Todas as rotas de execução, histórico, timeline e job exigem sessão; o
@@ -543,6 +646,11 @@ HTTP interno para inspecionar a construção do prompt, budget, hashes, Knowledg
 e validação manual. Nenhum componente React importa agentes ou workspaces do núcleo, e nenhum dado
 de inspeção é persistido no browser.
 
+A Sprint 25 adiciona um controle `Build Preview` à Factory e a rota autenticada
+`/executions/[id]/preview`. O Frontend consome apenas o contrato HTTP minimizado, apresenta
+elegibilidade e lifecycle reais e abre `View Build` em nova origin. Ele não recebe código, locator,
+ticket persistido, cookie interno, container, stdout/stderr ou filesystem.
+
 [Fluxo visual do Frontend MVP](knowledge/39-FRONTEND_FLOW.md) · [ADR-025](knowledge/ADR/ADR-025-FRONTEND-MVP.md)
 
 ## Factory Visualization
@@ -566,6 +674,10 @@ A Sprint 24 acrescenta uma linha técnica, sem novos personagens, para Code Gene
 Prepare, Typecheck, Build e Test. Todos os estados continuam derivados exclusivamente de Timeline
 `2.0.0` e `factoryResult` persistido; execuções históricas `1.0.0` mantêm a visualização anterior.
 Release do workspace aparece somente como metadata de lifecycle, não como atividade simulada.
+
+A Sprint 25 projeta um candidato de Preview somente quando o read model comprova `Factory SUCCESS`.
+O botão ainda depende da elegibilidade autoritativa do backend e nunca infere artifact disponível;
+estados `STARTING`, `RUNNING`, `STOPPING`, `STOPPED`, `EXPIRED` e `FAILED` são lidos da sessão real.
 
 [Fluxo visual da Factory](knowledge/45-FACTORY_VISUALIZATION_FLOW.md) ·
 [ADR-031](knowledge/ADR/ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md)

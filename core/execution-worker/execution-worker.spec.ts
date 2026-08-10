@@ -1,4 +1,5 @@
 import {
+  createExecutionEngine,
   deriveExecutionIdentity,
   type ExecutionEngine,
   type ExecutionOptions,
@@ -7,15 +8,28 @@ import {
 } from '@brq/execution-engine';
 import {
   createInMemoryExecutionRecordRepository,
+  createPersistentFactoryPipeline,
   createPersistentExecutionEngine,
   type ExecutionRecordRepository,
+  type PersistentFactoryExecutionHistory,
   type PersistentExecutionHistory,
 } from '@brq/execution-repository';
+import {
+  createFactoryPipelineCoordinator,
+  type FactoryExecutionResult,
+} from '@brq/factory-pipeline';
 import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
-import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
+import {
+  createFactoryExecutionResultFixture,
+  createFactoryPipelineConfigurationFixture,
+} from '@brq/factory-pipeline/testing';
 import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  createDeveloperRejectedWorkflowResultFixture,
+  createWorkflowRequestForExecution,
+} from '../execution-engine/testing/execution-engine-fixtures';
 import type { ExecutionWorker } from './contracts';
 import { createExecutionDispatcher } from './execution-dispatcher';
 import { EXECUTION_WORKER_ERROR_CODES, ExecutionWorkerError } from './errors';
@@ -35,6 +49,16 @@ function history(): PersistentExecutionHistory {
     begin() {},
     capture() {},
     complete() {},
+    get: () => null,
+    flush: vi.fn(async () => undefined),
+  };
+}
+
+function factoryHistory(): PersistentFactoryExecutionHistory {
+  return {
+    beginFactory() {},
+    capture() {},
+    completeFactory() {},
     get: () => null,
     flush: vi.fn(async () => undefined),
   };
@@ -98,6 +122,128 @@ describe('execution worker', () => {
     expect(await repository.findByJobId(job.jobId)).toMatchObject({
       job: { status: 'SUCCESS' },
     });
+  });
+
+  it('terminalizes both ExecutionRecord and Job when Factory observability fails', async () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (line) => lines.push(line), now: () => new Date(0) });
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createWorkerExecutionRequestFixture();
+    const identity = deriveExecutionIdentity(request);
+    const workflowRequest = createWorkflowRequestForExecution(request, identity.executionId);
+    const developerRejectedWorkflow =
+      await createDeveloperRejectedWorkflowResultFixture(workflowRequest);
+    const executionEngine = createExecutionEngine({
+      orchestrator: { execute: async () => developerRejectedWorkflow },
+      logger,
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const codeGeneratorExecute = vi.fn(async () => {
+      throw new Error('Code Generator must be skipped.');
+    });
+    const workspacePlan = vi.fn(() => {
+      throw new Error('Workspace plan must be skipped.');
+    });
+    const workspaceMaterialize = vi.fn(async () => {
+      throw new Error('Workspace materialization must be skipped.');
+    });
+    const workspaceRelease = vi.fn(async () => {
+      throw new Error('Workspace release must be skipped.');
+    });
+    const sandboxRun = vi.fn(async () => {
+      throw new Error('Sandbox must be skipped.');
+    });
+    const factory = createFactoryPipelineCoordinator({
+      executionEngine,
+      codeGeneratorAgent: { execute: codeGeneratorExecute },
+      workspace: {
+        plan: workspacePlan,
+        materialize: workspaceMaterialize,
+        release: workspaceRelease,
+      },
+      sandboxRunner: { run: sandboxRun },
+      configuration: createFactoryPipelineConfigurationFixture(),
+      logger,
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const factoryCompleted = deferred<FactoryExecutionResult>();
+    const observation = factoryHistory();
+    vi.mocked(observation.flush).mockRejectedValue(
+      Object.assign(new Error('PRIVATE-OBSERVABILITY-DETAIL'), {
+        code: 'OBSERVABILITY_INVALID_SNAPSHOT',
+      }),
+    );
+    const pipeline = createPersistentFactoryPipeline({
+      pipeline: {
+        execute: async (executionRequest, runOptions) => {
+          const result = await factory.execute(executionRequest, runOptions);
+          factoryCompleted.resolve(result);
+          return result;
+        },
+      },
+      repository,
+      history: observation,
+      logger,
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const worker = createExecutionWorker({ queue, repository, pipeline, logger });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+    const result = await factoryCompleted.promise;
+
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      terminalStage: 'DEVELOPER',
+      failure: { stage: 'DEVELOPER', sourceCode: 'ORCHESTRATOR_DEVELOPER_FAILED' },
+      generation: { status: 'SKIPPED' },
+      workspace: {
+        planStatus: 'SKIPPED',
+        materializationStatus: 'SKIPPED',
+        releaseStatus: 'NOT_REQUIRED',
+      },
+      sandbox: { status: 'SKIPPED' },
+    });
+    expect(result.stages.map(({ stageId, status }) => [stageId, status])).toEqual([
+      ['PRODUCT_OWNER', 'SUCCESS'],
+      ['DEVELOPER', 'FAILED'],
+      ['QA', 'SKIPPED'],
+      ['CODE_GENERATOR', 'SKIPPED'],
+      ['WORKSPACE_PLAN', 'SKIPPED'],
+      ['WORKSPACE_MATERIALIZATION', 'SKIPPED'],
+      ['SANDBOX_PREPARE', 'SKIPPED'],
+      ['SANDBOX_TYPECHECK', 'SKIPPED'],
+      ['SANDBOX_BUILD', 'SKIPPED'],
+      ['SANDBOX_TEST', 'SKIPPED'],
+      ['WORKSPACE_RELEASE', 'SKIPPED'],
+    ]);
+    expect(codeGeneratorExecute).not.toHaveBeenCalled();
+    expect(workspacePlan).not.toHaveBeenCalled();
+    expect(workspaceMaterialize).not.toHaveBeenCalled();
+    expect(workspaceRelease).not.toHaveBeenCalled();
+    expect(sandboxRun).not.toHaveBeenCalled();
+    expect(await queue.get(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      failure: { code: result.failure?.code },
+    });
+    expect(await repository.findByJobId(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED' },
+      failure: { code: result.failure?.code, sourceCode: result.failure?.sourceCode },
+      factoryResult: {
+        status: 'FAILED',
+        terminalStage: 'DEVELOPER',
+        hashes: { factoryResultHash: result.hashes.factoryResultHash },
+      },
+      observation: null,
+    });
+    expect(lines.join('\n')).toContain('execution.repository.factory_observation.terminal.failed');
+    expect(lines.join('\n')).toContain(job.jobId);
+    expect(lines.join('\n')).toContain('OBSERVABILITY_INVALID_SNAPSHOT');
+    expect(lines.join('\n')).not.toContain('PRIVATE-OBSERVABILITY-DETAIL');
   });
 
   it('consumes jobs in FIFO order and invokes the public Engine exactly once per job', async () => {

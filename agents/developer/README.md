@@ -16,11 +16,12 @@ O pacote não gera código, não gera testes, não persiste dados, não altera e
 
 ## Bundle ativo
 
-O loader seleciona estaticamente `prompts/developer/1.0.2`. Os releases históricos `1.0.0` e
-`1.0.1` permanecem inalterados. O `1.0.1` tornou explícitas as invariantes relacionais já exigidas
-pela Developer Business Validation. O `1.0.2` alinha o JSON Schema versionado ao schema Zod público:
-`modules[].path` rejeita caminhos absolutos, drives, backslashes, caracteres de controle, segmentos
-vazios, `.` e `..`, e os três campos `order` possuem teto em `Number.MAX_SAFE_INTEGER`.
+O loader seleciona estaticamente `prompts/developer/1.0.3`. Os releases históricos `1.0.0`,
+`1.0.1` e `1.0.2` permanecem inalterados. O `1.0.2` alinhou o JSON Schema versionado ao schema Zod
+público. O `1.0.3` preserva esse mesmo schema e torna normativa a tabela de readiness: condições
+bloqueantes prevalecem, perguntas não bloqueantes ou premissas com `requiresValidation: true`
+exigem `PARTIALLY_READY`, e `READY` somente é permitido sem pendências. A instrução final exige
+recalcular a decisão sobre as coleções finais antes de emitir o JSON.
 
 JSON Schema Draft 2020-12 mede `maxLength` por code points e não expressa normalização Unicode NFC,
 enquanto o contrato Zod preserva comprimento JavaScript UTF-16 e NFC para paths. Essas limitações
@@ -48,8 +49,9 @@ conteúdo bruto. Esse arquivo deve permanecer local e sem segredos.
 
 O modo seguro do Response Validator também exige simultaneamente `NODE_ENV=development` e
 `AI_FACTORY_STRUCTURED_OUTPUT_DEBUG=true`. Produção, API HTTP, Execution Repository e frontend não
-recebem o relatório. A auditoria preserva os bundles 1.0.0, 1.0.1 e 1.0.2: não foi demonstrado
-drift no 1.0.2 e uma versão 1.0.3 depende da reprodução concreta do payload histórico.
+recebem o relatório. O bundle `1.0.3` decorre de uma reprodução concreta de
+`DEVELOPER_READINESS_MISMATCH`; não houve drift estrutural no `1.0.2`, alteração de schema público
+ou enfraquecimento da Developer Business Validation.
 
 ## API pública
 

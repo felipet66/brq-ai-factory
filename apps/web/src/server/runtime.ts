@@ -51,7 +51,10 @@ import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
 import { createDevelopmentResponseValidator } from '@brq/response-validator/development';
 import type { SandboxRunner } from '@brq/sandbox-runner';
-import { createDockerSandboxRunner } from '@brq/sandbox-runner/docker';
+import {
+  createDockerArtifactCapturingSandboxRunner,
+  createDockerSandboxRunner,
+} from '@brq/sandbox-runner/docker';
 import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
@@ -63,8 +66,17 @@ import {
 } from './ai-factory-runtime-configuration';
 import {
   FACTORY_PIPELINE_CONFIGURATION,
+  FACTORY_SANDBOX_POLICY_ID,
   resolveFactorySandboxRuntimeConfiguration,
 } from './factory-sandbox-runtime-configuration';
+import type { FactoryPreviewArtifactIntegration } from './preview/artifact-integration';
+import type { PreviewApplicationService } from './preview/contracts';
+import type { PreviewGatewayService } from './preview/gateway-contracts';
+import {
+  createApplicationFactoryPreviewArtifactIntegration,
+  createApplicationPreviewRuntime,
+  type ApplicationPreviewRuntime,
+} from './preview/runtime';
 
 export interface ApplicationRuntimeOptions {
   readonly aiProvider?: AIProvider;
@@ -87,6 +99,7 @@ export interface ApplicationFactoryRuntimeOptions extends Omit<
   readonly controlledWorkspace?: ControlledWorkspace;
   readonly sandboxRunner?: SandboxRunner;
   readonly factoryConfiguration?: FactoryPipelineConfiguration;
+  readonly previewArtifactIntegration?: FactoryPreviewArtifactIntegration;
 }
 
 export interface ApplicationQueueRuntime {
@@ -286,15 +299,29 @@ function resolveFactoryBoundaries(
       logger,
       now,
     }),
-    sandboxRunner: createDockerSandboxRunner({
-      workspaceRoot: configuration.workspaceRoot,
-      dockerExecutable: configuration.dockerExecutable,
-      dockerHost: configuration.dockerHost,
-      image: configuration.image,
-      policies: Object.freeze([configuration.policy]),
-      logger,
-      now,
-    }),
+    sandboxRunner:
+      options.previewArtifactIntegration === undefined
+        ? createDockerSandboxRunner({
+            workspaceRoot: configuration.workspaceRoot,
+            dockerExecutable: configuration.dockerExecutable,
+            dockerHost: configuration.dockerHost,
+            image: configuration.image,
+            policies: Object.freeze([configuration.policy]),
+            logger,
+            now,
+          })
+        : createDockerArtifactCapturingSandboxRunner(
+            {
+              workspaceRoot: configuration.workspaceRoot,
+              dockerExecutable: configuration.dockerExecutable,
+              dockerHost: configuration.dockerHost,
+              image: configuration.image,
+              policies: Object.freeze([configuration.policy]),
+              logger,
+              now,
+            },
+            options.previewArtifactIntegration.artifactSink,
+          ),
   });
 }
 
@@ -337,13 +364,14 @@ export async function createApplicationFactoryRuntime(
     pipeline: coordinator,
     history: executionHistory,
   });
-  return createPersistentFactoryPipeline({
+  const persistentPipeline = createPersistentFactoryPipeline({
     pipeline: observedPipeline,
     repository,
     history: executionHistory,
     logger: baseLogger,
     now,
   });
+  return options.previewArtifactIntegration?.decorate(persistentPipeline) ?? persistentPipeline;
 }
 
 interface ApplicationRuntimeState {
@@ -356,6 +384,7 @@ interface ApplicationRuntimeState {
   executionRepository: FactoryExecutionRecordRepository | undefined;
   jobQueue: JobQueue | undefined;
   prismaClient: DatabaseClient | undefined;
+  previewRuntime: Promise<ApplicationPreviewRuntime> | undefined;
 }
 
 const runtimeGlobal = globalThis as typeof globalThis & {
@@ -371,6 +400,7 @@ const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
   executionRepository: undefined,
   jobQueue: undefined,
   prismaClient: undefined,
+  previewRuntime: undefined,
 });
 
 export function getExecutionEngine(): Promise<ExecutionEngine> {
@@ -390,9 +420,37 @@ export function getFactoryPipeline(): Promise<FactoryPipelineCoordinator> {
       factoryExecutionHistory: runtimeState.factoryExecutionHistory,
       executionRepository,
       logger: runtimeState.logger,
+      previewArtifactIntegration: createApplicationFactoryPreviewArtifactIntegration({
+        client: getDatabaseClient(),
+        environment: process.env,
+        sandboxPolicyId: FACTORY_SANDBOX_POLICY_ID,
+      }),
     }),
   );
   return runtimeState.factoryRuntime;
+}
+
+function getApplicationPreviewRuntime(): Promise<ApplicationPreviewRuntime> {
+  runtimeState.previewRuntime ??= createApplicationPreviewRuntime({
+    client: getDatabaseClient(),
+    environment: process.env,
+    logger: runtimeState.logger,
+  });
+  return runtimeState.previewRuntime;
+}
+
+export function getPreviewApplicationService(): Promise<PreviewApplicationService> {
+  return getApplicationPreviewRuntime().then((runtime) => runtime.applicationService);
+}
+
+export function getPreviewGatewayService(): Promise<PreviewGatewayService> {
+  return getApplicationPreviewRuntime().then((runtime) => runtime.gatewayService);
+}
+
+export function getPreviewOriginTemplate(): string {
+  const template = process.env.BRQ_PREVIEW_ORIGIN_TEMPLATE;
+  if (template === undefined) throw new TypeError('A origin de Preview não está configurada.');
+  return template;
 }
 
 export function getJobQueue(): JobQueue {

@@ -32,6 +32,8 @@
     "@brq/product-owner-agent": "0.1.0",
     "@brq/prompt-builder": "0.1.0",
     "@brq/prompt-inspector": "0.1.0",
+    "@brq/preview-artifact": "0.1.0",
+    "@brq/preview-runner": "0.1.0",
     "@brq/qa-agent": "0.1.0",
     "@brq/response-validator": "0.1.0",
     "@brq/sandbox-runner": "0.1.0",

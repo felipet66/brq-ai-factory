@@ -12,6 +12,7 @@ import { FactoryProgress } from './factory-progress';
 import { FactoryTechnicalPipeline } from './factory-technical-pipeline';
 import type { FactoryAgentId, FactoryViewModel } from './factory-view-model';
 import { KnowledgeStage } from './knowledge-stage';
+import { PreviewControl } from './preview-control';
 import styles from './factory.module.css';
 
 interface FactoryWorkspaceProps {
@@ -103,6 +104,10 @@ export function FactoryWorkspace({
       </section>
 
       <FactoryTechnicalPipeline stages={model.technicalStages} />
+      <PreviewControl
+        executionId={model.execution.executionId}
+        factoryApproved={model.previewCandidate !== null}
+      />
 
       <div className={styles.operationsGrid}>
         <FactoryActivityFeed activity={model.activity} />

@@ -1,0 +1,40 @@
+{
+  "id": "rules:qa",
+  "version": "1.0.1",
+  "scope": "AGENT",
+  "agent": "QA",
+  "rules": [
+    {
+      "id": "qa:specification-only",
+      "content": "Produza somente uma especificação declarativa de qualidade; não execute testes, não gere código e não alegue evidência de execução ou aprovação operacional."
+    },
+    {
+      "id": "qa:functional-coverage",
+      "content": "Todo Acceptance Criterion e toda Business Rule MUST aparecer em ao menos um cenário, no mapa functionalCoverage e na matriz. Para cada traceability.functionalCoverage[]: cada scenarioId MUST apontar para um cenário existente cujo functionalReferences MUST incluir o mesmo sourceId da entrada; outros IDs funcionais válidos MAY coexistir. MUST NOT associar uma fonte funcional a cenário que não declare essa fonte."
+    },
+    {
+      "id": "qa:technical-coverage",
+      "content": "Toda decisão técnica e todo item de Definition of Done MUST aparecer em ao menos um cenário, no mapa technicalCoverage e na matriz. Para cada traceability.technicalCoverage[]: cada scenarioId MUST apontar para um cenário existente cujo technicalReferences MUST incluir o mesmo sourceId da entrada; outros IDs técnicos válidos MAY coexistir. MUST NOT associar uma fonte técnica a cenário que não declare essa fonte."
+    },
+    {
+      "id": "qa:scenario-categories",
+      "content": "Produza cenários positivos, negativos e edge cases com passos, resultados esperados, prioridade e referências existentes. Para cada traceability.matrix[] e para cada scenarioId da linha, o cenário MUST declarar ao menos uma fonte da própria linha: um functionalSourceId em functionalReferences OR um technicalSourceId em technicalReferences. MUST NOT incluir em uma linha um cenário que não declare nenhuma das fontes relacionadas por essa linha."
+    },
+    {
+      "id": "qa:stable-identifiers",
+      "content": "Use os prefixos e formatos de IDs definidos no contrato e nunca invente referências funcionais ou técnicas."
+    },
+    {
+      "id": "qa:deterministic-readiness",
+      "content": "Calcule readiness somente depois de finalizar blockingItems, openQuestions e assumptions, aplicando exatamente a primeira condição verdadeira nesta ordem: (1) IF productOwnerSpecification.readiness === \"REQUIRES_CLARIFICATION\" OR technicalSpecification.readiness === \"REQUIRES_CLARIFICATION\", THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (2) ELSE IF blockingItems.length > 0, THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (3) ELSE IF qualquer openQuestions[].impact === \"BLOCKING\", THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (4) ELSE IF productOwnerSpecification.readiness === \"PARTIALLY_READY\" OR technicalSpecification.readiness === \"PARTIALLY_READY\", THEN readiness MUST ser \"PARTIALLY_READY\"; (5) ELSE IF openQuestions.length > 0 OR qualquer assumptions[].requiresValidation === true, THEN readiness MUST ser \"PARTIALLY_READY\"; (6) ELSE readiness MUST ser \"READY\". Uma assumption com requiresValidation === false, isoladamente, MUST NOT reduzir readiness. Antes de retornar o JSON, derive novamente sobre as coleções finais e confirme que o campo readiness é exatamente igual ao resultado; readiness MUST NOT representar aprovação ou execução de testes."
+    },
+    {
+      "id": "qa:future-automation",
+      "content": "Recomende automação apenas como trabalho futuro, sem Playwright, código, comandos ou implementação de testes."
+    },
+    {
+      "id": "qa:no-fabrication",
+      "content": "Quando faltarem dados, registre premissas, questões ou bloqueios; não invente conteúdo apenas para preencher coleções."
+    }
+  ]
+}

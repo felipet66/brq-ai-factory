@@ -5,6 +5,7 @@ import {
   DOCKER_SANDBOX_IDLE_EXECUTABLE,
   DOCKER_SANDBOX_READY_EXECUTABLE,
 } from './helper-contract';
+import { DOCKER_SANDBOX_ARTIFACT_EXPORT_EXECUTABLE } from './artifact-capture';
 
 export const SANDBOX_CONTAINER_USER = '65532:65532';
 export const SANDBOX_WORKING_DIRECTORY = '/workspace/project';
@@ -151,5 +152,26 @@ export function buildReadinessArguments(containerId: string): readonly string[] 
     containerId,
     '/usr/local/bin/node',
     DOCKER_SANDBOX_READY_EXECUTABLE,
+  ]);
+}
+
+/** Fixed, adapter-owned artifact export command; no generated value can select this executable. */
+export function buildArtifactExportArguments(containerId: string): readonly string[] {
+  return Object.freeze([
+    'container',
+    'exec',
+    '--workdir',
+    SANDBOX_WORKING_DIRECTORY,
+    '--user',
+    SANDBOX_CONTAINER_USER,
+    '--env',
+    'CI=1',
+    '--env',
+    'NO_COLOR=1',
+    containerId,
+    '/usr/local/bin/node',
+    DOCKER_SANDBOX_ARTIFACT_EXPORT_EXECUTABLE,
+    '--workspace',
+    SANDBOX_WORKING_DIRECTORY,
   ]);
 }

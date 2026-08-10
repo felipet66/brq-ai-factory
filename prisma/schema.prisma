@@ -216,6 +216,8 @@ model ExecutionRecord {
   lineageHandoffs   ExecutionLineageHandoff[]
   provenanceStages  ExecutionProvenanceStage[]
   factoryResult     ExecutionFactoryResult?
+  previewArtifacts  PreviewArtifact[]
+  previewSessions   PreviewSession[]
   user              User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt])
@@ -518,4 +520,156 @@ model ExecutionFactoryToolchainVersion {
 
   @@unique([executionFactoryResultId, name])
   @@index([name, version])
+}
+
+model PreviewArtifact {
+  artifactId          String          @id
+  executionRecordId   String
+  status              String
+  artifactVersion     String
+  contractVersion     String
+  hashAlgorithm       String
+  profileId           String
+  exporterVersion     String
+  fileCount           Int
+  totalBytes          Int
+  createdAt           DateTime
+  approvedAt          DateTime?
+  expiresAt           DateTime
+  consumedAt          DateTime?
+  deletedAt           DateTime?
+  workspaceHash       String
+  sandboxRequestHash  String
+  factoryResultHash   String?
+  sandboxResultHash   String?
+  artifactContentHash String
+  artifactHash        String          @unique
+  approvalHash        String?         @unique
+  revision            Int             @default(0)
+  executionRecord     ExecutionRecord @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  previewSession      PreviewSession?
+
+  @@index([executionRecordId, createdAt])
+  @@index([status, expiresAt])
+  @@index([workspaceHash])
+}
+
+model PreviewSession {
+  previewId            String                    @id
+  executionRecordId    String                    @unique
+  artifactId           String                    @unique
+  status               String
+  health               String
+  policyId             String
+  policyVersion        String
+  artifactProfileId    String
+  artifactFileCount    Int
+  artifactTotalBytes   Int
+  artifactExpiresAt    DateTime
+  createdAt            DateTime
+  startedAt            DateTime?
+  expiresAt            DateTime
+  stoppingAt           DateTime?
+  stoppedAt            DateTime?
+  revision             Int                       @default(0)
+  ttlSeconds           Int
+  startupTimeoutMs     Int
+  healthTimeoutMs      Int
+  stopTimeoutMs        Int
+  cpus                 Float
+  memoryBytes          Int
+  pidsLimit            Int
+  openFilesLimit       Int
+  temporaryBytes       Int
+  artifactBytes        Int
+  artifactFiles        Int
+  responseBytes        Int
+  responseTimeoutMs    Int
+  capturedLogBytes     Int
+  maxLogLineBytes      Int
+  factoryResultHash    String
+  sandboxRequestHash   String
+  sandboxResultHash    String
+  workspaceHash        String
+  artifactHash         String
+  artifactApprovalHash String
+  policyHash           String
+  limitsHash           String
+  previewRequestHash   String
+  lineageHash          String
+  provenanceHash       String
+  previewSessionHash   String
+  failureCode          String?
+  failureStage         String?
+  failureSourceCode    String?
+  executionRecord      ExecutionRecord           @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  artifact             PreviewArtifact           @relation(fields: [artifactId], references: [artifactId], onDelete: Restrict)
+  events               PreviewSessionEvent[]
+  provenance           PreviewSessionProvenance?
+  accessTicket         PreviewAccessTicket?
+
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@index([previewSessionHash])
+}
+
+model PreviewSessionEvent {
+  id                 String         @id @default(cuid())
+  previewSessionId   String
+  sequence           Int
+  event              String
+  status             String
+  occurredAt         DateTime
+  durationMs         Int?
+  artifactHash       String
+  previewRequestHash String
+  previewSessionHash String
+  policyId           String
+  failureCode        String?
+  contractVersion    String
+  previewSession     PreviewSession @relation(fields: [previewSessionId], references: [previewId], onDelete: Restrict)
+
+  @@unique([previewSessionId, sequence])
+  @@index([previewSessionId, occurredAt])
+  @@index([event, occurredAt])
+}
+
+model PreviewSessionProvenance {
+  previewSessionId        String         @id
+  runnerVersion           String
+  contractVersion         String
+  hashAlgorithm           String
+  artifactVersion         String
+  artifactContractVersion String
+  exporterVersion         String
+  policyId                String
+  policyVersion           String
+  policyHash              String
+  limitsHash              String
+  runtimeAdapter          String?
+  runtimeEngineName       String?
+  runtimeEngineVersion    String?
+  runtimeImageReference   String?
+  runtimeImageDigest      String?
+  runtimeImageId          String?
+  runtimePlatform         String?
+  runtimeName             String?
+  runtimeVersion          String?
+  runtimeServerAbiVersion String?
+  previewSession          PreviewSession @relation(fields: [previewSessionId], references: [previewId], onDelete: Restrict)
+
+  @@index([policyId, policyVersion])
+  @@index([runtimeImageDigest])
+}
+
+model PreviewAccessTicket {
+  previewSessionId String         @id
+  ticketHash       String         @unique
+  issuedAt         DateTime
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  revokedAt        DateTime?
+  previewSession   PreviewSession @relation(fields: [previewSessionId], references: [previewId], onDelete: Restrict)
+
+  @@index([expiresAt])
 }

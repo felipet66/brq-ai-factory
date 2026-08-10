@@ -9,7 +9,7 @@ import { createAgentRunRequest } from '../../core/agent-runner/testing/agent-run
 import { OpenAIProvider } from '../../core/ai-provider/openai/openai-provider';
 import { loadDeveloperPromptAssets } from './prompt-assets';
 
-describe('Developer 1.0.2 structured output transport', () => {
+describe('Developer 1.0.3 structured output transport', () => {
   it('preserves the exact active schema and strict mode through Agent Runner and OpenAI adapter', async () => {
     const assets = loadDeveloperPromptAssets();
     const base = createAgentRunRequest();
@@ -23,7 +23,7 @@ describe('Developer 1.0.2 structured output transport', () => {
 
     const aiRequest = toAIRequest(prompt, 'local-transport-audit');
 
-    expect(assets.manifest.version).toBe('1.0.2');
+    expect(assets.manifest.version).toBe('1.0.3');
     expect(aiRequest.responseFormat).toMatchObject({
       type: 'json_schema',
       strict: true,

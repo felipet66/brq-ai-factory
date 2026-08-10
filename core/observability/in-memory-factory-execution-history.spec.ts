@@ -1,16 +1,190 @@
 import {
   calculateFactoryPipelineResultHash,
   factoryExecutionResultSchema,
+  type FactoryExecutionResult,
+  type FactoryPipelineStageId,
 } from '@brq/factory-pipeline';
 import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 import { describe, expect, it } from 'vitest';
 
+import type { FactoryExecutionObservabilitySnapshot } from './contracts';
 import { createInMemoryFactoryExecutionHistory } from './in-memory-factory-execution-history';
 import { createObservabilityRequest, fixedClock } from './testing/observability-fixtures';
 
 const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
 
+type Mutable<T> = T extends readonly (infer Item)[]
+  ? Mutable<Item>[]
+  : T extends object
+    ? { -readonly [Key in keyof T]: Mutable<T[Key]> }
+    : T;
+
+function createTerminalFactoryResult(
+  stageId: FactoryPipelineStageId,
+  status: 'FAILED' | 'CANCELLED' = 'FAILED',
+  workflowId?: string,
+): FactoryExecutionResult {
+  const candidate = structuredClone(
+    createFactoryExecutionResultFixture({
+      executionId: EXECUTION_ID,
+      ...(workflowId === undefined ? {} : { workflowId }),
+    }),
+  ) as Mutable<FactoryExecutionResult>;
+  const terminalIndex = candidate.stages.findIndex((stage) => stage.stageId === stageId);
+  const failure = {
+    code: status === 'CANCELLED' ? 'FACTORY_PIPELINE_CANCELLED' : 'FACTORY_PIPELINE_STAGE_FAILED',
+    stage: stageId,
+    sourceCode: null,
+    message: status === 'CANCELLED' ? 'Execução cancelada.' : 'Etapa rejeitada.',
+  };
+
+  candidate.stages.forEach((stage, index) => {
+    if (index < terminalIndex) return;
+    if (index === terminalIndex) {
+      Object.assign(stage, { status, outputHash: null, failure });
+      return;
+    }
+    Object.assign(stage, {
+      status: 'SKIPPED',
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      outputHash: null,
+      failure: null,
+    });
+  });
+  Object.assign(candidate, { status, terminalStage: stageId, failure });
+
+  const { factoryResultHash: previousResultHash, ...hashesWithoutResult } = candidate.hashes;
+  if (previousResultHash.length !== 64) throw new Error('Expected the canonical result hash.');
+  return factoryExecutionResultSchema.parse({
+    ...candidate,
+    hashes: {
+      ...hashesWithoutResult,
+      factoryResultHash: calculateFactoryPipelineResultHash({
+        ...candidate,
+        hashes: hashesWithoutResult,
+      }),
+    },
+  });
+}
+
+function expectMonotonicEvents(snapshot: FactoryExecutionObservabilitySnapshot): void {
+  for (let index = 1; index < snapshot.events.length; index += 1) {
+    const previous = snapshot.events[index - 1]!;
+    const current = snapshot.events[index]!;
+    const previousTime = Date.parse(
+      previous.finishedAt ?? previous.startedAt ?? snapshot.updatedAt,
+    );
+    const currentTime = Date.parse(current.finishedAt ?? current.startedAt ?? snapshot.updatedAt);
+    expect(currentTime).toBeGreaterThanOrEqual(previousTime);
+  }
+}
+
 describe('In-memory Factory execution history', () => {
+  it('emite o evento terminal de sucesso depois das projeções observadas', () => {
+    const request = createObservabilityRequest();
+    const result = createFactoryExecutionResultFixture({
+      executionId: EXECUTION_ID,
+      workflowId: request.workflowId,
+    });
+    const observationStartsAfterResult = Date.parse(result.finishedAt) + 1_000;
+    const history = createInMemoryFactoryExecutionHistory({
+      now: fixedClock(observationStartsAfterResult),
+    });
+    history.beginFactory(request);
+    history.capture('info', 'factory.pipeline.started', {
+      workflowId: request.workflowId,
+      executionId: result.executionId,
+    });
+
+    history.completeFactory(result);
+
+    const snapshot = history.get(result.executionId)!;
+    expectMonotonicEvents(snapshot);
+    expect(snapshot.events.at(-1)).toMatchObject({
+      type: 'execution.finished',
+      status: 'SUCCESS',
+      finishedAt: snapshot.updatedAt,
+    });
+  });
+
+  it.each([
+    ['Product Owner', 'PRODUCT_OWNER', 'FAILED'],
+    ['Developer', 'DEVELOPER', 'FAILED'],
+    ['QA', 'QA', 'FAILED'],
+    ['Code Generator', 'CODE_GENERATOR', 'FAILED'],
+    ['Workspace', 'WORKSPACE_MATERIALIZATION', 'FAILED'],
+    ['Sandbox', 'SANDBOX_TEST', 'FAILED'],
+    ['cancelamento', 'CODE_GENERATOR', 'CANCELLED'],
+  ] as const)(
+    'preserva causalidade monotônica para terminalização em %s',
+    (_scenario, terminalStage, status) => {
+      const request = createObservabilityRequest();
+      const result = createTerminalFactoryResult(terminalStage, status, request.workflowId);
+      const observationStartsAfterResult = Date.parse(result.finishedAt) + 1_000;
+      const history = createInMemoryFactoryExecutionHistory({
+        now: fixedClock(observationStartsAfterResult),
+      });
+      history.beginFactory(request);
+      history.capture('info', 'factory.pipeline.started', {
+        workflowId: request.workflowId,
+        executionId: result.executionId,
+      });
+
+      history.completeFactory(result);
+
+      const snapshot = history.get(result.executionId)!;
+      const terminalEvent = snapshot.events.at(-1)!;
+      const lastSkippedEvent = snapshot.events.filter((event) => event.status === 'SKIPPED').at(-1);
+      expectMonotonicEvents(snapshot);
+      expect(snapshot.status).toBe(status);
+      expect(terminalEvent).toMatchObject({
+        type: 'execution.failed',
+        stageId: 'FACTORY',
+        status,
+        finishedAt: snapshot.updatedAt,
+      });
+      if (lastSkippedEvent !== undefined) {
+        expect(Date.parse(terminalEvent.finishedAt!)).toBeGreaterThanOrEqual(
+          Date.parse(lastSkippedEvent.finishedAt!),
+        );
+      }
+    },
+  );
+
+  it('terminaliza falha do Developer somente depois de marcar todo downstream como SKIPPED', () => {
+    const request = createObservabilityRequest();
+    const result = createTerminalFactoryResult('DEVELOPER', 'FAILED', request.workflowId);
+    const history = createInMemoryFactoryExecutionHistory({
+      now: fixedClock(Date.parse(result.finishedAt) + 1_000),
+    });
+    history.beginFactory(request);
+    history.completeFactory(result);
+
+    const snapshot = history.get(result.executionId)!;
+    const downstream = [
+      'QA',
+      'CODE_GENERATOR',
+      'WORKSPACE',
+      'SANDBOX_PREPARE',
+      'SANDBOX_TYPECHECK',
+      'SANDBOX_BUILD',
+      'SANDBOX_TEST',
+    ];
+    expect(
+      snapshot.stages
+        .filter((stage) => downstream.includes(stage.stageId))
+        .every((stage) => stage.status === 'SKIPPED'),
+    ).toBe(true);
+    expect(snapshot.events.at(-1)).toMatchObject({
+      type: 'execution.failed',
+      status: 'FAILED',
+      finishedAt: snapshot.updatedAt,
+    });
+    expectMonotonicEvents(snapshot);
+  });
+
   it('mantém o workflow intermediário RUNNING e terminaliza somente com FactoryResult', () => {
     const request = createObservabilityRequest();
     const result = createFactoryExecutionResultFixture({

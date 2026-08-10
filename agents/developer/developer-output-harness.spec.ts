@@ -55,7 +55,7 @@ describe('Developer output local diagnostic harness', () => {
       issues: [],
       metadata: {
         contractId: 'contract:developer-technical-specification',
-        contractVersion: '1.0.2',
+        contractVersion: '1.0.3',
         contractHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         schemaHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         candidateHash: expect.stringMatching(/^[a-f0-9]{64}$/),

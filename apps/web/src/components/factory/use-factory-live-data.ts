@@ -27,6 +27,8 @@ export type FactoryLiveDataState =
     };
 
 const FACTORY_FALLBACK_ERROR = 'The execution metadata service could not load this factory.';
+const FACTORY_TERMINAL_RECONCILIATION_NOTICE =
+  'Execution metadata is still reconciling; the terminal job status is shown.';
 
 function isTerminalExecution(status: ExecutionHistoryStatus): boolean {
   return status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELLED';
@@ -55,13 +57,19 @@ function safeErrorMessage(error: unknown): string {
   return FACTORY_FALLBACK_ERROR;
 }
 
-function executionStatusFromJob(job: ExecutionJobView): ExecutionHistoryStatus {
+type JobEvidence = Pick<
+  ExecutionJobView,
+  'jobId' | 'status' | 'queuedAt' | 'startedAt' | 'finishedAt'
+>;
+
+function executionStatusFromJob(job: Pick<JobEvidence, 'status'>): ExecutionHistoryStatus {
   return job.status === 'QUEUED' ? 'CREATED' : job.status;
 }
 
 function mergeJob(
   execution: ExecutionHistoryDetail,
-  job: ExecutionJobView,
+  job: JobEvidence,
+  status: ExecutionHistoryStatus = executionStatusFromJob(job),
 ): ExecutionHistoryDetail {
   const queuedAt = job.queuedAt ?? execution.job?.queuedAt;
   if (queuedAt === null || queuedAt === undefined) {
@@ -69,7 +77,7 @@ function mergeJob(
   }
   return Object.freeze({
     ...execution,
-    status: executionStatusFromJob(job),
+    status,
     startedAt: execution.startedAt ?? job.startedAt,
     finishedAt: execution.finishedAt ?? job.finishedAt,
     job: Object.freeze({ ...job, queuedAt }),
@@ -134,12 +142,91 @@ export function useFactoryLiveData(executionId: string) {
     async function finalize(): Promise<void> {
       execution = await getExecution(executionId, { signal: controller.signal });
       timeline = (await loadOptionalTimeline()) ?? timeline;
+      if (isTerminalExecution(execution.status)) {
+        publish();
+        return;
+      }
+      if (execution.job !== null && isTerminalJob(execution.job.status)) {
+        execution = mergeJob(execution, execution.job);
+        publish(FACTORY_TERMINAL_RECONCILIATION_NOTICE);
+        return;
+      }
+      if (execution.job === null) {
+        publish();
+        return;
+      }
+
+      const job = await getJob(execution.job.jobId, { signal: controller.signal });
+      if (job.executionId !== executionId) {
+        throw new TypeError('The job does not belong to the requested execution.');
+      }
+      execution = mergeJob(execution, job);
+      if (isTerminalJob(job.status)) {
+        publish(FACTORY_TERMINAL_RECONCILIATION_NOTICE);
+        return;
+      }
+
       publish();
+      if (job.status === 'QUEUED') schedule(pollJob);
+      else schedule(pollTimeline);
     }
 
-    async function pollTimeline(): Promise<void> {
+    async function settleTerminalJob(job: JobEvidence): Promise<void> {
+      if (execution === null) return;
+      const fallback = mergeJob(execution, job);
+      execution = fallback;
+
+      if (job.status !== 'SUCCESS') {
+        publish(FACTORY_TERMINAL_RECONCILIATION_NOTICE);
+        return;
+      }
+
+      publish(FACTORY_TERMINAL_RECONCILIATION_NOTICE);
+      try {
+        const refreshedExecution = await getExecution(executionId, {
+          signal: controller.signal,
+        });
+        const refreshedTimeline = await loadOptionalTimeline();
+        if (
+          refreshedTimeline !== null &&
+          (timeline === null || refreshedTimeline.revision > timeline.revision)
+        ) {
+          timeline = refreshedTimeline;
+        }
+        execution = isTerminalExecution(refreshedExecution.status)
+          ? mergeJob(refreshedExecution, job, refreshedExecution.status)
+          : mergeJob(refreshedExecution, job);
+        publish(
+          isTerminalExecution(refreshedExecution.status)
+            ? null
+            : FACTORY_TERMINAL_RECONCILIATION_NOTICE,
+        );
+      } catch (error) {
+        fail(error);
+      }
+    }
+
+    async function pollTimeline(knownJob?: ExecutionJobView): Promise<void> {
       if (stopped) return;
       try {
+        if (execution?.job !== null && execution?.job !== undefined) {
+          const job =
+            knownJob ?? (await getJob(execution.job.jobId, { signal: controller.signal }));
+          if (job.executionId !== executionId) {
+            throw new TypeError('The job does not belong to the requested execution.');
+          }
+          if (isTerminalJob(job.status)) {
+            await settleTerminalJob(job);
+            return;
+          }
+          execution = mergeJob(execution, job);
+          publish();
+          if (job.status === 'QUEUED') {
+            schedule(pollJob);
+            return;
+          }
+        }
+
         const nextTimeline = await loadOptionalTimeline();
         if (nextTimeline === null) {
           publish();
@@ -162,11 +249,14 @@ export function useFactoryLiveData(executionId: string) {
         if (job.executionId !== executionId) {
           throw new TypeError('The job does not belong to the requested execution.');
         }
+        if (isTerminalJob(job.status)) {
+          await settleTerminalJob(job);
+          return;
+        }
         execution = mergeJob(execution, job);
         publish();
         if (job.status === 'QUEUED') schedule(pollJob);
-        else if (job.status === 'RUNNING') await pollTimeline();
-        else if (isTerminalJob(job.status)) await finalize();
+        else await pollTimeline(job);
       } catch (error) {
         fail(error);
       }
@@ -180,6 +270,8 @@ export function useFactoryLiveData(executionId: string) {
         if (isTerminalExecution(execution.status)) {
           timeline = await loadOptionalTimeline();
           publish();
+        } else if (execution.job !== null && isTerminalJob(execution.job.status)) {
+          await settleTerminalJob(execution.job);
         } else if (execution.job !== null) {
           await pollJob();
         } else if (execution.status === 'RUNNING') {
@@ -201,10 +293,11 @@ export function useFactoryLiveData(executionId: string) {
           return;
         }
         publish();
-        if (execution.job?.status === 'QUEUED') schedule(pollJob);
+        if (execution.job !== null && isTerminalJob(execution.job.status))
+          await settleTerminalJob(execution.job);
+        else if (execution.job?.status === 'QUEUED') schedule(pollJob);
         else if (execution.job?.status === 'RUNNING' || execution.status === 'RUNNING')
           await pollTimeline();
-        else if (execution.job !== null && isTerminalJob(execution.job.status)) await finalize();
         else schedule(pollExecution);
       } catch (error) {
         fail(error);

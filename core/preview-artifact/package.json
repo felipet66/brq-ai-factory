@@ -1,0 +1,15 @@
+{
+  "name": "@brq/preview-artifact",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./filesystem": "./filesystem/filesystem-preview-artifact-store.ts",
+    "./testing": "./testing/index.ts"
+  },
+  "dependencies": {
+    "@brq/shared": "0.1.0",
+    "zod": "^4.4.3"
+  }
+}

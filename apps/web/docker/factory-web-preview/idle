@@ -1,0 +1,10 @@
+#!/usr/local/bin/node
+
+if (process.argv.length !== 3 || process.argv[2] !== '--hold') {
+  process.exitCode = 64;
+} else {
+  const finish = () => process.exit(0);
+  process.once('SIGINT', finish);
+  process.once('SIGTERM', finish);
+  setInterval(() => undefined, 2_147_000_000);
+}

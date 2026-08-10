@@ -5,7 +5,7 @@ import type { DockerSandboxImageConfiguration } from '@brq/sandbox-runner/docker
 import type { FactoryPipelineConfiguration } from '@brq/factory-pipeline';
 import { z } from 'zod';
 
-export const FACTORY_SANDBOX_POLICY_ID = 'NODE_TYPESCRIPT_24_V1' as const;
+export const FACTORY_SANDBOX_POLICY_ID = 'NODE_WEB_PREVIEW_24_V1' as const;
 export const FACTORY_SANDBOX_PROFILE_VERSION = '1.0.0' as const;
 export const FACTORY_SANDBOX_NODE_VERSION = '24.19.0' as const;
 export const FACTORY_SANDBOX_TYPESCRIPT_VERSION = '6.0.3' as const;
@@ -108,7 +108,7 @@ export function resolveFactorySandboxRuntimeConfiguration(
       expectedImageId: parsed.data.BRQ_FACTORY_SANDBOX_IMAGE_ID,
       platform: parsed.data.BRQ_FACTORY_SANDBOX_IMAGE_PLATFORM,
       requiredLabels: Object.freeze({
-        'org.brq.sandbox.factory-profile': 'node-typescript-24-v1',
+        'org.brq.sandbox.factory-profile': 'node-web-preview-24-v1',
       }),
       toolchainVersions: Object.freeze({
         NODE: FACTORY_SANDBOX_NODE_VERSION,

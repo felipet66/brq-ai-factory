@@ -42,6 +42,19 @@ export async function createSuccessfulWorkflowResultFixture(
   }).execute(request);
 }
 
+export async function createDeveloperRejectedWorkflowResultFixture(
+  request: WorkflowRequest,
+): Promise<WorkflowResult> {
+  const fixtures = await createOrchestratorAgentResultFixtures(request);
+  return createOrchestrator({
+    productOwnerAgent: { execute: async () => fixtures.generated.productOwner },
+    developerAgent: { execute: async () => fixtures.rejected.developer },
+    qaAgent: { execute: async () => fixtures.generated.qa },
+    logger: createLogger({ sink: () => undefined }),
+    now: incrementalClock(),
+  }).execute(request);
+}
+
 export function createTerminalWorkflowResultFixture(
   successful: WorkflowResult,
   status: 'FAILED' | 'CANCELLED',

@@ -2,10 +2,11 @@
 
 ## Estado atual
 
-Sprint 21 — Live Agent Workspace & Factory Visualization implementada localmente após aprovação
-arquitetural. A Factory é uma projeção visual read-only dos read models públicos e não executa
-agentes nem acessa AI Provider/OpenAI. O hotfix separado de Structured Outputs do Developer Agent
-permanece isolado. Nenhum item da Sprint 22 foi iniciado.
+Sprint 25 — Preview Runner & View Build implementada localmente após aprovação arquitetural. Um
+`PreviewArtifact` efêmero, separado do Controlled Workspace, somente é aprovado após
+`Factory SUCCESS` persistido e pode ser servido por um container Preview isolado, autenticado e
+limitado por TTL. Infraestrutura de produção, DNS/TLS operacional, deploy, runtime distribuído e
+Sprint 26 permanecem fora do escopo.
 
 ## Fundação técnica
 
@@ -37,6 +38,10 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
   concorrência;
 - Execution Worker como único consumidor sequencial, dependente apenas das APIs públicas da fila,
   do Engine e do Execution Repository;
+- Preview Artifact como envelope estático efêmero, imutável e correlacionado à Factory, sem reter o
+  Controlled Workspace original;
+- Preview Runner como port substituível de lifecycle, com adapter Docker explícito e profile
+  estático `NODE_WEB_PREVIEW_24_V1` fail-closed;
 - Better Auth como infraestrutura exclusiva do host Next.js para email/senha e sessões Prisma,
   sem imports em workspaces funcionais ou de domínio;
 - autorização server-side com roles `ADMIN` e `USER`, ownership obrigatório de
@@ -60,6 +65,8 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
   ambiente;
 - inspection data do Playground permanece em memória e em resposta `no-store`, sem Repository,
   Observability, History, cache ou browser storage;
+- metadata de Preview é persistida sem código, filesystem, host paths, portas, container IDs,
+  output, cookie ou ticket em claro; conteúdo do artifact e locator permanecem efêmeros no host;
 
 ## Shared Layer
 
@@ -217,8 +224,8 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - a saída funcional é uma `TechnicalSpecification` estrita com arquitetura, complexidade, story points, fases, plano, dependências internas e externas, riscos, decisões e rastreabilidade;
 - a Business Validation preserva IDs funcionais, rejeita referências inválidas, duplicidades e ciclos, deriva readiness e exige cobertura integral dos Acceptance Criteria da origem;
 - metadados preservam o hash canônico e a readiness da `ProductOwnerSpecification` recebida;
-- os releases históricos `prompts/developer/1.0.0` e `1.0.1` permanecem imutáveis; o loader seleciona
-  estaticamente `prompts/developer/1.0.2`, que gera exatamente `architecture.md`,
+- os releases históricos `prompts/developer/1.0.0`, `1.0.1` e `1.0.2` permanecem imutáveis; o loader
+  seleciona estaticamente `prompts/developer/1.0.3`, que gera exatamente `architecture.md`,
   `implementation-plan.md` e `technical-decisions.json` em memória;
 - o agente atua como arquiteto e não gera código ou testes, não executa comandos, não grava arquivos, não persiste, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator.
 
@@ -1104,13 +1111,99 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - Preview Runner, servidor, iframe, portas, deploy, retry, self-healing e Sprint 25 permanecem fora
   do escopo.
 
+## Implementação da Sprint 25
+
+- `core/preview-artifact` cria uma fronteira imutável e determinística para a cópia estática
+  efêmera exportada pelo profile da Factory; o artifact possui lifecycle explícito
+  `CANDIDATE → APPROVED | EXPIRED | DELETED`, `APPROVED → CONSUMED | EXPIRED | DELETED` e
+  `CONSUMED | EXPIRED → DELETED`, além de hashes próprios, lineage e provenance;
+- a captura do candidato ocorre somente após `TEST` bem-sucedido, mas a aprovação exige
+  `FactoryExecutionResult SUCCESS` já persistido, Sandbox `SUCCESS`, release
+  `RELEASED` e correlação exata de factory, sandbox request/result e workspace hashes;
+- o Controlled Workspace continua sendo descartado normalmente; Preview lê exclusivamente a cópia
+  efêmera sob uma raiz privada configurada pelo host e nunca reabre ou retém o workspace original;
+- `core/preview-runner` define port, contracts, schemas Zod, state machine, policies, limites,
+  erros, hashing, logging sanitizado, fake e coordinator sem depender de Docker, Next.js, Prisma,
+  autenticação, Factory Pipeline ou agentes;
+- `NODE_WEB_PREVIEW_24_V1` é o único profile inicial e permanece estrito e fail-closed: aceita
+  apenas o envelope estático, paths, media types, quantidade e bytes allowlisted; projetos
+  incompatíveis não recebem fallback, comando alternativo ou flexibilização da policy;
+- o adapter Docker usa uma imagem de Preview distinta do container de build/test, pinada por
+  digest e image ID, non-root, read-only, sem privileged, mounts, Docker socket, capabilities ou
+  egress e com CPU, memória, PIDs, open files, tmpfs, output, response e tempo limitados;
+- a network Docker é criada com `--internal` e sem publicação de portas. Como esse isolamento não
+  oferece conexão host→container por port publishing, um relay host-only em `127.0.0.1` usa
+  exclusivamente um helper fixo e allowlisted por `docker exec`; cada chamada exige token efêmero
+  privado, request, response, timeout e envelope são limitados e o locator nunca deixa o
+  composition root;
+- o Preview recebe origin exclusiva por `previewId`; a origin da Factory autentica e aplica
+  ownership antes de emitir um ticket curto, single-use e persistido somente como hash, cuja troca
+  cria um cookie Preview host-only, `HttpOnly` e assinado;
+- Factory cookies, DOM, storage e credentials não atravessam a origin; o gateway revalida cookie,
+  sessão `RUNNING`, TTL e locator privado em toda requisição e aceita somente `GET`/`HEAD` e
+  headers/respostas allowlisted;
+- start, health, stop manual, expiração e reconciliação convergem para remoção idempotente e
+  confirmada do relay, container, network e artifact; TTL default é 10 minutos, com ceiling de 15
+  minutos e requests autorizados apenas a reduzir o limite;
+- a migration `20260810140000_preview_metadata` adiciona `PreviewArtifact`, `PreviewSession`,
+  eventos, provenance e ticket. Prisma persiste somente metadata segura, hashes, lifecycle,
+  policy, limites e identidade do runtime; código, filesystem, paths, portas, container IDs,
+  stdout/stderr, cookies e tickets em claro são proibidos;
+- a API aditiva `3.2.0` expõe controle por execução e sessão; o Frontend adiciona `Build Preview`,
+  `View Build`, stop e a rota autenticada `/executions/[id]/preview`, consumindo somente read models
+  minimizados;
+- a suíte padrão usa Fake Preview Runner/executor e não depende de daemon. O caminho real
+  `Artifact → Start → Health → conteúdo servido → Stop → Cleanup` fica exclusivamente no comando
+  opt-in `test:preview:integration`, sem pull ou build automático;
+- ADR-035, `knowledge/51-PREVIEW_RUNNER_FLOW.md` e
+  `knowledge/52-PREVIEW_SECURITY_MODEL.md` documentam boundary, lifecycle, origin isolation,
+  autenticação, persistência, threat model e cleanup;
+- infraestrutura de produção, DNS/TLS operacional, deploy, Preview distribuído, retry,
+  self-healing e qualquer item da Sprint 26 permanecem fora do escopo.
+
+## Hotfix Developer Readiness 1.0.3
+
+- a execução real `execution-fc89dc550d362b2bfebe938e5ccf5dae` reproduziu
+  `DEVELOPER_READINESS_MISMATCH`: JSON Schema e Response Validator aceitaram a resposta, enquanto a
+  Business Validation derivou `PARTIALLY_READY` a partir de pergunta não bloqueante e/ou assumption
+  com `requiresValidation: true`;
+- `prompts/developer/1.0.3` preserva o JSON Schema do `1.0.2` e explicita a mesma tabela autoritativa,
+  na mesma ordem, no rule set do agente, nas instruções do output contract e na instrução final;
+- o modelo deve recalcular readiness sobre `openQuestions` e `assumptions` finais e confirmar
+  igualdade exata antes do JSON; `requiresValidation: false` isolado não reduz readiness e
+  completude técnica continua uma validação separada;
+- a Developer Business Validation, schemas públicos, contratos, hashing, runtime prompt budget e
+  demais agentes não foram alterados; o host permanece em 512 KiB e o prompt Developer denso usa
+  262.035 B com o novo bundle;
+- os bundles `1.0.0`, `1.0.1` e `1.0.2` permanecem intactos, o bundle ativo `1.0.3` possui hash
+  `0bd8155f3d81a382ea1ee673c1ff31e64adb3d93be5c753ad873412a139daea7`, e toda validação usa
+  providers fake ou construção local de prompt, sem chamada real à OpenAI.
+
+## Hotfix QA Traceability e Readiness 1.0.1
+
+- a execução real `execution-252c0e244d8bdbb2f013cc944d716e5f` chegou ao QA depois de Product
+  Owner e Developer concluídos, e a resposta do provider passou pelo JSON Schema e pelo Response
+  Validator antes de ser rejeitada com `QA_CATEGORY_MISMATCH` e `QA_READINESS_MISMATCH`;
+- `prompts/qa/1.0.1` preserva integralmente o JSON Schema do `1.0.0` e torna explícita, no rule set,
+  output contract e instrução final, a correspondência entre coverage/matrix e as referências
+  funcionais ou técnicas declaradas por cada cenário;
+- o mesmo bundle explicita a tabela ordenada de readiness: qualquer source que requeira
+  esclarecimento, blocker ou dúvida bloqueante produz `REQUIRES_CLARIFICATION`; caso contrário,
+  source parcial, qualquer dúvida ou assumption pendente produz `PARTIALLY_READY`; sem pendências,
+  o resultado é `READY`;
+- QA Business Validation, schemas públicos, contratos, runtime e prompt budget não foram alterados;
+  o host permanece em 512 KiB e o prompt QA denso usa 412.211 B;
+- o bundle histórico `1.0.0` permanece intacto e o bundle ativo `1.0.1` possui hash
+  `618302c7dc8ddcec7c7087789e966a74259631d4a716d125c9adefa8a5c665b9`; os testes usam somente
+  `FakeAIProvider` ou construção local de prompt, sem chamada real à OpenAI.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
-- execução direta no host e preview do código gerado; build e testes existem somente no Sandbox
-  Runner explícito, acionado pelo Factory Pipeline da Sprint 24;
+- execução direta do código gerado no host; build/test permanecem no Sandbox e Preview somente no
+  container separado do profile `NODE_WEB_PREVIEW_24_V1`;
 - network, privileged, Docker socket, bind mount, package scripts, lifecycle scripts, dependency
-  install online, retry e exportação de build na sandbox;
+  install online, retry e egress a partir dos containers;
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, requeue, recovery, workflows dinâmicos e concorrência;
@@ -1120,4 +1213,5 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - OAuth, SSO, LDAP, MFA, Organizations, Teams, permission engine, API keys, rate limit, billing e
   audit log completo;
 - filas externas, workers distribuídos, persistência distribuída e observabilidade distribuída;
+- DNS/TLS de produção, expose de container, deploy e runtime Preview distribuído;
 - deploy e configuração de Vercel.

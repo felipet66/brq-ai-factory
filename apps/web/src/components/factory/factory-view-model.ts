@@ -5,7 +5,7 @@ import type {
   ExecutionHistoryTimelineEvent,
 } from '@/api/execution-history-contracts';
 
-export const FACTORY_VIEW_MODEL_VERSION = '2.0.0' as const;
+export const FACTORY_VIEW_MODEL_VERSION = '2.1.0' as const;
 
 export type FactoryAgentId = 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
 export type FactoryTechnicalStageId =
@@ -195,6 +195,13 @@ export interface FactoryProgress {
   } | null;
 }
 
+export interface FactoryPreviewCandidate {
+  readonly factoryResultHash: string;
+  readonly sandboxResultHash: string;
+  readonly workspaceHash: string;
+  readonly profileId: string;
+}
+
 export interface FactoryViewModel {
   readonly version: typeof FACTORY_VIEW_MODEL_VERSION;
   readonly execution: {
@@ -217,6 +224,7 @@ export interface FactoryViewModel {
   readonly handoffs: readonly [FactoryHandoff, FactoryHandoff, FactoryHandoff];
   readonly activity: readonly FactoryActivity[];
   readonly progress: FactoryProgress;
+  readonly previewCandidate: FactoryPreviewCandidate | null;
 }
 
 type TimelineStage = FactoryTimelineSource['stages'][number];
@@ -842,6 +850,27 @@ function createProgress(
   });
 }
 
+function createPreviewCandidate(execution: FactoryExecutionSource): FactoryPreviewCandidate | null {
+  const result = execution.factoryResult;
+  if (
+    result === null ||
+    result.status !== 'SUCCESS' ||
+    result.sandboxStatus !== 'SUCCESS' ||
+    result.workspaceReleaseStatus !== 'RELEASED' ||
+    result.lineage.sandboxResultHash === null ||
+    result.lineage.workspaceHash === null ||
+    result.provenance.sandboxPolicyId === null
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    factoryResultHash: result.hashes.factoryResultHash,
+    sandboxResultHash: result.lineage.sandboxResultHash,
+    workspaceHash: result.lineage.workspaceHash,
+    profileId: result.provenance.sandboxPolicyId,
+  });
+}
+
 export function createFactoryViewModel({
   execution,
   timeline,
@@ -878,5 +907,6 @@ export function createFactoryViewModel({
     handoffs,
     activity: createActivity(execution, timeline),
     progress: createProgress(execution, timeline, knowledge, agents, technicalStages),
+    previewCandidate: createPreviewCandidate(execution),
   });
 }

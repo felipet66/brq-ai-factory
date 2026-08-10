@@ -2,6 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExecutionHistoryClientError } from '@/api/execution-history-client';
+import type { ExecutionJobView } from '@/api/execution-contracts';
 import type {
   ExecutionHistoryDetail,
   ExecutionHistoryTimeline,
@@ -76,6 +77,27 @@ function runningTimeline(revision = 10): ExecutionHistoryTimeline {
   });
 }
 
+function jobView(status: ExecutionJobView['status']): ExecutionJobView {
+  const persisted = historyDetail().job!;
+  const terminal = status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELLED';
+  return {
+    ...persisted,
+    executionId: EXECUTION_ID,
+    status,
+    startedAt: status === 'QUEUED' ? null : persisted.startedAt,
+    finishedAt: terminal ? persisted.finishedAt : null,
+  };
+}
+
+function staleExecutionWithTerminalJob(
+  status: Extract<ExecutionJobView['status'], 'SUCCESS' | 'FAILED' | 'CANCELLED'>,
+): ExecutionHistoryDetail {
+  return historyDetail({
+    ...runningExecution(),
+    job: { ...historyDetail().job!, status },
+  });
+}
+
 async function flush(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -88,6 +110,7 @@ beforeEach(() => {
   getExecutionMock.mockReset();
   getTimelineMock.mockReset();
   getJobMock.mockReset();
+  getJobMock.mockResolvedValue(jobView('RUNNING'));
 });
 
 afterEach(() => {
@@ -108,6 +131,54 @@ describe('useFactoryLiveData', () => {
     expect(getTimelineMock).toHaveBeenCalledOnce();
     expect(getJobMock).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['FAILED', 'CANCELLED'] as const)(
+    'projects a terminal %s job over stale RUNNING execution metadata and stops immediately',
+    async (status) => {
+      getExecutionMock.mockResolvedValueOnce(staleExecutionWithTerminalJob(status));
+      render(<LiveDataHarness />);
+      await flush();
+
+      expect(screen.getByTestId('factory-state')).toHaveTextContent(status);
+      expect(screen.getByTestId('factory-state')).toHaveAttribute(
+        'data-update-error',
+        'Execution metadata is still reconciling; the terminal job status is shown.',
+      );
+      expect(getExecutionMock).toHaveBeenCalledOnce();
+      expect(getTimelineMock).not.toHaveBeenCalled();
+      expect(getJobMock).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+
+      await act(async () => vi.advanceTimersByTimeAsync(10_000));
+      expect(getExecutionMock).toHaveBeenCalledOnce();
+      expect(getTimelineMock).not.toHaveBeenCalled();
+      expect(getJobMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('bounds final SUCCESS reconciliation and remains terminal when execution and timeline are stale', async () => {
+    const stale = staleExecutionWithTerminalJob('SUCCESS');
+    getExecutionMock.mockResolvedValueOnce(stale).mockResolvedValueOnce(stale);
+    getTimelineMock.mockResolvedValueOnce(runningTimeline(12));
+    render(<LiveDataHarness />);
+    await flush();
+
+    expect(screen.getByTestId('factory-state')).toHaveTextContent('SUCCESS');
+    expect(screen.getByTestId('factory-state')).toHaveAttribute('data-revision', '12');
+    expect(screen.getByTestId('factory-state')).toHaveAttribute(
+      'data-update-error',
+      'Execution metadata is still reconciling; the terminal job status is shown.',
+    );
+    expect(getExecutionMock).toHaveBeenCalledTimes(2);
+    expect(getTimelineMock).toHaveBeenCalledOnce();
+    expect(getJobMock).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(getExecutionMock).toHaveBeenCalledTimes(2);
+    expect(getTimelineMock).toHaveBeenCalledOnce();
+    expect(getJobMock).not.toHaveBeenCalled();
   });
 
   it('polls one source per phase from queue to observable terminal result', async () => {
@@ -157,6 +228,53 @@ describe('useFactoryLiveData', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each(['FAILED', 'SUCCESS'] as const)(
+    'reconciles a job that becomes %s while final execution metadata remains RUNNING',
+    async (status) => {
+      const stale = runningExecution();
+      getExecutionMock.mockResolvedValueOnce(stale).mockResolvedValueOnce(stale);
+      getJobMock.mockResolvedValueOnce(jobView('RUNNING')).mockResolvedValueOnce(jobView(status));
+      getTimelineMock.mockResolvedValue(historyTimeline({ revision: 16 }));
+      render(<LiveDataHarness />);
+      await flush();
+
+      expect(screen.getByTestId('factory-state')).toHaveTextContent(status);
+      expect(screen.getByTestId('factory-state')).toHaveAttribute('data-revision', '16');
+      expect(screen.getByTestId('factory-state')).toHaveAttribute(
+        'data-update-error',
+        'Execution metadata is still reconciling; the terminal job status is shown.',
+      );
+      expect(getExecutionMock).toHaveBeenCalledTimes(2);
+      expect(getTimelineMock).toHaveBeenCalledTimes(2);
+      expect(getJobMock).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('keeps polling after a terminal timeline while the bounded job reconciliation is still RUNNING', async () => {
+    const stale = runningExecution();
+    getExecutionMock.mockResolvedValueOnce(stale).mockResolvedValueOnce(stale);
+    getJobMock
+      .mockResolvedValueOnce(jobView('RUNNING'))
+      .mockResolvedValueOnce(jobView('RUNNING'))
+      .mockResolvedValueOnce(jobView('FAILED'));
+    getTimelineMock.mockResolvedValue(historyTimeline({ revision: 17 }));
+    render(<LiveDataHarness />);
+    await flush();
+
+    expect(screen.getByTestId('factory-state')).toHaveTextContent('RUNNING');
+    expect(getExecutionMock).toHaveBeenCalledTimes(2);
+    expect(getTimelineMock).toHaveBeenCalledTimes(2);
+    expect(getJobMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(screen.getByTestId('factory-state')).toHaveTextContent('FAILED');
+    expect(getJobMock).toHaveBeenCalledTimes(3);
+    expect(getTimelineMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('ignores stale revisions and never regresses the rendered timeline', async () => {
     getExecutionMock.mockResolvedValueOnce(runningExecution());
     getTimelineMock
@@ -169,6 +287,30 @@ describe('useFactoryLiveData', () => {
     await act(async () => vi.advanceTimersByTimeAsync(750));
     expect(screen.getByTestId('factory-state')).toHaveAttribute('data-revision', '7');
     expect(getTimelineMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('reconciles the job while polling a RUNNING timeline and stops on terminal failure', async () => {
+    getExecutionMock.mockResolvedValueOnce(runningExecution());
+    getJobMock.mockResolvedValueOnce(jobView('RUNNING')).mockResolvedValueOnce(jobView('FAILED'));
+    getTimelineMock.mockResolvedValueOnce(runningTimeline(15));
+    render(<LiveDataHarness />);
+    await flush();
+
+    expect(screen.getByTestId('factory-state')).toHaveTextContent('RUNNING');
+    expect(screen.getByTestId('factory-state')).toHaveAttribute('data-revision', '15');
+    expect(getJobMock).toHaveBeenCalledOnce();
+    expect(getTimelineMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(1);
+
+    await act(async () => vi.advanceTimersByTimeAsync(750));
+    expect(screen.getByTestId('factory-state')).toHaveTextContent('FAILED');
+    expect(getJobMock).toHaveBeenCalledTimes(2);
+    expect(getTimelineMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(getJobMock).toHaveBeenCalledTimes(2);
+    expect(getTimelineMock).toHaveBeenCalledOnce();
   });
 
   it('stops after a polling error while retaining the last verified state', async () => {

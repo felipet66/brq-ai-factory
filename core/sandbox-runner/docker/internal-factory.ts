@@ -35,11 +35,18 @@ import {
 import { finalizeSandboxRunResult } from '../result-projector';
 import { sandboxRunRequestSchema } from '../schemas';
 import {
+  buildArtifactExportArguments,
   buildCreateContainerArguments,
   buildExecArguments,
   buildReadinessArguments,
   isStrictSandboxCommand,
 } from './docker-command-builder';
+import {
+  DOCKER_SANDBOX_ARTIFACT_EXPORT_ABI_VERSION,
+  type DockerSandboxArtifactCorrelation,
+  type DockerSandboxArtifactSink,
+  type DockerSandboxArtifactUnavailableCode,
+} from './artifact-capture';
 import type { DockerCommandExecutor, DockerCommandResult } from './docker-cli';
 import type { ResolvedDockerSandboxRunnerOptions } from './docker-configuration';
 import { verifyCreatedContainer, verifyDockerRuntimeAndImage } from './docker-image-verifier';
@@ -48,9 +55,12 @@ import { readAndVerifyWorkspace } from './workspace-reader';
 
 interface DockerSandboxRunnerDependencies {
   readonly executor: DockerCommandExecutor;
+  readonly artifactSink?: DockerSandboxArtifactSink;
 }
 
 const ADMIN_OUTPUT_LIMIT = 1024 * 1024;
+const ARTIFACT_EXPORT_OUTPUT_LIMIT = 1536 * 1024;
+const ARTIFACT_EXPORT_TIMEOUT_MS = 15_000;
 const MINIMUM_DOCKER_MEMORY_BYTES = 128 * 1024 * 1024;
 const EMPTY_CAPTURE = Object.freeze({
   value: '',
@@ -72,6 +82,80 @@ function safeLog(operation: () => void): void {
     operation();
   } catch {
     // Observability is best effort and never changes a sandbox outcome.
+  }
+}
+
+async function notifyArtifactUnavailable(
+  sink: DockerSandboxArtifactSink,
+  correlation: DockerSandboxArtifactCorrelation,
+  code: DockerSandboxArtifactUnavailableCode,
+): Promise<void> {
+  try {
+    await sink.unavailable(Object.freeze({ ...correlation, code }));
+  } catch {
+    // Artifact inspection is additive and can never change an authoritative Sandbox outcome.
+  }
+}
+
+function artifactExportFailureCode(
+  result: DockerCommandResult,
+): DockerSandboxArtifactUnavailableCode | null {
+  if (result.cancelled) return 'EXPORT_CANCELLED';
+  if (result.timedOut) return 'EXPORT_TIMEOUT';
+  if (result.outputLimitExceeded || result.stdout.captureTruncated) return 'EXPORT_OUTPUT_LIMIT';
+  if (result.exitCode !== 0 || result.sourceCode !== null) return 'EXPORT_EXECUTION_FAILED';
+  if (result.stderr.observedBytes > 0) return 'EXPORT_EXECUTION_FAILED';
+  try {
+    const candidate: unknown = JSON.parse(result.stdout.value);
+    if (
+      candidate === null ||
+      typeof candidate !== 'object' ||
+      !('abiVersion' in candidate) ||
+      (candidate as { readonly abiVersion?: unknown }).abiVersion !==
+        DOCKER_SANDBOX_ARTIFACT_EXPORT_ABI_VERSION
+    ) {
+      return 'EXPORT_INVALID_OUTPUT';
+    }
+  } catch {
+    return 'EXPORT_INVALID_OUTPUT';
+  }
+  return null;
+}
+
+async function capturePreviewArtifact(input: {
+  readonly executor: DockerCommandExecutor;
+  readonly sink: DockerSandboxArtifactSink;
+  readonly correlation: DockerSandboxArtifactCorrelation;
+  readonly containerId: string;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  let result: DockerCommandResult;
+  try {
+    result = await input.executor.execute({
+      args: buildArtifactExportArguments(input.containerId),
+      timeoutMs: ARTIFACT_EXPORT_TIMEOUT_MS,
+      hardOutputBytes: ARTIFACT_EXPORT_OUTPUT_LIMIT,
+      capturedOutputBytesPerStream: ARTIFACT_EXPORT_OUTPUT_LIMIT,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
+    });
+  } catch {
+    await notifyArtifactUnavailable(input.sink, input.correlation, 'EXPORT_EXECUTION_FAILED');
+    return;
+  }
+  const failureCode = artifactExportFailureCode(result);
+  if (failureCode !== null) {
+    await notifyArtifactUnavailable(input.sink, input.correlation, failureCode);
+    return;
+  }
+  try {
+    await input.sink.captured(
+      Object.freeze({
+        ...input.correlation,
+        envelope: result.stdout.value,
+      }),
+    );
+  } catch {
+    await notifyArtifactUnavailable(input.sink, input.correlation, 'SINK_REJECTED');
   }
 }
 
@@ -893,6 +977,25 @@ export function createDockerSandboxRunnerWithDependencies(
                 resourceOutcome = step.resourceOutcome;
                 break;
               }
+            }
+            if (
+              status === 'SUCCESS' &&
+              steps.length === SANDBOX_STEP_IDS.length &&
+              dependencies.artifactSink !== undefined
+            ) {
+              await capturePreviewArtifact({
+                executor: dependencies.executor,
+                sink: dependencies.artifactSink,
+                correlation: Object.freeze({
+                  executionId: request.context.executionId,
+                  workspaceId: request.workspace.workspaceId,
+                  workspaceHash: request.workspace.metadata.workspaceHash,
+                  policyId: policy.policyId,
+                  sandboxRequestHash,
+                }),
+                containerId,
+                ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+              });
             }
           } else if (
             lifecycleFailure?.code === SANDBOX_RUNNER_ERROR_CODES.CANCELLED ||

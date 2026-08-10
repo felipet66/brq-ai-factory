@@ -140,6 +140,223 @@
   content: '';
 }
 
+.previewControl {
+  position: relative;
+  margin: 1.2rem;
+  overflow: hidden;
+  border: 1px solid rgb(102 223 198 / 24%);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgb(102 223 198 / 7%), transparent 42%), rgb(3 14 27 / 76%);
+}
+
+.previewControl::before {
+  position: absolute;
+  width: 0.22rem;
+  inset: 0 auto 0 0;
+  background: linear-gradient(#66dfc6, #5b80ff);
+  content: '';
+}
+
+.previewHeader {
+  display: flex;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid rgb(169 207 229 / 12%);
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.previewHeader small,
+.previewHeader h2 {
+  display: block;
+  margin: 0;
+}
+
+.previewHeader small {
+  color: #66dfc6;
+  font-size: 0.65rem;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.previewHeader h2 {
+  margin-top: 0.24rem;
+  color: #e9f4ff;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.previewBoundary {
+  color: #829ab2;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.67rem;
+  text-align: right;
+}
+
+.previewNotice,
+.previewBody {
+  margin: 0;
+  padding: 1.1rem;
+  color: #9db1c6;
+}
+
+.previewNotice {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.previewNotice button,
+.previewPrimaryAction,
+.previewSecondaryAction {
+  min-height: 2.55rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.65rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.previewNotice button,
+.previewSecondaryAction {
+  border: 1px solid rgb(169 207 229 / 24%);
+  background: rgb(9 26 43 / 84%);
+  color: #c2d3e3;
+}
+
+.previewPrimaryAction {
+  border: 1px solid #66dfc6;
+  background: #66dfc6;
+  color: #061622;
+  box-shadow: 0 0.8rem 2rem rgb(102 223 198 / 14%);
+}
+
+.previewNotice button:hover,
+.previewSecondaryAction:hover {
+  border-color: #66dfc6;
+  color: #eafffb;
+}
+
+.previewPrimaryAction:hover {
+  background: #8eecd8;
+}
+
+.previewPrimaryAction:disabled,
+.previewSecondaryAction:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.previewBody {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.previewBody strong,
+.previewBody p,
+.previewBody code {
+  display: block;
+  margin: 0;
+}
+
+.previewBody p {
+  margin-top: 0.28rem;
+  color: #8399ae;
+  font-size: 0.8rem;
+}
+
+.previewSessionCopy code {
+  margin-top: 0.45rem;
+  color: #71889e;
+  font-size: 0.7rem;
+  overflow-wrap: anywhere;
+}
+
+.previewStatusMark {
+  display: inline-flex;
+  min-width: 5.6rem;
+  min-height: 2rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: #91a9c2;
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  align-items: center;
+  justify-content: center;
+}
+
+.previewStatusMark[data-status='READY'],
+.previewStatusMark[data-status='RUNNING'] {
+  color: #66dfc6;
+}
+
+.previewStatusMark[data-status='STARTING'],
+.previewStatusMark[data-status='CREATED'],
+.previewStatusMark[data-status='STOPPING'] {
+  color: #ffd477;
+}
+
+.previewStatusMark[data-status='FAILED'],
+.previewStatusMark[data-status='UNAVAILABLE'] {
+  color: #ff91a5;
+}
+
+.previewActions {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.previewActionError {
+  grid-column: 1 / -1;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgb(255 145 165 / 25%);
+  border-radius: 0.65rem;
+  background: rgb(92 22 42 / 18%);
+  color: #ffafbd !important;
+}
+
+@media (max-width: 700px) {
+  .previewHeader,
+  .previewBody,
+  .previewNotice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .previewHeader {
+    display: flex;
+  }
+
+  .previewBoundary {
+    text-align: left;
+  }
+
+  .previewBody {
+    grid-template-columns: 1fr;
+  }
+
+  .previewActions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .previewActions form,
+  .previewActions button,
+  .previewPrimaryAction,
+  .previewSecondaryAction {
+    width: 100%;
+  }
+}
+
 .controlTopbar {
   display: flex;
   min-height: 3.4rem;

@@ -91,7 +91,7 @@ describe('application structured output diagnostics', () => {
         issueCount: 2,
         contract: {
           id: 'contract:developer-technical-specification',
-          version: '1.0.2',
+          version: '1.0.3',
           contractHash: expect.stringMatching(/^[a-f0-9]{64}$/),
           schemaHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         },

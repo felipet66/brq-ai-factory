@@ -242,7 +242,7 @@ describe('Prompt Playground HTTP handlers', () => {
     expect(body).toMatchObject({
       success: true,
       data: { retention: 'EPHEMERAL' },
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.1.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
       errors: [],
     });
     expect(fixture.inspector.catalog).toHaveBeenCalledOnce();

@@ -190,6 +190,30 @@ describe('DeveloperAgent', () => {
     expect(result.metadata.sourceReadiness).toBe('PARTIALLY_READY');
   });
 
+  it('produz PARTIALLY_READY para dúvida técnica não bloqueante sem retry ou autocorreção', async () => {
+    const specification = createTechnicalSpecification({
+      readiness: 'PARTIALLY_READY',
+      openQuestions: [
+        {
+          id: 'TQ-001',
+          question: 'A retenção local deverá ser configurável futuramente?',
+          impact: 'NON_BLOCKING',
+        },
+      ],
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createDeveloperAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(createDeveloperRequest());
+
+    expect(result.outcome).toBe('GENERATED');
+    expect(result.readiness).toBe('PARTIALLY_READY');
+    expect(result.specification?.openQuestions).toEqual(specification.openQuestions);
+    expect(result.artifacts).toHaveLength(3);
+    expect(provider.calls).toHaveLength(1);
+  });
+
   it('produz REQUIRES_CLARIFICATION para dúvida técnica bloqueante sem corrigir a saída', async () => {
     const specification = createTechnicalSpecification({
       readiness: 'REQUIRES_CLARIFICATION',

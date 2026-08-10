@@ -11,11 +11,18 @@ import {
   executionRequestSchema,
   type ExecutionRequest,
 } from '@brq/execution-engine';
+import {
+  factoryExecutionObservabilitySnapshotSchema,
+  type FactoryExecutionObservabilitySnapshot,
+} from '@brq/observability';
 import { createLogger } from '@brq/shared/logger/logger';
 
 import type { CreatePersistentFactoryPipelineOptions } from './contracts';
 import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from './errors';
 import { logRepositoryOperation } from './logging';
+
+const SAFE_TECHNICAL_CODE = /^[A-Z][A-Z0-9_]{0,127}$/u;
+const OBSERVATION_FAILURE_CODE = 'EXECUTION_REPOSITORY_OBSERVATION_FAILED';
 
 function isoNow(now: () => number): string {
   const value = now();
@@ -44,6 +51,16 @@ function assertOptions(options: CreatePersistentFactoryPipelineOptions): void {
   }
 }
 
+function observationFailureCode(error: unknown): string {
+  if (error === null || typeof error !== 'object' || !('code' in error)) {
+    return OBSERVATION_FAILURE_CODE;
+  }
+  const code = (error as { readonly code?: unknown }).code;
+  return typeof code === 'string' && SAFE_TECHNICAL_CODE.test(code)
+    ? code
+    : OBSERVATION_FAILURE_CODE;
+}
+
 export function createPersistentFactoryPipeline(
   options: CreatePersistentFactoryPipelineOptions,
 ): FactoryPipelineCoordinator {
@@ -51,9 +68,45 @@ export function createPersistentFactoryPipeline(
   const now = options.now ?? Date.now;
   const logger = options.logger ?? createLogger();
 
-  const persistTerminal = async (request: ExecutionRequest, result: FactoryExecutionResult) => {
-    await options.history.flush(request.workflowId);
-    const snapshot = options.history.get(result.executionId);
+  const terminalSnapshot = async (
+    request: ExecutionRequest,
+    result: FactoryExecutionResult,
+    jobId: string | undefined,
+  ): Promise<FactoryExecutionObservabilitySnapshot | null> => {
+    try {
+      await options.history.flush(request.workflowId);
+      const snapshot = options.history.get(result.executionId);
+      if (snapshot === null) return null;
+      const parsed = factoryExecutionObservabilitySnapshotSchema.safeParse(snapshot);
+      if (!parsed.success) {
+        throw Object.assign(new Error('Snapshot observacional terminal inválido.'), {
+          code: 'OBSERVABILITY_INVALID_SNAPSHOT',
+        });
+      }
+      return parsed.data;
+    } catch (error) {
+      logRepositoryOperation(
+        logger,
+        'warn',
+        'execution.repository.factory_observation.terminal.failed',
+        {
+          executionId: result.executionId,
+          ...(jobId === undefined ? {} : { jobId }),
+          stage: result.terminalStage,
+          status: result.status,
+          errorCode: observationFailureCode(error),
+        },
+      );
+      return null;
+    }
+  };
+
+  const persistTerminal = async (
+    request: ExecutionRequest,
+    result: FactoryExecutionResult,
+    jobId: string | undefined,
+  ) => {
+    const snapshot = await terminalSnapshot(request, result, jobId);
     const record = await options.repository.completeFactory(request.workflowId, result, snapshot);
     logRepositoryOperation(logger, 'info', 'execution.repository.factory_completed', {
       workflowId: request.workflowId,
@@ -72,6 +125,7 @@ export function createPersistentFactoryPipeline(
       if (!parsed.success) return options.pipeline.execute(rawRequest, runOptions);
       const request = parsed.data;
       const existing = await options.repository.findByWorkflowId(request.workflowId);
+      const jobId = existing?.job?.jobId;
       if (existing === null) {
         await options.repository.create({
           workflowId: request.workflowId,
@@ -121,11 +175,11 @@ export function createPersistentFactoryPipeline(
 
       try {
         const result = await options.pipeline.execute(request, runOptions);
-        await persistTerminal(request, result);
+        await persistTerminal(request, result, jobId);
         return result;
       } catch (error) {
         if (error instanceof FactoryPipelineError && error.result !== undefined) {
-          await persistTerminal(request, error.result);
+          await persistTerminal(request, error.result, jobId);
         }
         throw error;
       }
