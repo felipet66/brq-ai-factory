@@ -247,18 +247,43 @@ Código gerado por IA não deve ser executado automaticamente no MVP.
 
 # Execução de Código
 
-O MVP não executará código arbitrário produzido por agentes.
+O workflow operacional não executa automaticamente código produzido por agentes. Code Generator,
+Controlled Workspace e Sandbox Runner são três fronteiras independentes:
 
-Uma futura sandbox deve possuir:
+```text
+gerar código != materializar código != executar código
+```
 
-- isolamento
-- limite de CPU
-- limite de memória
-- limite de tempo
-- sistema de arquivos temporário
-- bloqueio de rede por padrão
-- lista controlada de comandos
-- descarte após execução
+A Sprint 23 adiciona somente um port explícito de build e testes isolados. O port recebe o resultado
+público do Controlled Workspace e uma policy confiável; não conhece agentes, workflow, API,
+Repository, Factory View ou Preview. Docker existe apenas no adapter concreto e nunca integra o
+contrato provider-neutral.
+
+Controles obrigatórios da sandbox:
+
+- imagem local pinada por digest, sem pull ou build implícito;
+- cópia limitada do workspace por stdin, sem bind mount ou host path no container;
+- verificação dos arquivos e hashes antes e depois da fronteira;
+- root filesystem read-only e tmpfs limitado para `/workspace` e `/tmp`;
+- usuário non-root, capabilities removidas, `no-new-privileges` e seccomp;
+- nenhuma rede, porta, device, host namespace, volume ou Docker socket;
+- limites de CPU, memória sem swap adicional, PIDs, open files, bytes/inodes de tmpfs, output e
+  tempo;
+- executáveis absolutos e argumentos fixos definidos pela policy, sem shell;
+- nenhuma execução de comandos da IA, scripts de `package.json` ou lifecycle scripts;
+- nenhuma instalação online ou fallback para registry;
+- cancelamento e timeout removem o container inteiro;
+- cleanup exatamente uma vez e confirmação da ausência do container;
+- stdout/stderr tratados como não confiáveis, limitados, sanitizados e nunca registrados como
+  conteúdo em logs estruturados.
+
+Um run bem-sucedido comprova somente o resultado observado das etapas fixas `PREPARE`, `TYPECHECK`,
+`BUILD` e `TEST`. Não autoriza preview, deploy, publicação, exportação de build ou uso em produção.
+Docker daemon e kernel permanecem trusted infrastructure e containerização não elimina o risco de
+escape ou comprometimento do host.
+
+Detalhes e threat model: [ADR-033](ADR/ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md) e
+[Sandbox Security Model](49-SANDBOX_SECURITY_MODEL.md).
 
 ---
 
@@ -442,8 +467,27 @@ Antes de uma entrega:
 - [ ] Logs não expõem dados.
 - [ ] Dependências foram verificadas.
 - [ ] Erros não revelam detalhes internos.
-- [ ] Código gerado não é executado automaticamente.
+- [ ] Código gerado não é executado automaticamente nem diretamente no host.
+- [ ] Sandbox usa imagem pinada, non-root, root read-only, network none e limites completos.
+- [ ] Sandbox não possui bind mount, host path, Docker socket, package script ou lifecycle script.
+- [ ] Cancelamento, timeout e falhas confirmam cleanup do container exatamente uma vez.
 - [ ] Documentação de segurança está atualizada.
+
+## Fronteira do Sandbox Runner
+
+O port `core/sandbox-runner` permanece provider-neutral. Somente o adapter Docker explícito controla
+o daemon por argumentos fixos e `shell: false`; código gerado nunca se torna comando do host. A
+policy confiável fixa imagem, helper, toolchain, dependency snapshot, executáveis, argumentos,
+environment, ordem das etapas e resource ceilings. Requests podem apenas reduzir esses limites.
+
+O adapter não monta o workspace: ele relê exatamente os arquivos declarados, recalcula hashes e
+envia um envelope canônico limitado por stdin. Um helper pinado reconstrói a cópia descartável e
+repete as verificações antes de executar. Qualquer drift ou tampering falha fechado.
+
+O resultado e os eventos contêm somente metadata allowlisted e hashes. Código, payload de
+workspace, host paths, environment, stdout/stderr e erros brutos do daemon permanecem proibidos em
+logs. Os testes Docker reais são opt-in, nunca fazem pull/build automático e não fazem parte dos
+quality gates normais.
 
 ## Fronteira do Execution Engine
 

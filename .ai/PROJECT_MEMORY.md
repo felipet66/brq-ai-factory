@@ -1014,11 +1014,69 @@ permanece isolado. Nenhum item da Sprint 22 foi iniciado.
 - nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 23
   foi iniciado.
 
+## Implementação da Sprint 23
+
+- `core/sandbox-runner` foi criado como port provider-neutral para avaliar explicitamente o
+  resultado público do Controlled Workspace, sem importar Code Generator, agentes, Orchestrator,
+  Execution Engine, Worker, Queue, Repository, Prisma ou aplicações;
+- Docker permanece restrito ao adapter explícito; o contrato principal contém requests, results,
+  schemas, policies, lifecycle, errors, hashing e imutabilidade sem tipos do runtime concreto;
+- gerar código, materializar código e executar código são três autoridades independentes; a Sprint
+  23 não conecta o Runner ao workflow, API, Repository, Observability, Factory View ou Preview;
+- o pipeline é fixo em `PREPARE → TYPECHECK → BUILD → TEST`, executa uma vez, interrompe na primeira
+  falha, marca etapas posteriores como `SKIPPED` e não possui retry, resume, fallback ou correção
+  autônoma;
+- imagem, helper, toolchain, dependency snapshot, executáveis, argumentos, environment, ordem e
+  limites são policies confiáveis do host; requests podem somente reduzir ceilings e nunca fornecem
+  command, shell, image, mount, network ou package manager;
+- nenhuma execução usa scripts do `package.json`, dependency lifecycle scripts, shell arbitrário,
+  instalação online ou fallback para registry; dependencies precisam estar disponíveis no snapshot
+  offline pinado;
+- a imagem é local e pinada por digest, com `--pull=never`; identidade, plataforma, labels, helper
+  ABI e dependency snapshot são verificados antes do start;
+- o container executa como UID/GID `65532:65532`, com root filesystem read-only, network none,
+  capabilities zeradas, no-new-privileges, seccomp e limites de CPU, memory sem swap adicional,
+  PIDs, open files, tmpfs, output e tempo;
+- privileged, ports, devices, host namespaces, bind mounts, host volumes e Docker socket são
+  proibidos; o workspace original nunca entra no container;
+- o adapter relê exatamente os arquivos declarados sob a raiz controlada, rejeita symlinks e drift,
+  recalcula hashes e envia um envelope canônico limitado por stdin; o helper pinado reconstrói a
+  cópia descartável e repete a verificação de integridade;
+- após o start, um helper fixo de readiness cria e verifica somente os diretórios no tmpfs antes do
+  `PREPARE`; o handshake remove corrida de scheduling e não adiciona etapa pública, delay ou retry;
+- timeout total e por etapa e cancelamento interrompem a execução e removem o container inteiro;
+  sucesso, falha, timeout e cancelamento convergem para um cleanup idempotente, com ownership único,
+  invocação exatamente uma vez e confirmação de remoção;
+- stdout e stderr são drenados continuamente com limites de bytes, linhas e hard output, decoding
+  UTF-8 entre chunks, remoção de ANSI/controles, redaction de secrets e host paths e truncamento
+  determinístico; logs estruturados não contêm código nem output;
+- `SandboxRequestHash` e `SandboxResultHash` estendem a cadeia de Technical Specification, bundle,
+  plan e workspace; timestamps, durations, container IDs e paths permanecem observacionais;
+  lineage e provenance continuam separados;
+- a suíte normal usa executor Docker fake e não depende de daemon; testes reais ficam somente no
+  comando opt-in `test:sandbox:integration`, exigem imagem digest-pinned previamente carregada e não
+  fazem pull ou build automático;
+- uma imagem mínima e auditável de integração foi versionada em
+  `core/sandbox-runner/integration/image`; o build explícito usa Node 24.19.0, TypeScript 6.0.3 e
+  Dockerfile frontend pinados, não inclui shell ou package manager na imagem final e produz helpers
+  fixos que validam o envelope, executam typecheck real, compilam e verificam o harness `ready`;
+- o teste opt-in real foi aprovado em Docker Desktop 4.42.0 / Engine 28.2.2, com repository digest
+  e image ID obtidos do image store local e cleanup confirmado; a compatibilidade com Docker 28
+  preserva PID/UTS privados pelos defaults inspecionados e aceita `MemorySwappiness: null` somente
+  junto do bloqueio de swap já exigido por `MemorySwap === Memory`;
+- ADR-033, `knowledge/48-SANDBOX_RUNNER_FLOW.md` e
+  `knowledge/49-SANDBOX_SECURITY_MODEL.md` documentam lifecycle, commands, filesystem, limits,
+  timeout, cancelamento, cleanup, output, threat model, hashes e integrações futuras;
+- nenhuma chamada real à OpenAI foi executada, nenhum commit foi criado e nenhum item da Sprint 24
+  foi iniciado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;
-- execução, build, testes ou preview do código gerado; a Sprint 22 limita-se à geração textual e à
-  materialização controlada;
+- execução direta no host, execução automática pelo workflow e preview do código gerado; build e
+  testes existem somente no Sandbox Runner explícito e isolado da Sprint 23;
+- network, privileged, Docker socket, bind mount, package scripts, lifecycle scripts, dependency
+  install online, retry e exportação de build na sandbox;
 - execução dos cenários definidos pelo QA Agent;
 - registry dinâmico, seleção de versão ativa e descoberta de assets de prompt;
 - retry funcional, requeue, recovery, workflows dinâmicos e concorrência;

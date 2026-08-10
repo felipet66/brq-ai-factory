@@ -321,31 +321,31 @@ describe('AI Factory host Prompt Builder budget', () => {
         'utf8',
       ),
     }).toEqual({
-      productOwnerKnowledgeBytes: 60_545,
-      developerKnowledgeBytes: 65_037,
-      qaKnowledgeBytes: 64_933,
+      productOwnerKnowledgeBytes: 63_699,
+      developerKnowledgeBytes: 65_469,
+      qaKnowledgeBytes: 65_099,
       productOwnerSpecificationBytes: 114_931,
       technicalSpecificationBytes: 178_346,
     });
     expect(productOwnerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 100_523,
+      usedBytes: 103_677,
       instructionsBytes: 30_361,
-      inputBytes: 63_322,
+      inputBytes: 66_476,
       outputContractBytes: 6_840,
     });
     expect(developerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 258_803,
+      usedBytes: 259_235,
       instructionsBytes: 55_146,
-      inputBytes: 182_548,
+      inputBytes: 182_980,
       outputContractBytes: 21_109,
     });
     expect(qaPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 405_631,
+      usedBytes: 405_797,
       instructionsBytes: 33_886,
-      inputBytes: 362_092,
+      inputBytes: 362_258,
       outputContractBytes: 9_653,
     });
     expect(qaPrompt.budget.usedBytes).toBeLessThan(AI_FACTORY_PROMPT_BUILDER_MAX_BYTES);

@@ -10,11 +10,12 @@ Cada fase deve entregar valor de forma independente.
 
 As fases podem ser reavaliadas conforme novos aprendizados.
 
-Estado incremental: Foundation, camadas core, fachadas Product Owner, Developer e QA,
-Orchestrator sequencial, Execution Engine efêmero, adapter HTTP, Frontend MVP e Execution History &
-Observability em memória estão implementados até a Sprint 16. A Sprint 16 foi validada localmente
-e aguarda aprovação humana. Persistência funcional, dashboard completo e demais páginas
-permanecem em evoluções futuras, sem atribuição a uma Sprint específica neste documento.
+Estado incremental: Foundation, camadas core, Product Owner, Developer, QA, Orchestrator, Execution
+Engine, adapter HTTP, Frontend MVP, Observability, Execution Repository, Job Queue, Worker,
+autenticação, Prompt Playground, Factory View, Code Generator e Controlled Workspace estão
+implementados até a Sprint 22. A Sprint 23 adiciona o Sandbox Runner isolado para preparação,
+typecheck, build e testes explícitos, sem conectá-lo ao workflow, API, persistência ou UI. Preview,
+deploy, execução distribuída e integração operacional continuam em evoluções futuras.
 
 ---
 
@@ -64,6 +65,8 @@ Entregas:
 - Frontend MVP com formulário e resumo da execução
 - histórico bounded em memória e timeline de execução
 - eventos tipados, métricas por agente e resumo observacional
+- Code Generator textual e Controlled Workspace independente
+- Sandbox Build/Test Runner explícito, provider-neutral e isolado por adapter Docker
 - Persistência
 - Logs
 - Exportação de Artefatos
@@ -71,6 +74,10 @@ Entregas:
 Critério de sucesso:
 
 Uma demanda percorre todo o pipeline e produz artefatos completos.
+
+As capabilities de geração, materialização e sandbox permanecem opt-in e fora do pipeline
+operacional até que ownership, autorização, persistência e eventos sejam definidos em Sprints
+próprias.
 
 ---
 
@@ -173,6 +180,9 @@ Entregas:
 - Fine Tuning
 - Plugin System
 - Marketplace de Agentes
+- integração confiável do Sandbox Runner ao lifecycle de execução
+- Preview Runner com lifecycle, autorização, portas e cleanup próprios
+- orphan recovery para containers e workspaces controlados
 
 ---
 

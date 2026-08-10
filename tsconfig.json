@@ -12,6 +12,7 @@
     "core/ai-provider/**/*.ts",
     "core/artifact-generator/**/*.ts",
     "core/controlled-workspace/**/*.ts",
+    "core/sandbox-runner/**/*.ts",
     "core/execution-engine/**/*.ts",
     "core/execution-repository/**/*.ts",
     "core/execution-worker/**/*.ts",
@@ -26,7 +27,8 @@
     "prisma/**/*.ts",
     "shared/**/*.ts",
     "vitest.config.ts",
-    "vitest.ai-live.config.ts"
+    "vitest.ai-live.config.ts",
+    "vitest.sandbox-integration.config.ts"
   ],
   "exclude": ["node_modules", "apps"]
 }

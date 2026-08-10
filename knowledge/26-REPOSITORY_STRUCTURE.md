@@ -141,23 +141,35 @@ Estrutura:
 ```
 core/
 
+agent-runner/
+
+ai-provider/
+
+artifact-generator/
+
+controlled-workspace/
+
 execution-engine/
+
+execution-repository/
+
+execution-worker/
+
+job-queue/
+
+knowledge-loader/
 
 observability/
 
 orchestrator/
 
-knowledge-loader/
-
 prompt-builder/
 
-agent-runner/
+prompt-inspector/
 
 response-validator/
 
-artifact-generator/
-
-ai-provider/
+sandbox-runner/
 ```
 
 ---
@@ -177,6 +189,51 @@ API pública do Execution Engine por decorator e projeta eventos imutáveis, tim
 métricas por agente e `ExecutionSummary` em um store limitado e local ao processo. O custo estimado
 permanece `null` sem rate card aprovado. O módulo não inicia workflow, não contém lógica de agentes
 e não persiste dados.
+
+---
+
+## Controlled Workspace
+
+Implementado em `core/controlled-workspace/` como workspace `@brq/controlled-workspace`. O
+entrypoint principal mantém contratos, schemas e planner provider-neutral; o adapter local existe
+somente no subpath explícito `./filesystem`. O workspace valida e materializa arquivos textuais sob
+uma raiz controlada, sem executar código, package manager, build ou testes.
+
+---
+
+## Sandbox Runner
+
+Implementado em `core/sandbox-runner/` como workspace `@brq/sandbox-runner`. O entrypoint principal
+define o port provider-neutral, contratos, schemas, policies, lifecycle, hashes e resultados
+imutáveis. Docker é um adapter explícito e não integra o contrato principal.
+
+O Runner recebe somente o resultado público do Controlled Workspace e uma policy confiável. Ele
+não importa agentes, Orchestrator, Execution Engine, Worker, Queue, Repository, Prisma ou apps. A
+Sprint 23 não o conecta a nenhuma dessas camadas.
+
+```text
+sandbox-runner/
+├── index.ts
+├── contracts.ts
+├── schemas.ts
+├── configuration.ts
+├── policies.ts
+├── lifecycle.ts
+├── hashing.ts
+├── output-sanitizer.ts
+├── docker/
+├── integration/
+│   ├── docker-sandbox-runner.integration.ts
+│   └── image/
+│       ├── Dockerfile
+│       ├── idle
+│       └── runner/
+└── testing/
+```
+
+O adapter Docker nunca executa código gerado diretamente no host, não monta o workspace e não
+aceita comandos do request. Uma cópia verificada é enviada por stdin a um container digest-pinned,
+non-root, read-only, sem rede, mounts, Docker socket, package scripts ou retry.
 
 ---
 
@@ -585,18 +642,25 @@ Workspaces implementados:
 - `apps/web`;
 - `shared`;
 - `prisma`;
-- `core/ai-provider`;
-- `core/knowledge-loader`;
-- `core/prompt-builder`;
-- `core/agent-runner`;
-- `core/response-validator`;
-- `core/artifact-generator`;
-- `core/observability`;
-- `agents/product-owner`;
+- `agents/code-generator`;
 - `agents/developer`;
+- `agents/product-owner`;
 - `agents/qa`;
+- `core/agent-runner`;
+- `core/ai-provider`;
+- `core/artifact-generator`;
+- `core/controlled-workspace`;
+- `core/sandbox-runner`;
+- `core/execution-engine`;
+- `core/execution-repository`;
+- `core/execution-worker`;
+- `core/job-queue`;
+- `core/knowledge-loader`;
+- `core/observability`;
 - `core/orchestrator`;
-- `core/execution-engine`.
+- `core/prompt-builder`;
+- `core/prompt-inspector`;
+- `core/response-validator`;
 
 Cada módulo é registrado como workspace somente quando for implementado pela Sprint correspondente.
 
@@ -616,6 +680,12 @@ core/orchestrator
 agents
   ↓
 APIs públicas dos componentes core + shared
+
+core/sandbox-runner
+  ↓
+core/controlled-workspace (somente contratos públicos)
+  ↓
+shared
 ```
 
 Componentes genéricos de `core` não conhecem agentes concretos. Como coordenador central, o Orchestrator é a exceção prevista pelo ADR-011 e chama somente as fachadas públicas em `agents`; cada fachada, por sua vez, compõe somente APIs públicas explicitamente permitidas pelo ADR correspondente.
@@ -662,6 +732,13 @@ O workspace de Observability pode acessar somente as APIs públicas de `core/exe
 componentes transversais de `shared` e Zod. Não pode importar Orchestrator, agentes, componentes
 inferiores do pipeline, Prisma, repositories ou código de `apps/`. O store em memória é limitado,
 observacional e não constitui persistência.
+
+O Sandbox Runner pode acessar somente os contratos públicos de `core/controlled-workspace`,
+componentes transversais de `shared` e Zod. O entrypoint principal permanece provider-neutral; o
+adapter Docker explícito é o único código que controla o runtime. O workspace não pode importar
+Code Generator, demais agentes, Orchestrator, Execution Engine, Worker, Queue, Repository, Prisma
+ou apps. Docker adapter não autoriza execução no host, bind mount, network, privileged, Docker
+socket, package scripts, lifecycle scripts ou retry.
 
 ---
 

@@ -49,7 +49,8 @@ brq-ai-factory/
 │   │   ├── ADR-029-AUTHENTICATION-AUTHORIZATION-BOUNDARY.md
 │   │   ├── ADR-030-PROMPT-PLAYGROUND-BOUNDARY.md
 │   │   ├── ADR-031-FACTORY-VISUALIZATION-BOUNDARY.md
-│   │   └── ADR-032-CODE-GENERATION-BOUNDARY.md
+│   │   ├── ADR-032-CODE-GENERATION-BOUNDARY.md
+│   │   └── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -98,7 +99,9 @@ brq-ai-factory/
 │   ├── 44-PROMPT_PLAYGROUND_FLOW.md
 │   ├── 45-FACTORY_VISUALIZATION_FLOW.md
 │   ├── 46-CODE_GENERATION_FLOW.md
-│   └── 47-CONTROLLED_WORKSPACE_FLOW.md
+│   ├── 47-CONTROLLED_WORKSPACE_FLOW.md
+│   ├── 48-SANDBOX_RUNNER_FLOW.md
+│   └── 49-SANDBOX_SECURITY_MODEL.md
 │
 ├── core/
 │   ├── orchestrator/
@@ -108,7 +111,8 @@ brq-ai-factory/
 │   ├── job-queue/
 │   ├── execution-worker/
 │   ├── prompt-inspector/
-│   └── controlled-workspace/
+│   ├── controlled-workspace/
+│   └── sandbox-runner/
 ├── agents/
 │   ├── product-owner/
 │   ├── developer/
@@ -346,6 +350,40 @@ metadata no Execution Repository.
 
 [Fluxo visual do Controlled Workspace](knowledge/47-CONTROLLED_WORKSPACE_FLOW.md) ·
 [ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
+
+## Sandbox Build & Test Runner
+
+O workspace `@brq/sandbox-runner` define um port provider-neutral que recebe somente o resultado
+público do Controlled Workspace e uma policy confiável selecionada pelo host. O adapter Docker é
+exposto separadamente e executa a sequência fixa `PREPARE → TYPECHECK → BUILD → TEST` em um único
+container descartável. Gerar, materializar e executar código permanecem três autoridades distintas.
+
+O workspace original não é montado. O adapter relê e verifica paths, bytes e hashes e transfere uma
+cópia limitada por stdin para um helper pinado. O container usa imagem por digest, usuário non-root,
+root filesystem read-only, rede desabilitada, capabilities removidas e limites de CPU, memória,
+PIDs, open files, bytes/inodes de tmpfs, output e tempo. Não há `--privileged`, Docker socket, host
+path, package script, lifecycle script, shell arbitrário, instalação online, retry ou exportação de
+build.
+
+Após iniciar o processo idle, um helper fixo de readiness cria e verifica os diretórios no tmpfs
+antes do `PREPARE`, eliminando corrida de inicialização sem adicionar etapa pública, espera
+artificial ou retry.
+
+Cancelamento, timeout, sucesso e falha convergem para um único cleanup idempotente, executado
+exatamente uma vez e confirmado antes do retorno. stdout e stderr são drenados com hard limit,
+sanitizados e resumidos; logs estruturados nunca carregam código ou conteúdo de output.
+
+A suíte padrão usa executor Docker fake. A integração real é exclusivamente opt-in por
+`npm run test:sandbox:integration`, exige daemon e imagem digest-pinned preparados explicitamente e
+nunca realiza pull ou build automático. A Sprint 23 não conecta o Runner ao workflow, API,
+Repository, Observability, Factory View ou Preview.
+
+O contexto mínimo versionado, o build explícito da imagem local e as variáveis exigidas pelo teste
+estão documentados no [README do Sandbox Runner](core/sandbox-runner/README.md).
+
+[Fluxo visual do Sandbox Runner](knowledge/48-SANDBOX_RUNNER_FLOW.md) ·
+[Modelo de segurança](knowledge/49-SANDBOX_SECURITY_MODEL.md) ·
+[ADR-033](knowledge/ADR/ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md)
 
 ## Orchestrator
 
