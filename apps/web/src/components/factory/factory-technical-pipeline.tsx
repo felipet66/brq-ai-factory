@@ -52,6 +52,12 @@ export function FactoryTechnicalPipeline({ stages }: FactoryTechnicalPipelinePro
                   <dd>{stage.failureCode}</dd>
                 </div>
               )}
+              {stage.reasonCode === null ? null : (
+                <div>
+                  <dt>Reason</dt>
+                  <dd>{stage.reasonCode}</dd>
+                </div>
+              )}
               {stage.resourceOutcome === null ? null : (
                 <div>
                   <dt>Resource</dt>

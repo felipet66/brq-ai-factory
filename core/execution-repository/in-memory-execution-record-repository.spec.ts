@@ -152,7 +152,7 @@ describe('in-memory execution record repository', () => {
         hashes: { factoryResultHash: result.hashes.factoryResultHash },
       },
     });
-    expect(completed.factoryResult?.stages).toHaveLength(11);
+    expect(completed.factoryResult?.stages).toHaveLength(12);
     expect(completed.factoryResult?.lineage.sandboxResultHash).toBe(
       result.hashes.sandboxResultHash,
     );

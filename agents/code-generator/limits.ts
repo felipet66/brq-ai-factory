@@ -5,6 +5,7 @@ export const CODE_GENERATOR_CONTRACT_LIMITS = Object.freeze({
     knowledgeDocuments: 4,
     promptBytes: 384 * 1024,
     maxOutputTokens: 131_072,
+    generationConstraints: 8,
     modelCharacters: 200,
     timeoutMs: 600_000,
   }),

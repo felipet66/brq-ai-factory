@@ -10,9 +10,17 @@ O hotfix Developer `1.0.3` está aplicado localmente: ele mantém o schema e a B
 mas explicita a tabela de readiness nos assets para evitar `DEVELOPER_READINESS_MISMATCH` quando
 existirem perguntas não bloqueantes ou premissas ainda pendentes de validação.
 
-O hotfix QA `1.0.1` também está aplicado localmente: preserva o schema e a Business Validation,
-mas explicita a correspondência obrigatória entre coverage/matrix e referências dos cenários e a
-tabela de readiness das duas fontes, bloqueios, dúvidas e premissas.
+O hotfix QA `1.0.4` também está aplicado localmente: preserva integralmente `1.0.0`–`1.0.3`, o
+schema e a Business Validation e estende o preflight final para auditar cada `DEC` e `DOD` por
+identidade em `technicalReferences`, `technicalCoverage` e matriz antes de derivar o resumo. A
+resposta continua fail-closed, sem retry ou autocorreção, quando qualquer superfície divergir.
+
+O hotfix Factory Code Profile também está aplicado localmente: o host fornece constraints do
+`NODE_WEB_PREVIEW_24_V1` ao Code Generator e valida deterministicamente o bundle antes de qualquer
+workspace. HTML/CSS sem source, JSX/TSX, source/test ausentes e dependencies/scripts incompatíveis
+falham rápido; o Sandbox permanece inalterado como última defesa. O bundle Code Generator ativo é
+`1.0.2`, com `1.0.0` e `1.0.1` preservados; sua auditoria final exige ao menos um path `.test.js` ou
+`.test.ts` antes da emissão do JSON.
 
 Um candidato somente é aprovado depois de `Factory SUCCESS` persistido, Sandbox bem-sucedido,
 hashes correlacionados e release confirmado. O fluxo público é
@@ -57,5 +65,10 @@ origin exclusiva, autenticação/ownership, ticket single-use, cookie Preview pr
 15. Preservar os bundles Developer `1.0.0`–`1.0.2`; qualquer evolução posterior ao `1.0.3` deve
     permanecer versionada, manter a Business Validation autoritativa e ser validada sem provider
     real.
-16. Preservar o bundle QA `1.0.0`; evoluções posteriores ao `1.0.1` devem manter schema e Business
-    Validation autoritativos e validar coverage, matrix e readiness sem provider real.
+16. Preservar os bundles QA `1.0.0`–`1.0.3`; evoluções posteriores ao `1.0.4` devem manter schema e
+    Business Validation autoritativos e validar coverage por identidade, matrix, preflight
+    par-a-par, resumo e readiness sem provider real, retry ou autocorreção.
+17. Preservar `prompts/code-generator/1.0.0`–`1.0.1` e o output contract do release ativo `1.0.2`.
+    Novos profiles devem ser host-owned, correlacionados à policy real e validados antes de
+    qualquer materialização, sem reduzir as capacidades globais do Code Generator nem flexibilizar
+    Sandbox.

@@ -8,6 +8,7 @@ import type { z } from 'zod';
 import type { CodeGeneratorPromptAssets } from './prompt-assets';
 import type {
   codeGenerationApprovalSchema,
+  codeGenerationConstraintSchema,
   codeGenerationLineageSchema,
   codeGenerationMetadataSchema,
   codeGenerationProvenanceSchema,
@@ -50,6 +51,7 @@ export type CodeGeneratorAgentContext = DeepReadonly<
 >;
 export type CodeGeneratorAgentLimits = DeepReadonly<z.infer<typeof codeGeneratorAgentLimitsSchema>>;
 export type CodeGenerationApproval = DeepReadonly<z.infer<typeof codeGenerationApprovalSchema>>;
+export type CodeGenerationConstraint = DeepReadonly<z.infer<typeof codeGenerationConstraintSchema>>;
 export type CodeGenerationRequest = DeepReadonly<z.infer<typeof codeGenerationRequestSchema>>;
 export type GeneratedCodeEncoding = DeepReadonly<z.infer<typeof generatedCodeEncodingSchema>>;
 export type GeneratedCodeMediaType = DeepReadonly<z.infer<typeof generatedCodeMediaTypeSchema>>;

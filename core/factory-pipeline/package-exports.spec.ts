@@ -19,6 +19,6 @@ describe('@brq/factory-pipeline package exports', () => {
     expect(createFactoryPipelineCoordinator).toBeTypeOf('function');
     expect(factoryExecutionResultSchema.parse(result)).toEqual(result);
     expect(createFactoryPipelineConfigurationFixture()).toBeDefined();
-    expect(FACTORY_PIPELINE_STAGE_IDS).toHaveLength(11);
+    expect(FACTORY_PIPELINE_STAGE_IDS).toHaveLength(12);
   });
 });

@@ -15,7 +15,10 @@ flowchart LR
     PO --> Dev["Developer"]
     Dev --> QA["QA"]
     Coordinator --> Code["Code Generator"]
-    Code --> Plan["Workspace Plan"]
+    Profile["FactoryExecutionProfile"] --> Constraints["Generation Constraints"]
+    Constraints --> Code
+    Code --> Validate["Profile Validator"]
+    Validate --> Plan["Workspace Plan"]
     Plan --> Materialize["Workspace Materialization"]
     Materialize --> Sandbox["Sandbox Runner"]
     Sandbox --> Prepare["PREPARE"]
@@ -41,6 +44,7 @@ sequenceDiagram
     E-->>F: ExecutionResult SUCCESS / QA READY
     F->>C: execute(derived approval, signal)
     C-->>F: GeneratedCodeBundle
+    F->>F: validate structure + content against profile
     F->>X: plan(explicit projection)
     X-->>F: WorkspacePlan
     F->>X: materialize(plan, signal)
@@ -93,6 +97,8 @@ flowchart LR
     PO["ProductOwnerSpecificationHash"] --> TS["TechnicalSpecificationHash"]
     TS --> QA["QA Specification / approval hash"]
     QA --> Generation["generationHash"]
+    Profile["executionProfileHash"] --> Projection["generationProjectionHash"]
+    Projection --> Validation["profileValidationHash"]
     Generation --> Bundle["bundleHash"]
     Bundle --> Plan["planHash"]
     Plan --> Workspace["workspaceHash"]
@@ -131,6 +137,7 @@ flowchart LR
     Policy["Sandbox policy / limits"] --> Provenance
     Image["Image digest / helper ABI"] --> Provenance
     Runtime["Runtime / toolchain"] --> Provenance
+    Profile["Profile / projection / validation hashes"] --> Provenance
     Provenance --> Hash["factoryProvenanceHash"]
 ```
 

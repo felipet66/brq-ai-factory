@@ -14,6 +14,14 @@ servidor.
 O modelo produz somente `files` e `entrypoints`. Ele nunca fornece hashes ou
 metadata autoritativa.
 
+O request público aceita `generationConstraints` opcionais e limitadas (1–8 quando presentes).
+Elas permitem que um host restrinja a geração para um profile específico sem reduzir as
+capacidades globais do agente. O bundle de prompt ativo `1.0.4` renderiza essas constraints em um
+único `CONSTRAINTS_SLOT`; callers sem profile recebem somente a constraint genérica explícita. O
+prompt exige genericamente que toda regra recebida seja obedecida e verificada antes do JSON, sem
+duplicar listas do profile. A constraint orienta o modelo, mas não substitui a validação
+determinística do host.
+
 ## Segurança
 
 - não importa nem chama o AI Provider diretamente;
@@ -28,12 +36,13 @@ metadata autoritativa.
 O bundle permanece dado não confiável. A fronteira Controlled Workspace deve
 revalidar paths, limites e hashes antes de materializar qualquer arquivo.
 
-## Limites do release 1.0.0
+## Limites do contrato 1.0.0
 
 - TechnicalSpecification: 224 KiB;
 - Knowledge: 4 documentos e 48 KiB;
 - Prompt: 384 KiB;
 - saída do provider: 131072 tokens;
+- 8 generation constraints;
 - 96 arquivos;
 - 64 KiB por arquivo;
 - 384 KiB de conteúdo total;
@@ -42,3 +51,8 @@ revalidar paths, limites e hashes antes de materializar qualquer arquivo.
 O `bundleContentHash` usa o domínio `brq.code-bundle-content.v1\n` seguido da
 projeção canônica e ordenada de path, encoding, media type, purpose, tamanho e
 content hash. Timestamps e durações permanecem observacionais e fora dos hashes.
+
+Os arquivos de prompt `1.0.0`–`1.0.3` permanecem preservados. O release ativo `1.0.4` mantém a
+obrigação normativa genérica do profile e explicita o preflight relacional de module/path, inclusive
+para arquivos raiz ou compartilhados rastreados somente ao plano. O output contract, o schema
+público de saída e as versões de `GeneratedCodeBundle`/contrato permanecem em `1.0.0`.

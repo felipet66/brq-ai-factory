@@ -23,6 +23,7 @@
     "@brq/execution-engine": "0.1.0",
     "@brq/execution-repository": "0.1.0",
     "@brq/execution-worker": "0.1.0",
+    "@brq/factory-execution-profile": "0.1.0",
     "@brq/factory-pipeline": "0.1.0",
     "@brq/job-queue": "0.1.0",
     "@brq/knowledge-loader": "0.1.0",

@@ -20,6 +20,7 @@ COPY --from=toolchain --chown=0:0 /opt/brq/toolchain/typescript/ /opt/brq/toolch
 
 COPY --chown=0:0 --chmod=0555 idle /opt/brq/sandbox/idle
 COPY --chown=0:0 --chmod=0555 runner/common.mjs /opt/brq/runner/common.mjs
+COPY --chown=0:0 --chmod=0444 runner/execution-profile.snapshot.json /opt/brq/runner/execution-profile.snapshot.json
 COPY --chown=0:0 --chmod=0444 runner/ready.mjs /opt/brq/runner/ready.mjs
 COPY --chown=0:0 --chmod=0444 runner/prepare.mjs /opt/brq/runner/prepare.mjs
 COPY --chown=0:0 --chmod=0444 runner/typecheck.mjs /opt/brq/runner/typecheck.mjs
@@ -35,6 +36,8 @@ LABEL org.brq.sandbox.helper-abi="1.0.0" \
   org.brq.sandbox.toolchain.node="24.19.0" \
   org.brq.sandbox.toolchain.typescript="6.0.3" \
   org.brq.sandbox.factory-profile="node-web-preview-24-v1" \
+  org.brq.sandbox.execution-profile-hash="cffc60459d28119fa0e83488ff87ff017d49668ac542002194a40e9342c1c31f" \
+  org.brq.sandbox.execution-profile-snapshot-hash="75d736b1fc3b102df86c715e62f59c87fff1ca069db604400d98b5a2f13be591" \
   org.brq.preview.artifact-export-abi="1.0.0"
 
 USER 65532:65532

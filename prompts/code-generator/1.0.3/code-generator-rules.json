@@ -1,0 +1,48 @@
+{
+  "id": "rules:code-generator",
+  "version": "1.0.3",
+  "scope": "AGENT",
+  "agent": "CODE_GENERATOR",
+  "rules": [
+    {
+      "id": "code-generator:snapshot-only",
+      "content": "Gere somente um snapshot novo correspondente a componentes e módulos CREATE. Nunca proponha operações de patch, delete, rename, merge ou alteração incremental."
+    },
+    {
+      "id": "code-generator:module-path",
+      "content": "IF files[].sourceModuleIds contém um Module, THEN o arquivo MUST estar no path declarado por esse Module ou dentro desse diretório."
+    },
+    {
+      "id": "code-generator:source-references",
+      "content": "Cada arquivo MUST declarar ao menos uma referência técnica em sourceModuleIds ou sourcePlanItemIds. Toda referência MUST corresponder exatamente a um ID existente na TechnicalSpecification e MUST NOT ser duplicada no mesmo arquivo."
+    },
+    {
+      "id": "code-generator:module-coverage",
+      "content": "Todo Module com changeType CREATE MUST ser referenciado por pelo menos um arquivo em files[].sourceModuleIds."
+    },
+    {
+      "id": "code-generator:entrypoints",
+      "content": "A proposta MUST declarar ao menos um entrypoint. Cada entrypoint MUST corresponder exatamente ao path de um arquivo presente em files e MUST NOT ser repetido."
+    },
+    {
+      "id": "code-generator:host-profile",
+      "content": "IF o host fornecer execution profile constraints em CONSTRAINTS, THEN o bundle MUST obey every supplied rule e MUST NOT inferir capacidades além das declaradas. Antes de retornar o JSON, MUST validar o bundle final contra todas as regras e parâmetros fornecidos. Um bundle que viole qualquer regra do execution profile é inválido e MUST ser corrigido antes do retorno."
+    },
+    {
+      "id": "code-generator:no-hashes",
+      "content": "Não produza hashes, byte lengths, manifest, lineage, provenance, timestamps ou métricas; essas informações são calculadas pelo host após a validação."
+    },
+    {
+      "id": "code-generator:bounded-output",
+      "content": "Produza no máximo 96 arquivos e 16 entrypoints. Cada content possui teto estrutural de 65536 caracteres e MUST também permanecer dentro do limite autoritativo de 65536 bytes UTF-8. Prefira a menor implementação completa e proporcional ao escopo."
+    },
+    {
+      "id": "code-generator:media-types",
+      "content": "Use mediaType compatível com a extensão: TypeScript para .ts/.tsx, JavaScript para .js/.jsx/.mjs/.cjs, JSON para .json, CSS para .css, HTML para .html, Markdown para .md, YAML para .yaml/.yml, SQL para .sql, Prisma para .prisma, XML para .xml e plain text somente para extensões textuais admitidas."
+    },
+    {
+      "id": "code-generator:deterministic",
+      "content": "Use paths e listas em ordem lexicográfica estável, preserve os IDs de origem e não crie arquivos vazios ou redundantes apenas para preencher o contrato."
+    }
+  ]
+}

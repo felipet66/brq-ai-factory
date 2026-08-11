@@ -127,6 +127,10 @@ export const sandboxFailureSchema = z
     stage: z.enum(Object.values(SANDBOX_RUNNER_ERROR_STAGES)),
     message: z.string().trim().min(1).max(300),
     sourceCode: z.string().trim().min(1).max(128).nullable(),
+    reasonCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
+      .nullable(),
   })
   .strict();
 
@@ -506,6 +510,7 @@ export const sandboxRunResultSchema = z
               code: result.failure.code,
               stage: result.failure.stage,
               sourceCode: result.failure.sourceCode,
+              reasonCode: result.failure.reasonCode,
             },
       policyHash: result.hashes.policyHash,
       commandPolicyHash: result.hashes.commandPolicyHash,

@@ -1,0 +1,101 @@
+{
+  "id": "contract:code-generation-proposal",
+  "version": "1.0.0",
+  "format": "JSON_SCHEMA",
+  "instructions": [
+    "Retorne somente um objeto com files e entrypoints aderente ao JSON Schema.",
+    "Cada arquivo MUST ser texto UTF-8 e MUST declarar path, content, encoding, mediaType, purpose, sourceModuleIds e sourcePlanItemIds.",
+    "Cada arquivo MUST possuir ao menos uma referência em sourceModuleIds ou sourcePlanItemIds, e toda referência MUST existir na TechnicalSpecification.",
+    "Todo módulo CREATE MUST possuir cobertura em files[].sourceModuleIds.",
+    "A proposta MUST declarar ao menos um entrypoint e cada entrypoint MUST corresponder exatamente ao path de um arquivo declarado.",
+    "Não retorne hashes, tamanhos, manifest, lineage, provenance ou propriedades adicionais."
+  ],
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["files", "entrypoints"],
+    "properties": {
+      "files": {
+        "type": "array",
+        "maxItems": 96,
+        "items": { "$ref": "#/$defs/file" }
+      },
+      "entrypoints": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "$defs": {
+      "file": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "content",
+          "encoding",
+          "mediaType",
+          "purpose",
+          "sourceModuleIds",
+          "sourcePlanItemIds"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "encoding": {
+            "type": "string",
+            "enum": ["UTF-8"]
+          },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "application/json",
+              "application/sql",
+              "application/yaml",
+              "text/css",
+              "text/html",
+              "text/javascript",
+              "text/markdown",
+              "text/plain",
+              "text/x-prisma",
+              "text/typescript",
+              "text/xml"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": ["SOURCE", "TEST", "CONFIGURATION", "DOCUMENTATION", "STYLE", "SCHEMA"]
+          },
+          "sourceModuleIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": {
+              "type": "string",
+              "pattern": "^MOD-[0-9]{3}$"
+            }
+          },
+          "sourcePlanItemIds": {
+            "type": "array",
+            "maxItems": 80,
+            "items": {
+              "type": "string",
+              "pattern": "^PLAN-[0-9]{3}$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

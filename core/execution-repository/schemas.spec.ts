@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import {
+  calculateFactoryPipelineResultHash,
+  type FactoryExecutionResult,
+} from '@brq/factory-pipeline';
 import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 
 import { projectPersistedFactoryResult } from './mapper';
@@ -117,5 +121,104 @@ describe('execution record schemas', () => {
       return stage;
     });
     expect(persistedFactoryResultSchema.safeParse({ ...factory, stages }).success).toBe(false);
+    expect(factory.lineage).toMatchObject({
+      executionProfileHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      generationProjectionHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      profileValidationHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(factory.provenance).toMatchObject({
+      executionProfileId: 'NODE_WEB_PREVIEW_24_V1',
+      executionProfileVersion: '1.0.0',
+      executionProfileContractVersion: '1.0.0',
+    });
+  });
+
+  it('persists an allowlisted nullable reason without leaking the Sandbox source code', () => {
+    const successful = createFactoryExecutionResultFixture({
+      executionId: `execution-${'e'.repeat(32)}`,
+      workflowId: 'workflow-reason-code',
+    });
+    const candidate: FactoryExecutionResult = {
+      ...successful,
+      status: 'FAILED' as const,
+      terminalStage: 'SANDBOX_PREPARE' as const,
+      failure: {
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'INLINE_ACTIVE_CONTENT',
+        stage: 'SANDBOX_PREPARE' as const,
+        message: 'A etapa técnica falhou.',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_PREPARE'
+          ? {
+              ...stage,
+              status: 'FAILED' as const,
+              failure: {
+                code: 'SANDBOX_STEP_FAILED',
+                stage: 'SANDBOX_PREPARE' as const,
+                sourceCode: null,
+                reasonCode: 'INLINE_ACTIVE_CONTENT',
+                message: 'A etapa técnica falhou.',
+              },
+            }
+          : stage,
+      ),
+    };
+    const hashes = {
+      executionHash: candidate.hashes.executionHash,
+      workflowHash: candidate.hashes.workflowHash,
+      generationHash: candidate.hashes.generationHash,
+      bundleHash: candidate.hashes.bundleHash,
+      workspacePlanHash: candidate.hashes.workspacePlanHash,
+      workspaceHash: candidate.hashes.workspaceHash,
+      sandboxRequestHash: candidate.hashes.sandboxRequestHash,
+      sandboxResultHash: candidate.hashes.sandboxResultHash,
+      lineageHash: candidate.hashes.lineageHash,
+      provenanceHash: candidate.hashes.provenanceHash,
+    };
+    const failed: FactoryExecutionResult = {
+      ...candidate,
+      hashes: {
+        ...hashes,
+        factoryResultHash: calculateFactoryPipelineResultHash({ ...candidate, hashes }),
+      },
+    };
+
+    const persisted = projectPersistedFactoryResult(failed);
+
+    expect(persisted.failure).toMatchObject({
+      code: 'SANDBOX_STEP_FAILED',
+      sourceCode: null,
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+    });
+    expect(persisted.stages.find((stage) => stage.stageId === 'SANDBOX_PREPARE')).toMatchObject({
+      failureCode: 'SANDBOX_STEP_FAILED',
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+    });
+    expect(JSON.stringify(persisted)).not.toContain('EXIT_1');
+
+    expect(
+      persistedFactoryResultSchema.safeParse({
+        ...persisted,
+        failure: persisted.failure === null ? null : { ...persisted.failure, reasonCode: null },
+        stages: persisted.stages.map((stage) => ({ ...stage, reasonCode: null })),
+        lineage: {
+          ...persisted.lineage,
+          executionProfileHash: null,
+          generationProjectionHash: null,
+          profileValidationHash: null,
+        },
+        provenance: {
+          ...persisted.provenance,
+          executionProfileId: null,
+          executionProfileVersion: null,
+          executionProfileContractVersion: null,
+          executionProfileHash: null,
+          generationProjectionHash: null,
+          profileValidationHash: null,
+        },
+      }).success,
+    ).toBe(true);
   });
 });

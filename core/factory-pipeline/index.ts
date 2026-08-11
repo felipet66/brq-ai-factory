@@ -1,5 +1,9 @@
 export { createFactoryPipelineCoordinator } from './coordinator';
 export * from './contracts';
+export type {
+  FactoryExecutionProfile,
+  FactoryExecutionProfileValidation,
+} from '@brq/factory-execution-profile';
 export {
   FACTORY_PIPELINE_ERROR_CODES,
   FactoryPipelineError,

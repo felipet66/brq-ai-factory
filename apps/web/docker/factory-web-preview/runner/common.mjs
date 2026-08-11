@@ -3,13 +3,18 @@ import { createRequire } from 'node:module';
 import { lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const PROFILE_ID = 'NODE_WEB_PREVIEW_24_V1';
+import executionProfile from './execution-profile.snapshot.json' with { type: 'json' };
+
+export const PROFILE_ID = executionProfile.profileId;
+export const REQUIRED_ENTRYPOINT = executionProfile.rules.previewProjection.requiredEntrypoint;
+export const REQUIRED_ENTRYPOINT_REASON = executionProfile.rules.files.requiredFilesRule.reasonCode;
+export const REQUIRED_TEST_REASON = executionProfile.rules.testDiscovery.rule.reasonCode;
 export const WORKSPACE_ROOT = '/workspace/project';
 export const BUILD_ROOT = '/tmp/brq-web-build';
 export const WORKSPACE_MANIFEST = '/tmp/brq-web-workspace-manifest.json';
 export const BUILD_MANIFEST = '/tmp/brq-web-build-manifest.json';
 export const NODE_TYPES = '/tmp/brq-web-node-types.d.ts';
-export const TYPESCRIPT_VERSION = '6.0.3';
+export const TYPESCRIPT_VERSION = executionProfile.rules.buildSemantics.typeScriptVersion;
 export const ARTIFACT_ABI_VERSION = '1.0.0';
 export const ARTIFACT_EXPORTER_VERSION = '1.0.0';
 
@@ -25,9 +30,10 @@ const HASH = /^[a-f0-9]{64}$/u;
 const WORKSPACE_ID = /^workspace-[a-f0-9]{32}$/u;
 const SAFE_PATH_CHARACTERS = /^[A-Za-z0-9._/-]+$/u;
 const WINDOWS_RESERVED_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/iu;
-const SOURCE_FILE = /(?:^|\/).+\.(?:js|ts)$/u;
-const TEST_FILE = /(?:^|\/)(?:tests?\/.*|.*\.test)\.(?:js|ts)$/u;
-const STATIC_FILE = /\.(?:css|html|json|svg|txt|xml)$/u;
+const PROFILE_RULES = Object.freeze(executionProfile.rules);
+const SOURCE_EXTENSIONS = new Set(PROFILE_RULES.sourceDiscovery.extensions);
+const TEST_SUFFIXES = Object.freeze(PROFILE_RULES.testDiscovery.suffixes);
+const STATIC_EXTENSIONS = new Set(PROFILE_RULES.previewProjection.staticExtensions);
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u;
 const SENSITIVE_SEGMENTS = new Set([
   '.env',
@@ -42,13 +48,7 @@ const SENSITIVE_SEGMENTS = new Set([
   'secrets',
 ]);
 const MEDIA_TYPES = Object.freeze({
-  '.css': 'text/css',
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.json': 'application/json',
-  '.svg': 'image/svg+xml',
-  '.txt': 'text/plain',
-  '.xml': 'text/xml',
+  ...PROFILE_RULES.files.mediaTypes,
 });
 const require = createRequire(import.meta.url);
 
@@ -210,11 +210,11 @@ export function validateOptionalPackage(content) {
   try {
     document = JSON.parse(decodeText(content));
   } catch {
-    throw new Error('PACKAGE_JSON');
+    throw new Error(PROFILE_RULES.packagePolicy.invalidJsonReasonCode);
   }
   assertCondition(
     document !== null && typeof document === 'object' && !Array.isArray(document),
-    'PACKAGE_POLICY',
+    PROFILE_RULES.packagePolicy.rule.reasonCode,
   );
   for (const field of [
     'dependencies',
@@ -227,10 +227,13 @@ export function validateOptionalPackage(content) {
     assertCondition(
       value === undefined ||
         (typeof value === 'object' && value !== null && Object.keys(value).length === 0),
-      'PACKAGE_POLICY',
+      PROFILE_RULES.packagePolicy.rule.reasonCode,
     );
   }
-  assertCondition(document.type === undefined || document.type === 'module', 'PACKAGE_POLICY');
+  assertCondition(
+    document.type === undefined || document.type === PROFILE_RULES.packagePolicy.type,
+    PROFILE_RULES.packagePolicy.rule.reasonCode,
+  );
 }
 
 async function enumerateFiles(directory, root) {
@@ -292,23 +295,35 @@ export async function verifyPreparedWorkspace() {
 export function sourcePathsFromManifest(manifest) {
   const sources = manifest.files
     .map((file) => file.path)
-    .filter((filePath) => SOURCE_FILE.test(filePath) && !filePath.endsWith('.d.ts'));
-  assertCondition(sources.length > 0, 'NO_SUPPORTED_SOURCE');
+    .filter(
+      (filePath) =>
+        SOURCE_EXTENSIONS.has(path.posix.extname(filePath).toLowerCase()) &&
+        !PROFILE_RULES.sourceDiscovery.excludedSuffixes.some((suffix) => filePath.endsWith(suffix)),
+    );
+  assertCondition(sources.length > 0, PROFILE_RULES.sourceDiscovery.rule.reasonCode);
   assertCondition(
-    manifest.files.every((file) => !/\.(?:jsx|tsx|cjs|cts|mjs|mts)$/u.test(file.path)),
-    'UNSUPPORTED_SOURCE_PROFILE',
+    manifest.files.every((file) => {
+      const extension = path.posix.extname(file.path).toLowerCase();
+      return (
+        PROFILE_RULES.files.allowedExtensions.includes(extension) &&
+        !PROFILE_RULES.files.forbiddenExtensions.includes(extension)
+      );
+    }),
+    PROFILE_RULES.files.rule.reasonCode,
   );
   return Object.freeze(sources);
 }
 
 export function testPathsFromSources(sources) {
-  const tests = sources.filter((filePath) => TEST_FILE.test(filePath));
-  assertCondition(tests.length > 0, 'NO_TEST_FILES');
+  const tests = sources.filter((filePath) =>
+    TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix)),
+  );
+  assertCondition(tests.length > 0, PROFILE_RULES.testDiscovery.rule.reasonCode);
   return Object.freeze(tests);
 }
 
 export function isTestPath(filePath) {
-  return TEST_FILE.test(filePath);
+  return TEST_SUFFIXES.some((suffix) => filePath.endsWith(suffix));
 }
 
 export function loadTypeScript() {
@@ -332,13 +347,16 @@ export async function compilerRootNames(manifest) {
 }
 
 export function compilerOptions(typescript, additional = {}) {
+  const target = typescript.ScriptTarget[PROFILE_RULES.buildSemantics.target];
+  const moduleKind = typescript.ModuleKind[PROFILE_RULES.buildSemantics.module];
+  assertCondition(target !== undefined && moduleKind !== undefined, 'TYPESCRIPT_VERSION');
   return Object.freeze({
-    target: typescript.ScriptTarget.ES2022,
-    module: typescript.ModuleKind.ES2022,
+    target,
+    module: moduleKind,
     moduleResolution: typescript.ModuleResolutionKind.Bundler,
-    strict: true,
-    allowJs: true,
-    checkJs: true,
+    strict: PROFILE_RULES.buildSemantics.strict,
+    allowJs: PROFILE_RULES.buildSemantics.allowJavaScript,
+    checkJs: PROFILE_RULES.buildSemantics.checkJavaScript,
     esModuleInterop: true,
     noEmitOnError: true,
     skipLibCheck: false,
@@ -360,15 +378,30 @@ export async function writeVerifiedFile(root, relativePath, content) {
   assertCondition(sha256(await readFile(target)) === sha256(content), 'WRITE_VERIFY');
 }
 
-function assertRelativeReference(value) {
+function assertRelativeReference(value, reasonCode) {
   const normalized = value.trim();
   assertCondition(
     normalized.length > 0 &&
       !/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/iu.test(normalized) &&
       !normalized.includes('\\') &&
       !normalized.split(/[?#]/u, 1)[0].split('/').includes('..'),
-    'EXTERNAL_OR_UNSAFE_REFERENCE',
+    reasonCode,
   );
+}
+
+function usesBrowserCapability(content, capability) {
+  const expressions = Object.freeze({
+    EventSource: /\bEventSource\s*\(/u,
+    SharedWorker: /\bSharedWorker\s*\(/u,
+    WebSocket: /\bWebSocket\s*\(/u,
+    Worker: /\bWorker\s*\(/u,
+    eval: /\beval\s*\(/u,
+    importScripts: /\bimportScripts\s*\(/u,
+    'navigator.sendBeacon': /\bnavigator\.sendBeacon\s*\(/u,
+    'navigator.serviceWorker': /\bnavigator\.serviceWorker\b/u,
+    'new Function': /\bnew\s+Function\s*\(/u,
+  });
+  return expressions[capability]?.test(content) ?? false;
 }
 
 export function validatePreviewSource(filePath, content) {
@@ -377,45 +410,120 @@ export function validatePreviewSource(filePath, content) {
     try {
       JSON.parse(text);
     } catch {
-      throw new Error('INVALID_JSON');
+      throw new Error(PROFILE_RULES.contentRules.json.rule.reasonCode);
     }
   }
   if (filePath.endsWith('.html')) {
-    assertCondition(!/<(?:base|embed|form|iframe|object)\b/iu.test(text), 'UNSUPPORTED_HTML');
-    assertCondition(!/\son[a-z]+\s*=|\sstyle\s*=|<style\b/iu.test(text), 'INLINE_ACTIVE_CONTENT');
-    assertCondition(!/<script\b(?![^>]*\bsrc\s*=)[^>]*>/iu.test(text), 'INLINE_ACTIVE_CONTENT');
-    for (const match of text.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/giu)) {
-      assertRelativeReference(match[1]);
+    const forbiddenElements = PROFILE_RULES.contentRules.html.forbiddenElements.join('|');
+    assertCondition(
+      !new RegExp(`<(?:${forbiddenElements})\\b`, 'iu').test(text),
+      PROFILE_RULES.contentRules.html.elementsRule.reasonCode,
+    );
+    const attributePrefixes = PROFILE_RULES.contentRules.html.forbiddenAttributePrefixes.join('|');
+    const forbiddenAttributes = PROFILE_RULES.contentRules.html.forbiddenAttributes.join('|');
+    assertCondition(
+      !new RegExp(
+        `\\s(?:${attributePrefixes})[a-z]+\\s*=|\\s(?:${forbiddenAttributes})\\s*=`,
+        'iu',
+      ).test(text),
+      PROFILE_RULES.contentRules.html.inlineActiveRule.reasonCode,
+    );
+    assertCondition(
+      !PROFILE_RULES.contentRules.html.forbidStyleElement || !/<style\b/iu.test(text),
+      PROFILE_RULES.contentRules.html.inlineActiveRule.reasonCode,
+    );
+    assertCondition(
+      !PROFILE_RULES.contentRules.html.forbidInlineScript ||
+        !/<script\b(?![^>]*\bsrc\s*=)[^>]*>/iu.test(text),
+      PROFILE_RULES.contentRules.html.inlineActiveRule.reasonCode,
+    );
+    const referenceAttributes = PROFILE_RULES.contentRules.html.referenceAttributes.join('|');
+    const referenceExpression = new RegExp(
+      `\\b(?:${referenceAttributes})\\s*=\\s*["']([^"']+)["']`,
+      'giu',
+    );
+    for (const match of text.matchAll(referenceExpression)) {
+      assertRelativeReference(match[1], PROFILE_RULES.contentRules.html.referencesRule.reasonCode);
     }
   }
-  if (/\.(?:js|ts)$/u.test(filePath) && !isTestPath(filePath)) {
+  if (SOURCE_EXTENSIONS.has(path.posix.extname(filePath).toLowerCase())) {
     assertCondition(
-      !/\b(?:eval\s*\(|new\s+Function\s*\(|WebSocket\s*\(|EventSource\s*\(|SharedWorker\s*\(|Worker\s*\(|importScripts\s*\(|sendBeacon\s*\(|serviceWorker\b)/u.test(
-        text,
-      ),
-      'UNSUPPORTED_BROWSER_CAPABILITY',
+      !/\b(?:require\s*\(|module\.exports\b|exports\.[A-Za-z_$])/u.test(text),
+      PROFILE_RULES.modulePolicy.formatRule.reasonCode,
     );
-    for (const match of text.matchAll(/(?:\bfrom\s+|\bimport\s*\()\s*["']([^"']+)["']/gu)) {
-      assertRelativeReference(match[1]);
+    const allowedRelativeExtensions = new Set(PROFILE_RULES.modulePolicy.relativeImportExtensions);
+    const allowedTestBareImports = new Set(PROFILE_RULES.modulePolicy.allowedTestBareImports);
+    const importedSpecifiers = [
+      ...text.matchAll(/\bfrom\s+["']([^"']+)["']/gu),
+      ...text.matchAll(/\bimport\s+["']([^"']+)["']/gu),
+      ...text.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu),
+    ].map((match) => match[1]);
+    assertCondition(
+      importedSpecifiers.every((specifier) => {
+        if (specifier.startsWith('./') || specifier.startsWith('../')) {
+          return allowedRelativeExtensions.has(path.posix.extname(specifier).toLowerCase());
+        }
+        return isTestPath(filePath) && allowedTestBareImports.has(specifier);
+      }),
+      PROFILE_RULES.modulePolicy.importRule.reasonCode,
+    );
+  }
+  if (SOURCE_EXTENSIONS.has(path.posix.extname(filePath).toLowerCase()) && !isTestPath(filePath)) {
+    assertCondition(
+      !PROFILE_RULES.contentRules.javaScript.forbiddenCapabilities.some((capability) =>
+        usesBrowserCapability(text, capability),
+      ),
+      PROFILE_RULES.contentRules.javaScript.capabilitiesRule.reasonCode,
+    );
+    if (PROFILE_RULES.contentRules.javaScript.relativeImportsOnly) {
+      for (const match of text.matchAll(/(?:\bfrom\s+|\bimport\s*\()\s*["']([^"']+)["']/gu)) {
+        assertRelativeReference(
+          match[1],
+          PROFILE_RULES.contentRules.javaScript.referencesRule.reasonCode,
+        );
+      }
     }
-    for (const match of text.matchAll(/\bfetch\s*\(\s*["']([^"']+)["']/gu)) {
-      assertRelativeReference(match[1]);
+    if (PROFILE_RULES.contentRules.javaScript.relativeFetchOnly) {
+      for (const match of text.matchAll(/\bfetch\s*\(\s*["']([^"']+)["']/gu)) {
+        assertRelativeReference(
+          match[1],
+          PROFILE_RULES.contentRules.javaScript.referencesRule.reasonCode,
+        );
+      }
     }
   }
   if (filePath.endsWith('.css')) {
-    assertCondition(!/@import\b/iu.test(text), 'UNSUPPORTED_CSS');
-    for (const match of text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/giu)) {
-      assertRelativeReference(match[1]);
+    assertCondition(
+      !PROFILE_RULES.contentRules.css.forbidImport || !/@import\b/iu.test(text),
+      PROFILE_RULES.contentRules.css.importRule.reasonCode,
+    );
+    if (PROFILE_RULES.contentRules.css.relativeUrlsOnly) {
+      for (const match of text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/giu)) {
+        assertRelativeReference(match[1], PROFILE_RULES.contentRules.css.urlsRule.reasonCode);
+      }
     }
   }
-  if (filePath.endsWith('.svg')) {
-    assertCondition(
-      !/<(?:script|foreignObject)\b|\son[a-z]+\s*=|\b(?:href|src)\s*=\s*["'](?:[a-z][a-z0-9+.-]*:|\/\/)/iu.test(
-        text,
-      ),
-      'UNSUPPORTED_SVG',
-    );
+}
+
+export function validateExecutionProfileFiles(files) {
+  const manifest = { files };
+  const sources = sourcePathsFromManifest(manifest);
+  const tests = testPathsFromSources(sources);
+  assertCondition(
+    PROFILE_RULES.files.requiredFiles.every((requiredPath) =>
+      files.some((file) => file.path === requiredPath),
+    ),
+    PROFILE_RULES.files.requiredFilesRule.reasonCode,
+  );
+  for (const file of files) {
+    const expectedMediaType = MEDIA_TYPES[path.posix.extname(file.path).toLowerCase()];
+    if (file.mediaType !== undefined) {
+      assertCondition(file.mediaType === expectedMediaType, PROFILE_RULES.files.rule.reasonCode);
+    }
+    if (file.path === PROFILE_RULES.packagePolicy.path) validateOptionalPackage(file.content);
+    validatePreviewSource(file.path, file.content);
   }
+  return Object.freeze({ sources, tests });
 }
 
 export function mediaTypeFor(filePath) {
@@ -429,7 +537,9 @@ export function staticPathsFromManifest(manifest) {
     .map((file) => file.path)
     .filter(
       (filePath) =>
-        filePath !== 'package.json' && STATIC_FILE.test(filePath) && !isTestPath(filePath),
+        filePath !== PROFILE_RULES.packagePolicy.path &&
+        STATIC_EXTENSIONS.has(path.posix.extname(filePath).toLowerCase()) &&
+        !isTestPath(filePath),
     )
     .sort();
 }

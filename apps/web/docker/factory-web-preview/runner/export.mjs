@@ -7,6 +7,8 @@ import {
   MAX_ARTIFACT_BYTES,
   MAX_ARTIFACT_FILES,
   PROFILE_ID,
+  REQUIRED_ENTRYPOINT,
+  REQUIRED_ENTRYPOINT_REASON,
   assertCondition,
   containedPath,
   parseWorkspaceArguments,
@@ -35,8 +37,8 @@ await runHelper('EXPORT', async () => {
   }
   assertCondition(files.length > 0 && files.length <= MAX_ARTIFACT_FILES, 'ARTIFACT_FILES');
   assertCondition(
-    files.some((file) => file.path === 'index.html'),
-    'INDEX_HTML_REQUIRED',
+    files.some((file) => file.path === REQUIRED_ENTRYPOINT),
+    REQUIRED_ENTRYPOINT_REASON,
   );
   assertCondition(totalBytes > 0 && totalBytes <= MAX_ARTIFACT_BYTES, 'ARTIFACT_BYTES');
   process.stdout.write(

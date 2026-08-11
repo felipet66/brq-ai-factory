@@ -1,0 +1,243 @@
+{
+  "snapshotVersion": "1.0.0",
+  "profileId": "NODE_WEB_PREVIEW_24_V1",
+  "profileVersion": "1.0.0",
+  "profileHash": "cffc60459d28119fa0e83488ff87ff017d49668ac542002194a40e9342c1c31f",
+  "rules": {
+    "files": {
+      "pathPolicy": "ASCII_PORTABLE",
+      "allowedExtensions": [".css", ".html", ".js", ".json", ".ts", ".txt", ".xml"],
+      "forbiddenExtensions": [".cjs", ".cts", ".jsx", ".mjs", ".mts", ".tsx"],
+      "requiredFiles": ["index.html"],
+      "mediaTypes": {
+        ".css": "text/css",
+        ".html": "text/html",
+        ".js": "text/javascript",
+        ".json": "application/json",
+        ".ts": "text/typescript",
+        ".txt": "text/plain",
+        ".xml": "text/xml"
+      },
+      "rule": {
+        "ruleId": "files.allowed-and-media-types",
+        "reasonCode": "UNSUPPORTED_SOURCE_PROFILE"
+      },
+      "requiredFilesRule": { "ruleId": "files.required", "reasonCode": "INDEX_HTML_REQUIRED" }
+    },
+    "sourceDiscovery": {
+      "extensions": [".js", ".ts"],
+      "excludedSuffixes": [".d.ts"],
+      "required": true,
+      "rule": { "ruleId": "source.required", "reasonCode": "NO_SUPPORTED_SOURCE" }
+    },
+    "testDiscovery": {
+      "suffixes": [".test.js", ".test.ts"],
+      "required": true,
+      "rule": { "ruleId": "test.required", "reasonCode": "NO_TEST_FILES" }
+    },
+    "modulePolicy": {
+      "format": "ESM",
+      "relativeImportExtensions": [".js"],
+      "allowedTestBareImports": ["node:assert", "node:assert/strict", "node:test"],
+      "formatRule": { "ruleId": "module.esm-only", "reasonCode": "DEPENDENCY_UNSUPPORTED" },
+      "importRule": { "ruleId": "module.import-policy", "reasonCode": "DEPENDENCY_UNSUPPORTED" }
+    },
+    "packagePolicy": {
+      "path": "package.json",
+      "type": "module",
+      "dependencies": "FORBIDDEN",
+      "scripts": "FORBIDDEN",
+      "rule": { "ruleId": "package.no-scripts-or-dependencies", "reasonCode": "PACKAGE_POLICY" },
+      "invalidJsonReasonCode": "PACKAGE_JSON"
+    },
+    "contentRules": {
+      "html": {
+        "forbiddenElements": ["base", "embed", "form", "iframe", "object"],
+        "forbiddenAttributes": ["style"],
+        "forbiddenAttributePrefixes": ["on"],
+        "forbidInlineScript": true,
+        "forbidStyleElement": true,
+        "referenceAttributes": ["href", "src"],
+        "elementsRule": {
+          "ruleId": "content.html.forbidden-elements",
+          "reasonCode": "UNSUPPORTED_HTML"
+        },
+        "inlineActiveRule": {
+          "ruleId": "content.html.no-inline-active-content",
+          "reasonCode": "INLINE_ACTIVE_CONTENT"
+        },
+        "referencesRule": {
+          "ruleId": "content.html.relative-references",
+          "reasonCode": "EXTERNAL_OR_UNSAFE_REFERENCE"
+        }
+      },
+      "css": {
+        "forbidImport": true,
+        "relativeUrlsOnly": true,
+        "importRule": { "ruleId": "content.css.no-import", "reasonCode": "UNSUPPORTED_CSS" },
+        "urlsRule": {
+          "ruleId": "content.css.relative-urls",
+          "reasonCode": "EXTERNAL_OR_UNSAFE_REFERENCE"
+        }
+      },
+      "javaScript": {
+        "forbiddenCapabilities": [
+          "EventSource",
+          "SharedWorker",
+          "WebSocket",
+          "Worker",
+          "eval",
+          "importScripts",
+          "navigator.sendBeacon",
+          "navigator.serviceWorker",
+          "new Function"
+        ],
+        "relativeImportsOnly": true,
+        "relativeFetchOnly": true,
+        "capabilitiesRule": {
+          "ruleId": "content.javascript.forbidden-capabilities",
+          "reasonCode": "UNSUPPORTED_BROWSER_CAPABILITY"
+        },
+        "referencesRule": {
+          "ruleId": "content.javascript.relative-references",
+          "reasonCode": "EXTERNAL_OR_UNSAFE_REFERENCE"
+        }
+      },
+      "json": {
+        "parseRequired": true,
+        "rule": { "ruleId": "content.json.valid", "reasonCode": "INVALID_JSON" }
+      }
+    },
+    "buildSemantics": {
+      "runtime": "NODE",
+      "runtimeVersion": "24.19.0",
+      "typeScriptVersion": "6.0.3",
+      "target": "ES2022",
+      "module": "ES2022",
+      "strict": true,
+      "allowJavaScript": true,
+      "checkJavaScript": true,
+      "packageManager": "NONE"
+    },
+    "previewProjection": {
+      "requiredEntrypoint": "index.html",
+      "staticExtensions": [".css", ".html", ".json", ".txt", ".xml"],
+      "testVisibility": "TEST",
+      "applicationVisibility": "PREVIEW"
+    }
+  },
+  "publicReasonCodes": {
+    "PREPARE": [
+      "UNSUPPORTED_SOURCE_PROFILE",
+      "NO_SUPPORTED_SOURCE",
+      "NO_TEST_FILES",
+      "INDEX_HTML_REQUIRED",
+      "DEPENDENCY_UNSUPPORTED",
+      "PACKAGE_JSON",
+      "PACKAGE_POLICY",
+      "UNSUPPORTED_HTML",
+      "INLINE_ACTIVE_CONTENT",
+      "EXTERNAL_OR_UNSAFE_REFERENCE",
+      "UNSUPPORTED_CSS",
+      "UNSUPPORTED_BROWSER_CAPABILITY",
+      "INVALID_JSON",
+      "ABI",
+      "BASE64",
+      "CONTENT",
+      "ENCODING",
+      "ENVELOPE",
+      "FILE",
+      "FILES",
+      "FILE_BYTES",
+      "FILE_HASH",
+      "HASH",
+      "ID",
+      "INVALID_ARGUMENTS",
+      "INVALID_TEXT",
+      "PATH_COLLISION",
+      "PATH_ESCAPE",
+      "STDIN_LIMIT",
+      "TOTAL_BYTES",
+      "UNSAFE_PATH",
+      "WORKSPACE_ALIAS",
+      "WRITE_VERIFY"
+    ],
+    "TYPECHECK": [
+      "FILE_ALIAS",
+      "FILE_BYTES",
+      "FILE_HASH",
+      "FILE_SET",
+      "FILE_TYPE",
+      "INVALID_ARGUMENTS",
+      "INVALID_TEXT",
+      "MANIFEST",
+      "MANIFEST_FILE",
+      "NO_SUPPORTED_SOURCE",
+      "TYPESCRIPT_DIAGNOSTICS",
+      "TYPESCRIPT_VERSION",
+      "WORKSPACE_ALIAS",
+      "WORKSPACE_SPECIAL_FILE",
+      "WORKSPACE_SYMLINK"
+    ],
+    "BUILD": [
+      "ARTIFACT_BYTES",
+      "BUILD_EMIT",
+      "BUILD_FILE_BYTES",
+      "BUILD_FILE_HASH",
+      "BUILD_FILE_SET",
+      "BUILD_MANIFEST",
+      "BUILD_MANIFEST_FILE",
+      "BUILD_MEDIA_TYPE",
+      "BUILD_PATH",
+      "BUILD_PATH_COLLISION",
+      "BUILD_VISIBILITY",
+      "EXTERNAL_OR_UNSAFE_REFERENCE",
+      "FILE_ALIAS",
+      "FILE_BYTES",
+      "FILE_HASH",
+      "FILE_SET",
+      "FILE_TYPE",
+      "INDEX_HTML_REQUIRED",
+      "INLINE_ACTIVE_CONTENT",
+      "INVALID_ARGUMENTS",
+      "INVALID_TEXT",
+      "MANIFEST",
+      "MANIFEST_FILE",
+      "NO_SUPPORTED_SOURCE",
+      "TYPESCRIPT_DIAGNOSTICS",
+      "TYPESCRIPT_VERSION",
+      "UNSUPPORTED_BROWSER_CAPABILITY",
+      "UNSUPPORTED_CSS",
+      "UNSUPPORTED_HTML",
+      "UNSUPPORTED_PREVIEW_FILE",
+      "WORKSPACE_ALIAS",
+      "WORKSPACE_SPECIAL_FILE",
+      "WORKSPACE_SYMLINK",
+      "WRITE_VERIFY"
+    ],
+    "TEST": [
+      "BUILD_FILE_BYTES",
+      "BUILD_FILE_HASH",
+      "BUILD_FILE_SET",
+      "BUILD_MANIFEST",
+      "BUILD_MANIFEST_FILE",
+      "BUILD_MEDIA_TYPE",
+      "BUILD_VISIBILITY",
+      "FILE_ALIAS",
+      "FILE_BYTES",
+      "FILE_HASH",
+      "FILE_SET",
+      "FILE_TYPE",
+      "INVALID_ARGUMENTS",
+      "INVALID_TEXT",
+      "MANIFEST",
+      "MANIFEST_FILE",
+      "NO_TEST_FILES",
+      "TEST_FAILED",
+      "WORKSPACE_ALIAS",
+      "WORKSPACE_SPECIAL_FILE",
+      "WORKSPACE_SYMLINK"
+    ]
+  },
+  "snapshotHash": "75d736b1fc3b102df86c715e62f59c87fff1ca069db604400d98b5a2f13be591"
+}

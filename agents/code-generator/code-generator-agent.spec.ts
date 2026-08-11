@@ -3,6 +3,10 @@ import { Buffer } from 'node:buffer';
 import { createAgentRunner } from '@brq/agent-runner';
 import { createKnowledgeLoader, type KnowledgeLoader } from '@brq/knowledge-loader';
 import {
+  NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+  projectGenerationProfileConstraints,
+} from '@brq/factory-execution-profile';
+import {
   calculateCanonicalJsonHash,
   calculatePromptHash,
   canonicalizeJson,
@@ -217,6 +221,78 @@ describe('CodeGeneratorAgent', () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.bundle.files)).toBe(true);
     expect(Object.isFrozen(result.bundle.files[0])).toBe(true);
+  });
+
+  it('renders host-provided generation constraints into the real prompt input', async () => {
+    const { agent, provider } = await createHarness();
+    const generationProfile = projectGenerationProfileConstraints(
+      NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+    );
+    const request = createCodeGenerationRequest({
+      generationConstraints: [
+        {
+          id: 'constraint:factory-profile-test',
+          serialization: 'JSON',
+          value: generationProfile as unknown as JsonValue,
+        },
+      ],
+    });
+    const snapshot = structuredClone(request);
+
+    const result = await agent.execute(request);
+
+    expect(result.outcome).toBe('GENERATED');
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0]?.request.input).toContain('sourceId: constraint:factory-profile-test');
+    expect(provider.calls[0]?.request.input).toContain('"projectionVersion":"1.1.0"');
+    expect(provider.calls[0]?.request.input).toContain('"suffixes":[".test.js",".test.ts"]');
+    expect(provider.calls[0]?.request.input).toContain('"requiredEntrypoint":"index.html"');
+    expect(provider.calls[0]?.request.input).toContain('"packageManager":"NONE"');
+    expect(provider.calls[0]?.request.instructions).toContain('MUST obey every supplied rule');
+    expect(provider.calls[0]?.request.instructions).toContain(
+      'Um bundle que viole qualquer regra fornecida é inválido',
+    );
+    expect(result.metadata.assets.manifest.version).toBe('1.0.4');
+    expect(result.metadata.run.prompt.metadata.version).toBe('1.0.4');
+    expect(result.metadata.run.prompt.budget.usedBytes).toBeLessThanOrEqual(
+      CODE_GENERATOR_CONTRACT_LIMITS.request.promptBytes,
+    );
+    expect(request).toEqual(snapshot);
+    expect(Object.isFrozen(request)).toBe(false);
+  });
+
+  it('uses the explicit generic constraint only when the caller omits generation constraints', async () => {
+    const { agent, provider } = await createHarness();
+
+    await agent.execute(createCodeGenerationRequest());
+
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0]?.request.input).toContain(
+      'sourceId: constraint:generic-code-generation',
+    );
+    expect(provider.calls[0]?.request.input).toContain(
+      'Nenhum profile específico do host foi fornecido',
+    );
+  });
+
+  it('counts dynamic constraints against the prompt budget without truncation or provider calls', async () => {
+    const { agent, provider } = await createHarness();
+    const request = createCodeGenerationRequest({
+      generationConstraints: [
+        {
+          id: 'constraint:oversized-profile',
+          serialization: 'TEXT',
+          value: 'x'.repeat(CODE_GENERATOR_CONTRACT_LIMITS.request.promptBytes),
+        },
+      ],
+    });
+
+    await expect(agent.execute(request)).rejects.toMatchObject({
+      code: CODE_GENERATOR_AGENT_ERROR_CODES.RUN_FAILED,
+      stage: 'RUNNER_EXECUTION',
+      sourceCode: 'AGENT_RUN_PROMPT_BUILD_FAILED',
+    });
+    expect(provider.calls).toHaveLength(0);
   });
 
   it('uses the domain-separated interoperable content hash over binary-sorted descriptors', async () => {

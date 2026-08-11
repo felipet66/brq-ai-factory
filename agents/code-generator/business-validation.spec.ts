@@ -267,6 +267,29 @@ describe('Code Generator Business Validation', () => {
     expect(result.issues.map((issue) => issue.code)).toContain(CODES.MISSING_MODULE_COVERAGE);
   });
 
+  it('accepts root/shared files traced only to a plan and rejects forged module ownership', () => {
+    const proposal = createGeneratedCodeProposal();
+    const rootFile = {
+      path: 'index.html',
+      content: '<main>Application shell</main>\n',
+      encoding: 'UTF-8',
+      mediaType: 'text/html',
+      purpose: 'CONFIGURATION',
+      sourceModuleIds: [],
+      sourcePlanItemIds: ['PLAN-001'],
+    } as const;
+
+    expect(
+      validate({ files: [...proposal.files, rootFile], entrypoints: [rootFile.path] }),
+    ).toEqual({ valid: true, issues: [], issuesTruncated: false });
+    expect(
+      issueCodes({
+        files: [...proposal.files, { ...rootFile, sourceModuleIds: ['MOD-001'] }],
+        entrypoints: [rootFile.path],
+      }),
+    ).toContain(CODES.MODULE_PATH_MISMATCH);
+  });
+
   it('requires entrypoints to be unique and point to generated files', () => {
     const proposal = createGeneratedCodeProposal();
     expect(issueCodes({ ...proposal, entrypoints: [] })).toContain(CODES.MISSING_ENTRYPOINT);

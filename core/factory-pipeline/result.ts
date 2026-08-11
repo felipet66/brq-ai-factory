@@ -1,4 +1,9 @@
 import type { ExecutionResult } from '@brq/execution-engine';
+import type {
+  FactoryExecutionProfile,
+  FactoryExecutionProfileValidation,
+} from '@brq/factory-execution-profile';
+import { projectGenerationProfileConstraints } from '@brq/factory-execution-profile';
 
 import type {
   FactoryAgentsSummary,
@@ -38,6 +43,8 @@ export interface CreateFactoryExecutionResultInput {
   readonly generation: FactoryGenerationSummary;
   readonly workspace: FactoryWorkspaceSummary;
   readonly sandbox: FactorySandboxSummary;
+  readonly executionProfile: FactoryExecutionProfile;
+  readonly profileValidation: FactoryExecutionProfileValidation | null;
   readonly provenance: Omit<
     FactoryPipelineProvenance,
     'pipelineVersion' | 'contractVersion' | 'hashAlgorithm'
@@ -60,6 +67,10 @@ export function createFactoryExecutionResult(
     workspaceHash: input.workspace.hashes?.workspaceHash ?? null,
     sandboxRequestHash: input.sandbox.hashes?.sandboxRequestHash ?? null,
     sandboxResultHash: input.sandbox.hashes?.sandboxResultHash ?? null,
+    executionProfileHash: input.executionProfile.identity.profileHash,
+    generationProjectionHash: projectGenerationProfileConstraints(input.executionProfile)
+      .generationProjectionHash,
+    profileValidationHash: input.profileValidation?.profileValidationHash ?? null,
   };
   const provenance: FactoryPipelineProvenance = {
     pipelineVersion: FACTORY_PIPELINE_VERSION,

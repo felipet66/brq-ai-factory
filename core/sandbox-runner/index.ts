@@ -54,6 +54,7 @@ export {
 export { DEFAULT_SANDBOX_LIMITS, SANDBOX_ABSOLUTE_LIMITS, type SandboxLimits } from './limits';
 export { logSandboxEvent, sandboxLogContext } from './logging';
 export { sanitizeSandboxOutput, type SandboxOutputSanitizationOptions } from './output-sanitizer';
+export { extractSandboxHelperReasonCode } from './reason-codes';
 export {
   resolveSandboxPolicy,
   sandboxCommandPolicySchema,

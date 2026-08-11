@@ -1,0 +1,48 @@
+{
+  "id": "rules:qa",
+  "version": "1.0.4",
+  "scope": "AGENT",
+  "agent": "QA",
+  "rules": [
+    {
+      "id": "qa:specification-only",
+      "content": "Produza somente uma especificação declarativa de qualidade; não execute testes, não gere código e não alegue evidência de execução ou aprovação operacional."
+    },
+    {
+      "id": "qa:functional-coverage",
+      "content": "Depois de finalizar todos os cenários, derive a cobertura funcional diretamente de productOwnerSpecification. Para CADA id de productOwnerSpecification.acceptanceCriteria[] e CADA id de productOwnerSpecification.businessRules[]: (1) ao menos um cenário MUST conter o id em functionalReferences; (2) traceability.functionalCoverage MUST conter exatamente uma entrada cujo sourceId seja igual ao id, com scenarioIds não vazio, e cada cenário listado MUST conter esse id em functionalReferences; (3) ao menos uma linha de traceability.matrix MUST conter o id em functionalSourceIds e MUST relacioná-lo a ao menos um cenário da mesma linha que contenha esse id em functionalReferences. MUST NOT omitir, renomear ou substituir IDs AC/BR. Outros IDs funcionais válidos MAY coexistir nos cenários."
+    },
+    {
+      "id": "qa:coverage-summary",
+      "content": "Calcule traceability.summary somente depois de finalizar cenários, functionalCoverage, technicalCoverage e matrix. acceptanceCriteria.total, businessRules.total, technicalDecisions.total e definitionOfDone.total MUST ser, respectivamente, as quantidades de IDs únicos em productOwnerSpecification.acceptanceCriteria[], productOwnerSpecification.businessRules[], technicalSpecification.decisions[] e technicalSpecification.definitionOfDone[]. Para AC/BR, cada covered MUST contar somente IDs presentes simultaneamente em functionalReferences, functionalCoverage e functionalSourceIds da matrix. Para DEC/DOD, cada covered MUST contar somente IDs presentes simultaneamente em technicalReferences, technicalCoverage e technicalSourceIds da matrix. Como a cobertura integral é obrigatória, acceptanceCriteria.covered MUST ser EXATAMENTE igual a acceptanceCriteria.total; businessRules.covered MUST ser EXATAMENTE igual a businessRules.total; technicalDecisions.covered MUST ser EXATAMENTE igual a technicalDecisions.total; e definitionOfDone.covered MUST ser EXATAMENTE igual a definitionOfDone.total. Recalcule os oito valores por identidade imediatamente antes de emitir o JSON; MUST NOT declarar como coberto um ID ausente em qualquer superfície obrigatória e MUST NOT inferir cobertura por quantidade."
+    },
+    {
+      "id": "qa:technical-coverage",
+      "content": "Depois de finalizar todos os cenários, derive a cobertura técnica diretamente de technicalSpecification. Para CADA id de technicalSpecification.decisions[] e CADA id de technicalSpecification.definitionOfDone[]: (1) ao menos um cenário entre positiveScenarios, negativeScenarios e edgeCases MUST conter exatamente o id em technicalReferences; (2) traceability.technicalCoverage MUST conter exatamente uma entrada cujo sourceId seja exatamente o id, com scenarioIds não vazio, e CADA cenário listado MUST existir e conter esse mesmo id em technicalReferences; (3) ao menos uma linha de traceability.matrix MUST conter o id em technicalSourceIds e MUST relacioná-lo a ao menos um cenário da mesma linha que contenha esse id em technicalReferences. MUST NOT omitir, renomear, substituir ou inferir cobertura por contagem para IDs DEC/DOD. Outros IDs técnicos válidos MAY coexistir nos cenários. IF qualquer ocorrência estiver ausente ou incoerente, THEN MUST criar ou corrigir a cobertura válida e repetir a auditoria antes do retorno; MUST NOT declarar o ID como coberto enquanto qualquer uma das três superfícies estiver incompleta."
+    },
+    {
+      "id": "qa:scenario-categories",
+      "content": "Produza cenários positivos, negativos e edge cases com passos, resultados esperados, prioridade e referências existentes. Para cada traceability.matrix[] e para cada scenarioId da linha, o cenário MUST declarar ao menos uma fonte da própria linha: um functionalSourceId em functionalReferences OR um technicalSourceId em technicalReferences. MUST NOT incluir em uma linha um cenário que não declare nenhuma das fontes relacionadas por essa linha."
+    },
+    {
+      "id": "qa:pairwise-relational-audit",
+      "content": "Antes de emitir o JSON, execute uma auditoria relacional par-a-par sem confiar em summary ou contagens agregadas. Para CADA entrada de traceability.functionalCoverage[] e para CADA scenarioId dessa entrada: MUST localizar exatamente um cenário existente entre positiveScenarios, negativeScenarios e edgeCases, e esse cenário MUST conter, por igualdade exata, o sourceId da entrada em functionalReferences. Para CADA entrada de traceability.technicalCoverage[] e para CADA scenarioId dessa entrada: MUST localizar exatamente um cenário existente e esse cenário MUST conter, por igualdade exata, o sourceId da entrada em technicalReferences. Para CADA linha de traceability.matrix[] e para CADA scenarioId da linha: MUST localizar exatamente um cenário existente e MUST haver ao menos uma correspondência par-a-par, por igualdade exata, entre functionalSourceIds da linha e functionalReferences do cenário OR entre technicalSourceIds da linha e technicalReferences do cenário. Se qualquer par falhar, MUST corrigir a associação ou as referências antes do retorno e repetir a auditoria até não restar par incoerente. MUST NOT considerar totals, covered ou a presença isolada de um sourceId como prova da consistência de cada associação cenário-fonte."
+    },
+    {
+      "id": "qa:stable-identifiers",
+      "content": "Use os prefixos e formatos de IDs definidos no contrato e nunca invente referências funcionais ou técnicas."
+    },
+    {
+      "id": "qa:deterministic-readiness",
+      "content": "Calcule readiness somente depois de finalizar blockingItems, openQuestions e assumptions, aplicando exatamente a primeira condição verdadeira nesta ordem: (1) IF productOwnerSpecification.readiness === \"REQUIRES_CLARIFICATION\" OR technicalSpecification.readiness === \"REQUIRES_CLARIFICATION\", THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (2) ELSE IF blockingItems.length > 0, THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (3) ELSE IF qualquer openQuestions[].impact === \"BLOCKING\", THEN readiness MUST ser \"REQUIRES_CLARIFICATION\"; (4) ELSE IF productOwnerSpecification.readiness === \"PARTIALLY_READY\" OR technicalSpecification.readiness === \"PARTIALLY_READY\", THEN readiness MUST ser \"PARTIALLY_READY\"; (5) ELSE IF openQuestions.length > 0 OR qualquer assumptions[].requiresValidation === true, THEN readiness MUST ser \"PARTIALLY_READY\"; (6) ELSE readiness MUST ser \"READY\". Uma assumption com requiresValidation === false, isoladamente, MUST NOT reduzir readiness. Antes de retornar o JSON, derive novamente sobre as coleções finais e confirme que o campo readiness é exatamente igual ao resultado; readiness MUST NOT representar aprovação ou execução de testes."
+    },
+    {
+      "id": "qa:future-automation",
+      "content": "Recomende automação apenas como trabalho futuro, sem Playwright, código, comandos ou implementação de testes."
+    },
+    {
+      "id": "qa:no-fabrication",
+      "content": "Quando faltarem dados, registre premissas, questões ou bloqueios; não invente conteúdo apenas para preencher coleções."
+    }
+  ]
+}

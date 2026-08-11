@@ -435,6 +435,7 @@ model ExecutionFactoryResult {
   failureKind            String?
   failureCode            String?
   failureSourceCode      String?
+  failureReasonCode      String?
   failureStageId         String?
   executionRecord        ExecutionRecord                    @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
   stages                 ExecutionFactoryStageResult[]
@@ -457,6 +458,7 @@ model ExecutionFactoryStageResult {
   durationMs               Int?
   outputHash               String?
   failureCode              String?
+  reasonCode               String?
   resourceOutcome          String?
   executionFactoryResult   ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
 
@@ -479,6 +481,9 @@ model ExecutionFactoryLineage {
   workspaceHash                 String?
   sandboxRequestHash            String?
   sandboxResultHash             String?
+  executionProfileHash          String?
+  generationProjectionHash      String?
+  profileValidationHash         String?
   factoryResultHash             String
   executionFactoryResult        ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
 }
@@ -488,6 +493,12 @@ model ExecutionFactoryProvenance {
   codeGeneratorAgentVersion     String?
   codeGeneratorContractVersion  String?
   codeGeneratorAssetBundleHash  String?
+  executionProfileId            String?
+  executionProfileVersion       String?
+  executionProfileContractVersion String?
+  executionProfileHash          String?
+  generationProjectionHash      String?
+  profileValidationHash         String?
   workspaceVersion              String?
   workspaceContractVersion      String?
   workspacePolicyHash           String?

@@ -1,4 +1,5 @@
 import { codeGeneratorAgentLimitsSchema } from '@brq/code-generator-agent';
+import { factoryExecutionProfileSchema } from '@brq/factory-execution-profile';
 import { sandboxLimitReductionsSchema } from '@brq/sandbox-runner';
 import {
   identifierSchema,
@@ -36,6 +37,7 @@ export const factoryPipelineStageStatusSchema = z.enum([
 
 export const factoryPipelineConfigurationSchema = z
   .object({
+    executionProfile: factoryExecutionProfileSchema,
     codeGenerator: z
       .object({
         agentVersion: semanticVersionSchema,
@@ -46,17 +48,41 @@ export const factoryPipelineConfigurationSchema = z
     sandbox: z
       .object({
         policyId: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/u),
+        policyVersion: semanticVersionSchema,
+        profileSnapshotHash: factoryPipelineHashSchema,
         limits: sandboxLimitReductionsSchema.optional(),
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((configuration, context) => {
+    if (configuration.executionProfile.sandbox.policyId !== configuration.sandbox.policyId) {
+      context.addIssue({
+        code: 'custom',
+        path: ['executionProfile', 'sandbox', 'policyId'],
+        message: 'O Factory Execution Profile deve corresponder à policy de Sandbox selecionada.',
+      });
+    }
+    if (
+      configuration.executionProfile.sandbox.policyVersion !== configuration.sandbox.policyVersion
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['executionProfile', 'sandbox', 'policyVersion'],
+        message: 'A versão da policy deve corresponder ao Factory Execution Profile.',
+      });
+    }
+  });
 
 export const factoryPipelineFailureSchema = z
   .object({
     code: z.string().trim().min(1).max(128),
     stage: z.union([factoryPipelineStageIdSchema, z.literal('EXECUTION'), z.literal('SANDBOX')]),
     sourceCode: z.string().trim().min(1).max(128).nullable(),
+    reasonCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
+      .nullable(),
     message: z.string().trim().min(1).max(300),
   })
   .strict();
@@ -300,6 +326,10 @@ export const factorySandboxStepSummarySchema = z
         code: z.string().trim().min(1).max(128),
         stage: z.string().trim().min(1).max(64),
         sourceCode: z.string().trim().min(1).max(128).nullable(),
+        reasonCode: z
+          .string()
+          .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
+          .nullable(),
         message: z.string().trim().min(1).max(300),
       })
       .strict()
@@ -385,6 +415,9 @@ export const factoryPipelineLineageSchema = z
     workspaceHash: factoryPipelineHashSchema.nullable(),
     sandboxRequestHash: factoryPipelineHashSchema.nullable(),
     sandboxResultHash: factoryPipelineHashSchema.nullable(),
+    executionProfileHash: factoryPipelineHashSchema,
+    generationProjectionHash: factoryPipelineHashSchema,
+    profileValidationHash: factoryPipelineHashSchema.nullable(),
   })
   .strict();
 
@@ -402,6 +435,16 @@ export const factoryPipelineProvenanceSchema = z
         developer: semanticVersionSchema.nullable(),
         qa: semanticVersionSchema.nullable(),
         codeGenerator: semanticVersionSchema,
+      })
+      .strict(),
+    executionProfile: z
+      .object({
+        profileId: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/u),
+        version: semanticVersionSchema,
+        contractVersion: semanticVersionSchema,
+        profileHash: factoryPipelineHashSchema,
+        generationProjectionHash: factoryPipelineHashSchema,
+        profileValidationHash: factoryPipelineHashSchema.nullable(),
       })
       .strict(),
     codeGenerator: z

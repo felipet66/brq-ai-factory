@@ -39,14 +39,18 @@ Artifacts canônicos:
 ## Garantias
 
 - uma chamada ao provider por execução;
-- assets ativos `prompts/qa/1.0.1` validados e pinados por hash, com o release histórico `1.0.0` preservado;
+- assets ativos `prompts/qa/1.0.4` validados e pinados por hash, com os releases históricos `1.0.0`–`1.0.3` preservados;
 - três contextos `INPUT/UNTRUSTED`;
 - cobertura obrigatória de `AC`, `BR`, `DEC` e `DOD`;
 - consistência relacional entre coverage, matriz e referências dos cenários orientada pelo prompt e validada autoritativamente pela Business Validation;
+- auditoria por ID de cada `AC` e `BR` nas três superfícies funcionais e resumo derivado da interseção dessas evidências;
+- auditoria por ID de cada `DEC` e `DOD` em `technicalReferences`, `technicalCoverage` e `technicalSourceIds` da matriz;
+- `traceability.summary` derivado por identidade das quatro categorias somente depois dos detalhes e da rastreabilidade final;
+- preflight par-a-par final de cada associação funcional, técnica e da matriz antes da emissão do JSON;
 - readiness derivado pela tabela ordenada das duas fontes, bloqueios, dúvidas e premissas;
 - logs allowlisted;
 - resultado profundamente imutável;
-- ausência de retry, workflow, código, Playwright e execução de testes.
+- ausência de retry, autocorreção, workflow, código, Playwright e execução de testes.
 
 Consulte [ADR-021](../../knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md) e [fluxo visual](../../knowledge/35-QA_AGENT_FLOW.md).
 

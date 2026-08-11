@@ -63,11 +63,13 @@ describe('Factory Pipeline schemas', () => {
   });
 
   it('validates trusted host configuration without adding runtime defaults', () => {
+    const configuration = createFactoryPipelineConfigurationFixture();
+    expect(factoryPipelineConfigurationSchema.parse(configuration)).toEqual(configuration);
     expect(
-      factoryPipelineConfigurationSchema.parse(createFactoryPipelineConfigurationFixture()),
-    ).toEqual({
-      codeGenerator: { agentVersion: '1.0.0', model: 'fake-model' },
-      sandbox: { policyId: 'NODE_NONE_24_V1' },
-    });
+      factoryPipelineConfigurationSchema.safeParse({
+        ...configuration,
+        sandbox: { policyId: 'ANOTHER_SANDBOX_PROFILE_V1' },
+      }).success,
+    ).toBe(false);
   });
 });

@@ -28,6 +28,7 @@ describe('Factory Pipeline dependency boundary', () => {
       '@brq/code-generator-agent',
       '@brq/controlled-workspace',
       '@brq/execution-engine',
+      '@brq/factory-execution-profile',
       '@brq/sandbox-runner',
       '@brq/shared',
       'zod',

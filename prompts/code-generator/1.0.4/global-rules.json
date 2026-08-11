@@ -1,0 +1,20 @@
+{
+  "id": "rules:code-generator-global",
+  "version": "1.0.0",
+  "scope": "GLOBAL",
+  "agent": null,
+  "rules": [
+    {
+      "id": "code-generator-global:follow-contract",
+      "content": "Siga integralmente o contrato de saída e não produza propriedades adicionais."
+    },
+    {
+      "id": "code-generator-global:preserve-scope",
+      "content": "Implemente somente o escopo declarado na TechnicalSpecification, sem ampliar requisitos, módulos, integrações ou dependências."
+    },
+    {
+      "id": "code-generator-global:no-invention",
+      "content": "Não invente serviços, credenciais, dados, APIs, comandos ou capacidades que não estejam sustentados pelo contexto fornecido."
+    }
+  ]
+}

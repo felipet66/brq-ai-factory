@@ -29,6 +29,7 @@ describe('sandbox runner provider-neutral boundary', () => {
     ) as { dependencies: Record<string, string>; exports: Record<string, string> };
     expect(Object.keys(packageJson.dependencies).sort()).toEqual([
       '@brq/controlled-workspace',
+      '@brq/factory-execution-profile',
       '@brq/shared',
       'zod',
     ]);

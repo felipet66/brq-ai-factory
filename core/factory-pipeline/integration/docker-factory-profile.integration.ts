@@ -31,6 +31,13 @@ function requiredEnvironment(name: string): string {
 function workspaceRequest(): WorkspacePlanRequest {
   const rawFiles = [
     {
+      path: 'index.html',
+      content:
+        '<!doctype html><html><head><meta charset="utf-8"><title>Factory profile</title></head><body><script type="module" src="./src/math.js"></script></body></html>\n',
+      mediaType: 'text/html' as const,
+      purpose: 'SOURCE' as const,
+    },
+    {
       path: 'src/math.ts',
       content:
         'export function add(left: number, right: number): number { return left + right; }\n',
@@ -40,13 +47,13 @@ function workspaceRequest(): WorkspacePlanRequest {
     {
       path: 'test/math.test.ts',
       content:
-        "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { add } from '../src/math';\ntest('adds values', () => assert.equal(add(2, 3), 5));\n",
+        "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { add } from '../src/math.js';\ntest('adds values', () => assert.equal(add(2, 3), 5));\n",
       mediaType: 'text/typescript' as const,
       purpose: 'TEST' as const,
     },
     {
       path: 'package.json',
-      content: '{"name":"factory-profile-fixture","private":true}\n',
+      content: '{"name":"factory-profile-fixture","private":true,"type":"module"}\n',
       mediaType: 'application/json' as const,
       purpose: 'CONFIGURATION' as const,
     },

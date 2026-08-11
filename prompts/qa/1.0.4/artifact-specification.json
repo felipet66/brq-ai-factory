@@ -1,0 +1,99 @@
+{
+  "id": "artifacts:qa",
+  "version": "1.0.4",
+  "sourceContract": {
+    "id": "contract:qa-specification",
+    "version": "1.0.4",
+    "format": "JSON_SCHEMA",
+    "contractHash": "e2a407ef386c2fd202979ce3a6193b7b818ed4d387d3ddaed20e8ce88b9a9a3d"
+  },
+  "templates": [
+    {
+      "id": "artifact:qa-test-plan",
+      "name": "QA Test Plan",
+      "filename": "test-plan.md",
+      "type": "QA_TEST_PLAN",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "title", "path": ["title"] },
+        { "id": "readiness", "path": ["readiness"] },
+        { "id": "strategy", "path": ["testStrategy"] },
+        { "id": "positive", "path": ["positiveScenarios"] },
+        { "id": "negative", "path": ["negativeScenarios"] },
+        { "id": "edge", "path": ["edgeCases"] },
+        { "id": "approval", "path": ["approvalCriteria"] },
+        { "id": "priority", "path": ["priorityTests"] },
+        { "id": "automation", "path": ["automationRecommendations"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# Plano de testes — " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Readiness\n\n" },
+        { "kind": "BINDING", "bindingId": "readiness", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Estratégia\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "strategy", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Cenários positivos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "positive", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Cenários negativos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "negative", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Edge cases\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "edge", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Critérios de aprovação\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "approval", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Testes prioritários\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "priority", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Automação futura\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "automation", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    },
+    {
+      "id": "artifact:qa-traceability-matrix",
+      "name": "QA Traceability Matrix",
+      "filename": "traceability-matrix.json",
+      "type": "QA_TRACEABILITY_MATRIX",
+      "format": "JSON",
+      "mediaType": "application/json",
+      "bindings": [{ "id": "traceability", "path": ["traceability"] }],
+      "rootBindingId": "traceability"
+    },
+    {
+      "id": "artifact:qa-specification",
+      "name": "QA Specification",
+      "filename": "qa-specification.md",
+      "type": "QA_SPECIFICATION",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "title", "path": ["title"] },
+        { "id": "summary", "path": ["summary"] },
+        { "id": "objective", "path": ["objective"] },
+        { "id": "risks", "path": ["risks"] },
+        { "id": "blockers", "path": ["blockingItems"] },
+        { "id": "assumptions", "path": ["assumptions"] },
+        { "id": "questions", "path": ["openQuestions"] },
+        { "id": "out-of-scope", "path": ["outOfScope"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# Especificação de qualidade — " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Resumo\n\n" },
+        { "kind": "BINDING", "bindingId": "summary", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Objetivo\n\n" },
+        { "kind": "BINDING", "bindingId": "objective", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Riscos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "risks", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Bloqueios\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "blockers", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Premissas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "assumptions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Questões abertas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "questions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Fora de escopo\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "out-of-scope", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    }
+  ]
+}

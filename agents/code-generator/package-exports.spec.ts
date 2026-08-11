@@ -2,6 +2,7 @@ import {
   CODE_GENERATOR_AGENT_ERROR_CODES,
   CODE_GENERATOR_BUSINESS_VALIDATION_ISSUE_CODES,
   CODE_GENERATOR_CONTRACT_LIMITS,
+  codeGenerationConstraintSchema,
   codeGenerationRequestSchema,
   createCodeGeneratorAgent,
   generatedCodeBundleSchema,
@@ -10,6 +11,7 @@ import {
   projectCodeGeneratorPromptContexts,
   validateCodeGenerationBusinessRules,
   type CodeGenerationRequest,
+  type CodeGenerationConstraint,
   type CodeGeneratorAgentResult,
   type GeneratedCodeBundle,
 } from '@brq/code-generator-agent';
@@ -24,11 +26,17 @@ import {
 describe('@brq/code-generator-agent package exports', () => {
   it('exports the facade, contracts, schemas, assets and pure Business Validation', () => {
     const request: CodeGenerationRequest = createCodeGenerationRequest();
+    const constraint: CodeGenerationConstraint = {
+      id: 'constraint:package-export',
+      serialization: 'TEXT',
+      value: 'Generate a bounded textual snapshot.',
+    };
     const resultTypeCheck: CodeGeneratorAgentResult | undefined = undefined;
     const bundleTypeCheck: GeneratedCodeBundle | undefined = undefined;
 
     expect(createCodeGeneratorAgent).toBeTypeOf('function');
     expect(codeGenerationRequestSchema.safeParse(request).success).toBe(true);
+    expect(codeGenerationConstraintSchema.safeParse(constraint).success).toBe(true);
     expect(generatedCodeProposalSchema.safeParse(createGeneratedCodeProposal()).success).toBe(true);
     expect(generatedCodeBundleSchema).toBeDefined();
     expect(resultTypeCheck).toBeUndefined();

@@ -1197,6 +1197,118 @@ Sprint 26 permanecem fora do escopo.
   `618302c7dc8ddcec7c7087789e966a74259631d4a716d125c9adefa8a5c665b9`; os testes usam somente
   `FakeAIProvider` ou construção local de prompt, sem chamada real à OpenAI.
 
+## Hotfix QA Functional Coverage Summary 1.0.2
+
+- a execução real `execution-927ca57b5b517e72946352d25736a391` chegou ao QA depois de Product
+  Owner e Developer concluídos; a resposta passou pelo JSON Schema e pelo Response Validator, mas
+  foi rejeitada pela Business Validation com `QA_MISSING_BUSINESS_RULE_COVERAGE` e
+  `QA_COVERAGE_SUMMARY_MISMATCH`;
+- `prompts/qa/1.0.2` preserva o JSON Schema e todas as regras relacionais/readiness do `1.0.1`, mas
+  explicita a auditoria obrigatória de cada ID `AC` e `BR` em três superfícies: referências dos
+  cenários, `functionalCoverage` e linhas da matriz correlacionadas aos mesmos cenários;
+- os totais do resumo devem ser derivados dos IDs únicos das fontes e cada valor `covered` deve ser
+  derivado da interseção das três superfícies. Como a cobertura integral é obrigatória, cada
+  `covered` deve ser igual ao respectivo `total`, com recálculo imediatamente antes do JSON;
+- QA Business Validation, schemas públicos, contratos públicos TypeScript, runtime e prompt budget
+  não foram alterados;
+  o host permanece em 512 KiB e o prompt QA denso usa 417.130 B, preservando margem de 107.158 B;
+- os bundles históricos `1.0.0` e `1.0.1` permanecem intactos e o bundle ativo `1.0.2` possui hash
+  `ffd4f29dc2131872c320ee1cd56b96eaef23962591327d12e441d2769cfaa4e1`; os testes usam somente
+  `FakeAIProvider` ou construção local de prompt, sem chamada real à OpenAI.
+
+## Hotfix QA Pairwise Category Preflight 1.0.3
+
+- a execução real `execution-88e4fb8d6798fb3644b19e8193dff90d` utilizou comprovadamente o
+  bundle QA `1.0.2`, hash
+  `ffd4f29dc2131872c320ee1cd56b96eaef23962591327d12e441d2769cfaa4e1`; a resposta passou pelo
+  JSON Schema e pelo Response Validator, com readiness esperada `READY`, mas foi rejeitada pela
+  Business Validation com duas ocorrências de `QA_CATEGORY_MISMATCH`;
+- o release observado `1.0.2` permanece intacto. `prompts/qa/1.0.3` preserva seu JSON Schema,
+  auditoria de cobertura, resumo e tabela de readiness, mas eleva a consistência relacional a um
+  preflight final e par-a-par sobre todas as associações produzidas;
+- para cada `functionalCoverage[].scenarioId`, o cenário deve conter o mesmo `sourceId`
+  associado em `functionalReferences`; a regra equivalente vale para `technicalCoverage` e
+  `technicalReferences`; para cada cenário de uma linha da matriz, deve existir interseção com ao
+  menos uma fonte funcional ou técnica da própria linha;
+- a QA Business Validation continua sendo a fonte autoritativa e fail-closed. Schema público,
+  contratos TypeScript, runtime prompt budget e demais componentes permanecem inalterados; não há
+  retry, autocorreção ou normalização da resposta rejeitada;
+- o bundle ativo `1.0.3` permanece pinado pelo hash canônico
+  `b634e138b040674416ea24fd1fdd111db99f34210f4da3f8ac021ccb1f7c360c`; o host continua em 512
+  KiB e o prompt QA denso usa 422.131 B, com margem de 102.157 B. Toda validação do hotfix usa
+  `FakeAIProvider` ou construção local de prompt, sem chamada real à OpenAI.
+
+## Hotfix QA DEC/DOD Coverage Alignment 1.0.4
+
+- a execução real `execution-d02a57e0c98bb33f846ccff3b866d6f4` utilizou o bundle QA `1.0.3` e
+  passou pelo JSON Schema e pelo Response Validator sem issues, mas a Business Validation rejeitou
+  a resposta com `QA_MISSING_DEFINITION_OF_DONE_COVERAGE` e
+  `QA_COVERAGE_SUMMARY_MISMATCH`;
+- a regra autoritativa conta cada `DEC` e `DOD` somente pela interseção, por identidade, entre
+  `technicalReferences` dos cenários, uma entrada não vazia de `traceability.technicalCoverage` e
+  `technicalSourceIds` da matriz. `traceability.summary` é derivado dessas superfícies finais;
+- `prompts/qa/1.0.4` explicita a auditoria exaustiva de cada ID em `technicalSpecification.decisions`
+  e `technicalSpecification.definitionOfDone`, a correção de ocorrências ausentes antes do retorno
+  e o recálculo dos oito campos de summary. Não solicita raciocínio ou análise oculta e continua
+  retornando somente o JSON do contrato;
+- `1.0.0`–`1.0.3`, a QA Business Validation e o JSON Schema público permanecem intactos. O bundle
+  ativo `1.0.4` está pinado por
+  `d72d8c454438a3a523e9aa034211a171db12ac49e0a2736f12d4139fe6fb20bd`;
+- no cenário denso, o prompt passou de 422.131 B para 426.475 B: delta de 4.344 B (1,03%), uso de
+  81,34% do budget de 512 KiB e margem de 97.813 B. Os assets JSON somam 43.846 B, contra 40.568 B
+  no `1.0.3`;
+- regressões cobrem DOD ausente de cenário, `technicalCoverage` ou matriz, summary DOD inconsistente,
+  DEC completo/incompleto, summary DEC inconsistente, múltiplos IDs e matriz combinada
+  `AC + BR + DEC + DOD`. Toda execução de agente usa `FakeAIProvider`; nenhuma Factory/OpenAI real
+  ou Docker participa do hotfix, e a Sprint 26 não foi iniciada.
+
+## Hotfix Factory Code Profile Compatibility
+
+- causa raiz confirmada: o Code Generator genérico aceitava HTML, CSS, JSX e TSX, enquanto o
+  profile operacional `NODE_WEB_PREVIEW_24_V1` exige source executável `.js`/`.ts`, teste e
+  `index.html`; a correlação era descoberta somente pelo helper Sandbox em `PREPARE`;
+- a definição confiável da interseção gerável/executável agora pertence ao composition root web em
+  `apps/web/src/server/factory-code-profile.ts` e é correlacionada ao mesmo `policyId` do Sandbox;
+- o Factory Pipeline projeta o descriptor como `generationConstraints` no Code Generator e executa
+  `FactoryCodeProfileValidator` após a validação normal do agente, mas antes de
+  `ControlledWorkspace.plan()`; rejeição não cria filesystem e deixa todo downstream `SKIPPED`;
+- o profile exige root `index.html`, ao menos um `.js`/`.ts`, ao menos um `.test.js`/`.test.ts`, ESM,
+  imports relativos terminados em `.js`, package sem dependencies/scripts e rejeita
+  `.cjs/.cts/.jsx/.mjs/.mts/.tsx` ou qualquer extensão fora da allowlist;
+- `FACTORY_CODE_PROFILE_UNSUPPORTED_SOURCE`, `FACTORY_CODE_PROFILE_MISSING_SOURCE`,
+  `FACTORY_CODE_PROFILE_MISSING_TEST`, `FACTORY_CODE_PROFILE_MISSING_REQUIRED_FILE` e
+  `FACTORY_CODE_PROFILE_DEPENDENCY_UNSUPPORTED` são evidências determinísticas e sanitizadas;
+- o sucesso preserva o `generationHash` existente; rejeições usam `validationHash`
+  domain-separated, não promovem o bundle para lineage/provenance e não expõem código;
+- `prompts/code-generator/1.0.1` adiciona o `CONSTRAINTS_SLOT` e instruções normativas de profile;
+  `1.0.0` permanece intacto, o output schema e contratos do bundle permanecem `1.0.0`, e o novo
+  `bundleHash` é `29231d2db54ab9aeb2c89a29cb60d5098fe625a03aeef6ec6180b54c8bdb84ca`;
+- o Sandbox não foi alterado: source discovery, `NO_SUPPORTED_SOURCE`, comandos fixos, isolamento e
+  demais proteções continuam sendo defesa final. Testes usam somente `FakeAIProvider`; Docker real
+  e OpenAI real não participam do hotfix.
+
+## Hotfix Code Generator Required Test 1.0.2
+
+- a execução real `execution-8435686de44cf594bae2bd39ea5891b1` confirmou Product Owner,
+  Developer e QA `SUCCESS`, com QA no bundle `1.0.4`, antes de o Code Generator ser rejeitado por
+  `FACTORY_CODE_PROFILE_MISSING_TEST`; Workspace e Sandbox permaneceram `SKIPPED`;
+- o profile autoritativo já exigia ao menos um arquivo executável cujo `files[].path` terminasse em
+  `.test.js` ou `.test.ts`. O prompt `1.0.1` apresentava `testFileSuffixes`, mas não tornava
+  explícita a obrigação existencial de criar esse arquivo;
+- `prompts/code-generator/1.0.2` altera somente manifesto, rule set do agente e instrução final. O
+  modelo MUST criar ao menos um arquivo com sufixo permitido, MUST auditar essa existência antes do
+  JSON e MUST tratar como inválido qualquer bundle sem teste; `.jsx` e `.tsx` continuam proibidos
+  no `NODE_WEB_PREVIEW_24_V1`;
+- `global-rules.json`, `security-rules.json` e `output-contract.json` são idênticos ao `1.0.1`.
+  Factory Code Profile, Business Validation, schemas, Factory Pipeline, Sandbox e demais agentes
+  não foram alterados;
+- `1.0.0` e `1.0.1` permanecem protegidos por hashes históricos. O bundle ativo `1.0.2` está pinado
+  por `5d58517c8c81cd6450527d46a8685cbbaa70f083eeaf1f596c2381d85c31aae2`; os assets somam
+  16.335 B, aumento localizado de 1.054 B sobre o `1.0.1`;
+- os testes usam somente provider fake e validação determinística local. Nenhuma chamada real à
+  OpenAI/Factory ou Docker participa deste hotfix, a Sprint 26 não foi iniciada e nenhum commit foi
+  criado.
+
 ## Fora do escopo confirmado
 
 - testes E2E e Playwright;

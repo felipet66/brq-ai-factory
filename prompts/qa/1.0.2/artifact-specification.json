@@ -1,11 +1,11 @@
 {
   "id": "artifacts:qa",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "sourceContract": {
     "id": "contract:qa-specification",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "format": "JSON_SCHEMA",
-    "contractHash": "8b75b618b1e0c5f1d6bc9662262056a572143a4ebf8883ac39ff74c68434be4d"
+    "contractHash": "ee0a50db4db301389768a1a79d68d1a1a5fc0520fc9ce5fd33afa111561b10ea"
   },
   "templates": [
     {

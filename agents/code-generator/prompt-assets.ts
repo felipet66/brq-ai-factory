@@ -13,12 +13,12 @@ import { safeFilenameSchema, semanticVersionSchema } from '@brq/shared/schemas/c
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { z } from 'zod';
 
-import rawCodeGeneratorRules from '../../prompts/code-generator/1.0.0/code-generator-rules.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/code-generator/1.0.0/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/code-generator/1.0.0/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/code-generator/1.0.0/output-contract.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/code-generator/1.0.0/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/code-generator/1.0.0/template.json' with { type: 'json' };
+import rawCodeGeneratorRules from '../../prompts/code-generator/1.0.4/code-generator-rules.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/code-generator/1.0.4/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/code-generator/1.0.4/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/code-generator/1.0.4/output-contract.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/code-generator/1.0.4/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/code-generator/1.0.4/template.json' with { type: 'json' };
 import { calculateCodeGeneratorAssetBundleHash } from './asset-hashing';
 import { deepFreeze } from './immutability';
 
@@ -30,8 +30,8 @@ const CODE_GENERATOR_ASSET_FILENAMES = {
   codeGeneratorRules: 'code-generator-rules.json',
   outputContract: 'output-contract.json',
 } as const;
-const CODE_GENERATOR_RELEASE_1_0_0_BUNDLE_HASH =
-  'df968b649b607d7bd7c34ad05f4e7f2d1bb22880aab8582250ecffc443c88504';
+const CODE_GENERATOR_RELEASE_1_0_4_BUNDLE_HASH =
+  'c4155a8e745c9c3ac5e4d8803f04347b422c80d3af960fb76615b488c968c512';
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 const assetFilenameSchema = z
@@ -257,6 +257,7 @@ function assertTemplateWiring(
   const contextIds = fragments.flatMap((fragment) =>
     fragment.type === 'CONTEXT_SLOT' ? [fragment.contextId] : [],
   );
+  const constraintsSlots = fragments.filter((fragment) => fragment.type === 'CONSTRAINTS_SLOT');
   assertEqual(template.agent, CODE_GENERATOR_AGENT, 'O template pertence a outro agente.');
   assertArrayEqual(
     ruleSetIds,
@@ -268,6 +269,7 @@ function assertTemplateWiring(
     [manifest.contexts.knowledge, manifest.contexts.technicalSpecification],
     'Os slots de contexto não correspondem ao manifesto.',
   );
+  assertEqual(constraintsSlots.length, 1, 'O template exige exatamente um slot de constraints.');
 }
 
 function parseOutputContract(
@@ -308,7 +310,7 @@ export function parseCodeGeneratorPromptAssets(
   try {
     const manifest = parseManifest(sources.manifest);
     assertEqual(manifest.id, 'assets:code-generator', 'O ID do manifesto é inválido.');
-    assertEqual(manifest.version, '1.0.0', 'A versão do bundle é inválida.');
+    assertEqual(manifest.version, '1.0.4', 'A versão do bundle é inválida.');
     assertEqual(manifest.schemaVersion, '1.0.0', 'A versão do schema é inválida.');
 
     const template = promptTemplateSchema.parse(sources.template) as PromptTemplate;
@@ -358,8 +360,8 @@ export function parseCodeGeneratorPromptAssets(
     });
     assertEqual(
       bundleHash,
-      CODE_GENERATOR_RELEASE_1_0_0_BUNDLE_HASH,
-      'O conteúdo não corresponde ao release Code Generator 1.0.0.',
+      CODE_GENERATOR_RELEASE_1_0_4_BUNDLE_HASH,
+      'O conteúdo não corresponde ao release Code Generator 1.0.4.',
     );
 
     return deepFreeze({

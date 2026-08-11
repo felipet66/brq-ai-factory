@@ -5,6 +5,8 @@ import {
   BUILD_MANIFEST,
   BUILD_ROOT,
   PROFILE_ID,
+  REQUIRED_ENTRYPOINT,
+  REQUIRED_ENTRYPOINT_REASON,
   WORKSPACE_ROOT,
   assertCondition,
   assertNoDiagnostics,
@@ -62,8 +64,8 @@ await runHelper('BUILD', async () => {
     });
   }
   assertCondition(
-    outputs.some((output) => output.path === 'index.html'),
-    'INDEX_HTML_REQUIRED',
+    outputs.some((output) => output.path === REQUIRED_ENTRYPOINT),
+    REQUIRED_ENTRYPOINT_REASON,
   );
   const buildPackage = Buffer.from('{"private":true,"type":"module"}\n', 'utf8');
   outputs.push({

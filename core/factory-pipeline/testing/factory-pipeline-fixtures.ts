@@ -4,6 +4,12 @@ import type {
   FactoryPipelineProvenance,
 } from '../contracts';
 import {
+  NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+  projectGenerationProfileConstraints,
+  projectSandboxExecutionProfileSnapshot,
+} from '@brq/factory-execution-profile';
+import { SANDBOX_RUNNER_CONTRACT_VERSION, SANDBOX_RUNNER_VERSION } from '@brq/sandbox-runner';
+import {
   calculateFactoryPipelineLineageHash,
   calculateFactoryPipelineProvenanceHash,
   calculateFactoryPipelineResultHash,
@@ -21,12 +27,25 @@ const hash = (character: string): string => character.repeat(64);
 const prefixedHash = (character: string): string => `sha256:${hash(character)}`;
 
 export function createFactoryPipelineConfigurationFixture(
-  overrides: Partial<FactoryPipelineConfiguration> = {},
+  overrides: Partial<Omit<FactoryPipelineConfiguration, 'codeGenerator' | 'sandbox'>> & {
+    readonly codeGenerator?: Partial<FactoryPipelineConfiguration['codeGenerator']>;
+    readonly sandbox?: Partial<FactoryPipelineConfiguration['sandbox']>;
+  } = {},
 ): FactoryPipelineConfiguration {
+  const snapshot = projectSandboxExecutionProfileSnapshot(NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE);
   return immutableClone({
-    codeGenerator: { agentVersion: '1.0.0', model: 'fake-model' },
-    sandbox: { policyId: 'NODE_NONE_24_V1' },
-    ...overrides,
+    executionProfile: overrides.executionProfile ?? NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+    codeGenerator: {
+      agentVersion: '1.0.0',
+      model: 'fake-model',
+      ...overrides.codeGenerator,
+    },
+    sandbox: {
+      policyId: 'NODE_WEB_PREVIEW_24_V1',
+      policyVersion: '1.0.0',
+      profileSnapshotHash: snapshot.snapshotHash,
+      ...overrides.sandbox,
+    },
   });
 }
 
@@ -152,10 +171,10 @@ export function createFactoryExecutionResultFixture(
     sandboxResultHash: hash('f'),
   };
   const sandboxProvenance = {
-    runnerVersion: '1.0.0',
-    contractVersion: '1.0.0',
+    runnerVersion: SANDBOX_RUNNER_VERSION,
+    contractVersion: SANDBOX_RUNNER_CONTRACT_VERSION,
     sanitizerVersion: '1.0.0',
-    policyId: 'NODE_NONE_24_V1',
+    policyId: 'NODE_WEB_PREVIEW_24_V1',
     policyVersion: '1.0.0',
     packageManager: 'NONE' as const,
     helperAbiVersion: '1.0.0',
@@ -179,8 +198,8 @@ export function createFactoryExecutionResultFixture(
     steps: (['PREPARE', 'TYPECHECK', 'BUILD', 'TEST'] as const).map((stepId, index) => ({
       stepId,
       status: 'SUCCESS' as const,
-      startedAt: new Date(startedAtMs + 60 + index * 10).toISOString(),
-      finishedAt: new Date(startedAtMs + 65 + index * 10).toISOString(),
+      startedAt: new Date(startedAtMs + 70 + index * 10).toISOString(),
+      finishedAt: new Date(startedAtMs + 75 + index * 10).toISOString(),
       durationMs: 5,
       exitCode: 0,
       resourceOutcome: 'NONE' as const,
@@ -202,6 +221,11 @@ export function createFactoryExecutionResultFixture(
     workspaceHash: workspace.hashes.workspaceHash,
     sandboxRequestHash: sandboxHashes.sandboxRequestHash,
     sandboxResultHash: sandboxHashes.sandboxResultHash,
+    executionProfileHash: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.identity.profileHash,
+    generationProjectionHash: projectGenerationProfileConstraints(
+      NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+    ).generationProjectionHash,
+    profileValidationHash: hash('0'),
   };
   const provenance: FactoryPipelineProvenance = {
     pipelineVersion: FACTORY_PIPELINE_VERSION,
@@ -213,6 +237,11 @@ export function createFactoryExecutionResultFixture(
       developer: '1.0.0',
       qa: '1.0.0',
       codeGenerator: '1.0.0',
+    },
+    executionProfile: {
+      ...NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.identity,
+      generationProjectionHash: lineage.generationProjectionHash,
+      profileValidationHash: lineage.profileValidationHash,
     },
     codeGenerator: { contractVersion: '1.0.0', assetBundleHash: hash('4') },
     workspace: {

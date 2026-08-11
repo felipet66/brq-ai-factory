@@ -18,6 +18,7 @@ describe('Factory Pipeline logging', () => {
         code: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
         stage: 'CODE_GENERATOR',
         sourceCode: 'PROVIDER_ERROR',
+        reasonCode: null,
         message: 'Mensagem pública sanitizada.',
       },
     });

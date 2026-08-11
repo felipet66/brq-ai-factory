@@ -11,6 +11,7 @@ describe('sandbox logging', () => {
       stage: 'BUILD',
       message: 'must never be logged: sensitive output',
       sourceCode: 'EXIT_NONZERO',
+      reasonCode: 'BUILD_EMIT',
     };
     const context = sandboxLogContext({
       sandboxRunId: 'sandbox-' + 'a'.repeat(32),
@@ -22,7 +23,11 @@ describe('sandbox logging', () => {
     });
     expect(context).toMatchObject({
       stepId: 'BUILD',
-      error: { code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED, sourceCode: 'EXIT_NONZERO' },
+      error: {
+        code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+        sourceCode: 'EXIT_NONZERO',
+        reasonCode: 'BUILD_EMIT',
+      },
     });
     expect(JSON.stringify(context)).not.toContain('sensitive output');
   });

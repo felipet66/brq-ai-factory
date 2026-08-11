@@ -112,6 +112,7 @@ export interface SandboxResultHashInput {
     readonly code: string;
     readonly stage: string;
     readonly sourceCode: string | null;
+    readonly reasonCode: string | null;
   } | null;
   readonly policyHash: string;
   readonly commandPolicyHash: string;
@@ -160,6 +161,7 @@ export function calculateSandboxResultHash(input: SandboxResultHashInput): strin
               code: step.failure.code,
               stage: step.failure.stage,
               sourceCode: step.failure.sourceCode,
+              reasonCode: step.failure.reasonCode,
             },
     })),
     resourceOutcome: input.resourceOutcome,

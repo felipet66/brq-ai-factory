@@ -1,5 +1,9 @@
 import path from 'node:path';
 
+import {
+  NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+  projectSandboxExecutionProfileSnapshot,
+} from '@brq/factory-execution-profile';
 import { sandboxExecutionPolicySchema, type SandboxExecutionPolicy } from '@brq/sandbox-runner';
 import type { DockerSandboxImageConfiguration } from '@brq/sandbox-runner/docker';
 import type { FactoryPipelineConfiguration } from '@brq/factory-pipeline';
@@ -11,14 +15,22 @@ export const FACTORY_SANDBOX_NODE_VERSION = '24.19.0' as const;
 export const FACTORY_SANDBOX_TYPESCRIPT_VERSION = '6.0.3' as const;
 export const FACTORY_CODE_GENERATOR_AGENT_VERSION = '1.0.0' as const;
 export const FACTORY_CODE_GENERATOR_MODEL = 'gpt-5-mini' as const;
+export const FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT = projectSandboxExecutionProfileSnapshot(
+  NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
+);
 
 /** Host-owned composition profile; these values are not defaults of the domain modules. */
 export const FACTORY_PIPELINE_CONFIGURATION: FactoryPipelineConfiguration = Object.freeze({
+  executionProfile: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
   codeGenerator: Object.freeze({
     agentVersion: FACTORY_CODE_GENERATOR_AGENT_VERSION,
     model: FACTORY_CODE_GENERATOR_MODEL,
   }),
-  sandbox: Object.freeze({ policyId: FACTORY_SANDBOX_POLICY_ID }),
+  sandbox: Object.freeze({
+    policyId: FACTORY_SANDBOX_POLICY_ID,
+    policyVersion: FACTORY_SANDBOX_PROFILE_VERSION,
+    profileSnapshotHash: FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT.snapshotHash,
+  }),
 });
 
 const factorySandboxEnvironmentSchema = z
@@ -109,6 +121,10 @@ export function resolveFactorySandboxRuntimeConfiguration(
       platform: parsed.data.BRQ_FACTORY_SANDBOX_IMAGE_PLATFORM,
       requiredLabels: Object.freeze({
         'org.brq.sandbox.factory-profile': 'node-web-preview-24-v1',
+        'org.brq.sandbox.execution-profile-hash':
+          NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.identity.profileHash,
+        'org.brq.sandbox.execution-profile-snapshot-hash':
+          FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT.snapshotHash,
       }),
       toolchainVersions: Object.freeze({
         NODE: FACTORY_SANDBOX_NODE_VERSION,

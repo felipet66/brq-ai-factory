@@ -93,3 +93,7 @@ export interface FactoryPipelineCoordinator {
 }
 
 export type { ExecutionRequest, ExecutionResult };
+export type {
+  FactoryExecutionProfile,
+  FactoryExecutionProfileValidation,
+} from '@brq/factory-execution-profile';

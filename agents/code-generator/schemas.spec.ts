@@ -29,6 +29,7 @@ describe('Code Generator public schemas', () => {
         knowledgeDocuments: 4,
         promptBytes: 384 * 1024,
         maxOutputTokens: 131_072,
+        generationConstraints: 8,
       },
       generation: {
         files: 96,
@@ -124,6 +125,49 @@ describe('Code Generator public schemas', () => {
       codeGenerationRequestSchema.safeParse({
         ...request,
         limits: { promptMaxBytes: 384 * 1024 + 1 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts bounded dynamic generation constraints and rejects empty, duplicate or excessive inputs', () => {
+    const request = createCodeGenerationRequest();
+    const constraint = {
+      id: 'constraint:factory-profile',
+      serialization: 'JSON' as const,
+      value: {
+        profileId: 'NODE_WEB_PREVIEW_24_V1',
+        requiredFiles: ['index.html'],
+      },
+    };
+
+    expect(
+      codeGenerationRequestSchema.safeParse({
+        ...request,
+        generationConstraints: [constraint],
+      }).success,
+    ).toBe(true);
+    expect(
+      codeGenerationRequestSchema.safeParse({ ...request, generationConstraints: [] }).success,
+    ).toBe(false);
+    expect(
+      codeGenerationRequestSchema.safeParse({
+        ...request,
+        generationConstraints: [constraint, constraint],
+      }).success,
+    ).toBe(false);
+    expect(
+      codeGenerationRequestSchema.safeParse({
+        ...request,
+        generationConstraints: Array.from(
+          { length: CODE_GENERATOR_CONTRACT_LIMITS.request.generationConstraints + 1 },
+          (_, index) => ({ ...constraint, id: `constraint:factory-profile-${index}` }),
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
+      codeGenerationRequestSchema.safeParse({
+        ...request,
+        constraints: [constraint],
       }).success,
     ).toBe(false);
   });

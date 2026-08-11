@@ -52,7 +52,8 @@ brq-ai-factory/
 │   │   ├── ADR-032-CODE-GENERATION-BOUNDARY.md
 │   │   ├── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
 │   │   ├── ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md
-│   │   └── ADR-035-PREVIEW-RUNNER-BOUNDARY.md
+│   │   ├── ADR-035-PREVIEW-RUNNER-BOUNDARY.md
+│   │   └── ADR-036-FACTORY-EXECUTION-PROFILE-BOUNDARY.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -117,6 +118,8 @@ brq-ai-factory/
 │   ├── execution-worker/
 │   ├── prompt-inspector/
 │   ├── controlled-workspace/
+│   ├── agent-contract-invariants/
+│   ├── factory-execution-profile/
 │   ├── factory-pipeline/
 │   ├── sandbox-runner/
 │   ├── preview-artifact/
@@ -137,8 +140,16 @@ brq-ai-factory/
 │   │   └── 1.0.3/ (ativo)
 │   ├── qa/
 │   │   ├── 1.0.0/
-│   │   └── 1.0.1/ (ativo)
-│   └── code-generator/1.0.0/
+│   │   ├── 1.0.1/
+│   │   ├── 1.0.2/
+│   │   ├── 1.0.3/
+│   │   └── 1.0.4/ (ativo)
+│   └── code-generator/
+│       ├── 1.0.0/
+│       ├── 1.0.1/
+│       ├── 1.0.2/
+│       ├── 1.0.3/
+│       └── 1.0.4/ (ativo)
 ├── shared/
 ├── prisma/
 ├── package.json
@@ -386,7 +397,15 @@ O workspace `agents/qa` implementa a terceira fachada concreta. O request recebe
 
 Cada tentativa projeta exatamente três contextos `INPUT/UNTRUSTED` e segue `Knowledge Loader → Agent Runner → Response Validator → QA Business Validation → Artifact Generator`. A Business Validation exige cobertura verificável de todos os IDs `AC`, `BR`, `DEC` e `DOD`, recalcula totais e readiness e rejeita referências inválidas sem corrigir a saída.
 
-O bundle ativo `prompts/qa/1.0.1` preserva o JSON Schema público do `1.0.0` e explicita as invariantes relacionais entre `functionalCoverage`, `technicalCoverage`, matriz e referências dos cenários, além da tabela ordenada de readiness. A Business Validation permanece a fonte autoritativa e fail-closed dessas regras.
+Os releases `prompts/qa/1.0.0`–`1.0.3` permanecem preservados. O bundle ativo `1.0.4` mantém o
+mesmo JSON Schema público, a auditoria de cobertura, a tabela de readiness e o preflight par-a-par,
+e torna exaustiva a checagem de cada `DEC` e `DOD`: o mesmo ID deve ocorrer em
+`technicalReferences`, em uma entrada não vazia de `technicalCoverage` e em `technicalSourceIds` da
+matriz. `traceability.summary` é recalculado por identidade somente depois dessas superfícies
+finais. A Business Validation permanece a fonte autoritativa e fail-closed; o agente não retenta
+nem autocorrige uma resposta rejeitada. O bundle está pinado por
+`d72d8c454438a3a523e9aa034211a171db12ac49e0a2736f12d4139fe6fb20bd`; no cenário denso, o prompt
+usa 426.475 B dos 512 KiB configurados.
 
 Uma saída aceita gera, nessa ordem, `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA Agent não recebe código, não executa testes, não gera Playwright, não persiste drafts, não retenta e não afirma aprovação operacional.
 
@@ -409,6 +428,14 @@ A Sprint 24 conecta essa capability somente pelo `FactoryPipelineCoordinator`, d
 execução PO → Developer → QA bem-sucedida e QA `READY`. A projeção recebe a
 `TechnicalSpecification` enquanto ela ainda existe em memória; o resultado público e o Execution
 Repository preservam somente metadata e hashes, nunca a specification ou o código gerado.
+
+O Code Generator continua genérico. O bundle de prompt ativo `1.0.4` recebe constraints opcionais
+do host em um `CONSTRAINTS_SLOT`, sem alterar seu output contract ou o schema do bundle. Na Factory,
+o composition root injeta a projeção determinística de `NODE_WEB_PREVIEW_24_V1`, incluindo IDs de
+regra e parâmetros de arquivos, source/test, conteúdo, módulos/imports, package policy, build e
+preview. O prompt preserva a obrigação normativa genérica de obedecer às regras recebidas e agora
+explicita o preflight module/path para arquivos de módulo versus arquivos raiz/compartilhados; o
+validator host pré-materialização permanece autoritativo.
 
 [Fluxo visual do Code Generator](knowledge/46-CODE_GENERATION_FLOW.md) ·
 [ADR-032](knowledge/ADR/ADR-032-CODE-GENERATION-BOUNDARY.md)
@@ -477,7 +504,7 @@ estão documentados no [README do Sandbox Runner](core/sandbox-runner/README.md)
 ## Factory Pipeline
 
 O workspace `@brq/factory-pipeline` implementa a composição externa e aditiva
-`Execution Engine → Code Generator → Controlled Workspace → Sandbox Runner`. O
+`Execution Engine → Code Generator → Execution Profile Validator → Controlled Workspace → Sandbox Runner`. O
 `FactoryPipelineCoordinator` depende somente das APIs públicas dessas quatro fronteiras; o
 Orchestrator e o Execution Engine mantêm seus contratos e comportamentos funcionais intactos.
 
@@ -495,8 +522,17 @@ retry, fallback automático ou retenção do Controlled Workspace. O core da Fac
 conteúdo nem abre portas; a Sprint 25 consome somente um `PreviewArtifact` aprovado por uma
 fronteira externa e aditiva.
 
+Antes de `ControlledWorkspace.plan()`, o pipeline valida estrutura e conteúdo do
+`GeneratedCodeBundle` contra o `FactoryExecutionProfile` leaf. Incompatibilidades como somente
+HTML/CSS, JSX/TSX, source/test/index ausente, conteúdo ativo inline, referência externa, CommonJS,
+dependência ou package script falham em `CODE_PROFILE_VALIDATION`; Code Generator pode permanecer
+`SUCCESS`, e plan/materialização/Sandbox ficam `SKIPPED`. O Sandbox consome um snapshot imutável e
+repete as mesmas proteções como defesa em profundidade. Motivos públicos são allowlisted e
+separados do diagnóstico interno `EXIT_1`.
+
 [Fluxo visual do Factory Pipeline](knowledge/50-FACTORY_PIPELINE_FLOW.md) ·
-[ADR-034](knowledge/ADR/ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md)
+[ADR-034](knowledge/ADR/ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md) ·
+[ADR-036](knowledge/ADR/ADR-036-FACTORY-EXECUTION-PROFILE-BOUNDARY.md)
 
 ## Preview Runner & View Build
 

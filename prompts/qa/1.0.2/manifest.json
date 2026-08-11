@@ -1,6 +1,6 @@
 {
   "id": "assets:qa",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "schemaVersion": "1.0.0",
   "agent": "QA",
   "contexts": {
@@ -9,7 +9,7 @@
     "technicalSpecification": "context:qa-technical-specification"
   },
   "assets": {
-    "template": { "filename": "template.json", "id": "prompt:qa", "version": "1.0.1" },
+    "template": { "filename": "template.json", "id": "prompt:qa", "version": "1.0.2" },
     "ruleSets": [
       {
         "filename": "global-rules.json",
@@ -23,17 +23,17 @@
         "version": "1.0.0",
         "scope": "SECURITY"
       },
-      { "filename": "qa-rules.json", "id": "rules:qa", "version": "1.0.1", "scope": "AGENT" }
+      { "filename": "qa-rules.json", "id": "rules:qa", "version": "1.0.2", "scope": "AGENT" }
     ],
     "outputContract": {
       "filename": "output-contract.json",
       "id": "contract:qa-specification",
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     "artifactSpecification": {
       "filename": "artifact-specification.json",
       "id": "artifacts:qa",
-      "version": "1.0.1"
+      "version": "1.0.2"
     }
   }
 }

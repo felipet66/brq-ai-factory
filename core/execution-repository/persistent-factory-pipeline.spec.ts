@@ -37,6 +37,7 @@ function failedDeveloperResult(
     code: FACTORY_PIPELINE_ERROR_CODES.EXECUTION_FAILED,
     stage: 'DEVELOPER' as const,
     sourceCode: 'ORCHESTRATOR_DEVELOPER_FAILED',
+    reasonCode: null,
     message: 'A execução funcional não foi concluída.',
   };
   const stages = successful.stages.map((stage, index) =>

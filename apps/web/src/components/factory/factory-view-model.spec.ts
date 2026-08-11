@@ -107,13 +107,14 @@ describe('FactoryViewModel', () => {
     expect(historical.technicalStages).toEqual([]);
     expect(factory.technicalStages.map(({ id, status }) => ({ id, status }))).toEqual([
       { id: 'CODE_GENERATOR', status: 'COMPLETED' },
+      { id: 'CODE_PROFILE_VALIDATION', status: 'COMPLETED' },
       { id: 'WORKSPACE', status: 'COMPLETED' },
       { id: 'SANDBOX_PREPARE', status: 'COMPLETED' },
       { id: 'SANDBOX_TYPECHECK', status: 'COMPLETED' },
       { id: 'SANDBOX_BUILD', status: 'COMPLETED' },
       { id: 'SANDBOX_TEST', status: 'COMPLETED' },
     ]);
-    expect(factory.technicalStages[1]).toMatchObject({
+    expect(factory.technicalStages[2]).toMatchObject({
       evidenceSource: 'OBSERVABILITY_V2',
       outputHash: expect.any(String),
       facts: expect.arrayContaining([
@@ -123,9 +124,9 @@ describe('FactoryViewModel', () => {
       ]),
     });
     expect(factory.progress).toMatchObject({
-      completedTechnicalStageCount: 6,
-      resolvedTechnicalStageCount: 6,
-      totalTechnicalStageCount: 6,
+      completedTechnicalStageCount: 7,
+      resolvedTechnicalStageCount: 7,
+      totalTechnicalStageCount: 7,
       activeTechnicalStageId: null,
       failedTechnicalStageId: null,
     });
@@ -193,6 +194,42 @@ describe('FactoryViewModel', () => {
     );
     expect(model.progress.failedTechnicalStageId).toBe('SANDBOX_BUILD');
     expect(JSON.stringify(model)).not.toMatch(/sourceCode|stdout|stderr|filesystem|containerId/);
+  });
+
+  it('projects the safe reason separately and never exposes the internal EXIT_1 diagnostic', () => {
+    const successful = factoryResultFixture();
+    const factoryResult = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_PREPARE',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'INLINE_ACTIVE_CONTENT',
+        stageId: 'SANDBOX_PREPARE',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_PREPARE'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'INLINE_ACTIVE_CONTENT',
+            }
+          : stage,
+      ),
+    });
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ status: 'FAILED', factoryResult }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(model.technicalStages.find((stage) => stage.id === 'SANDBOX_PREPARE')).toMatchObject({
+      failureCode: 'SANDBOX_STEP_FAILED',
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+    });
+    expect(JSON.stringify(model)).not.toMatch(/EXIT_1|stdout|stderr/u);
   });
 
   it.each<[FactoryTimelineSource['stages'][number]['status'], FactoryVisualStatus]>([

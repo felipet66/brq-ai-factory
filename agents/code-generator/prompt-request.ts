@@ -6,6 +6,13 @@ import { deepFreeze } from './immutability';
 import { CODE_GENERATOR_CONTRACT_LIMITS } from './limits';
 import type { CodeGeneratorPromptAssets } from './prompt-assets';
 
+const GENERIC_GENERATION_CONSTRAINT = Object.freeze({
+  id: 'constraint:generic-code-generation',
+  serialization: 'TEXT' as const,
+  value:
+    'Nenhum profile específico do host foi fornecido; preserve as capacidades textuais genéricas e siga somente os contratos públicos do Code Generator.',
+});
+
 export function createCodeGeneratorAgentRunRequest(
   request: CodeGenerationRequest,
   contexts: readonly PromptContextInput[],
@@ -29,7 +36,7 @@ export function createCodeGeneratorAgentRunRequest(
       ruleSets: assets.ruleSets,
       contexts,
       variables: [],
-      constraints: [],
+      constraints: request.generationConstraints ?? [GENERIC_GENERATION_CONSTRAINT],
       outputContract: assets.outputContract,
       maxBytes: request.limits?.promptMaxBytes ?? limits.promptBytes,
     },

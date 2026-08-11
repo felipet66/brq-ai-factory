@@ -13,6 +13,7 @@ import {
 } from '../../core/ai-provider/fake/fake-ai-provider';
 import { FakeKnowledgeSource } from '../../core/knowledge-loader/testing/fake-knowledge-source';
 import { createTechnicalSpecification } from '../developer/testing/developer-fixtures';
+import { createProductOwnerSpecification } from '../product-owner/testing/product-owner-fixtures';
 import { QA_BUSINESS_VALIDATION_ISSUE_CODES } from './business-validation';
 import { QA_AGENT_ERROR_CODES, QAAgentError } from './errors';
 import { createQAAgent } from './qa-agent';
@@ -36,6 +37,57 @@ const KNOWLEDGE_POLICY = {
     ARCHITECTURE: EMPTY_SELECTION,
   },
 } as const;
+const THREE_BUSINESS_RULES = [
+  {
+    id: 'BR-001',
+    description: 'O texto deve ser obrigatório.',
+    source: 'Escopo funcional.',
+    condition: 'Texto informado.',
+    impact: 'HIGH',
+  },
+  {
+    id: 'BR-002',
+    description: 'Espaços também contam como caracteres.',
+    source: 'Escopo funcional.',
+    condition: 'Texto contém espaços.',
+    impact: 'MEDIUM',
+  },
+  {
+    id: 'BR-003',
+    description: 'O resultado deve refletir o texto atual.',
+    source: 'Escopo funcional.',
+    condition: 'Texto alterado.',
+    impact: 'HIGH',
+  },
+] as const;
+
+function createThreeBusinessRuleSpecification(readiness: 'READY' | 'PARTIALLY_READY' = 'READY') {
+  const base = createQASpecification();
+  const functionalSourceIds = ['AC-001', 'BR-001', 'BR-002', 'BR-003'] as const;
+  return createQASpecification({
+    readiness,
+    positiveScenarios: [
+      { ...base.positiveScenarios[0]!, functionalReferences: functionalSourceIds },
+    ],
+    traceability: {
+      ...base.traceability,
+      summary: {
+        ...base.traceability.summary,
+        businessRules: { total: 3, covered: 3 },
+      },
+      functionalCoverage: functionalSourceIds.map((sourceId) => ({
+        sourceId,
+        scenarioIds: ['QAP-001' as const],
+      })),
+      matrix: [
+        {
+          ...base.traceability.matrix[0]!,
+          functionalSourceIds,
+        },
+      ],
+    },
+  });
+}
 
 interface HarnessOptions {
   readonly outcomes?: FakeAIProviderOutcome[];
@@ -237,6 +289,119 @@ describe('QAAgent', () => {
     expect(provider.calls).toHaveLength(1);
   });
 
+  it('gera artifacts com três Business Rules integralmente cobertas usando FakeAIProvider', async () => {
+    const productOwnerSpecification = createProductOwnerSpecification({
+      readiness: 'PARTIALLY_READY',
+      businessRules: THREE_BUSINESS_RULES,
+      openQuestions: [
+        { id: 'Q-001', question: 'Qual o limite máximo de texto?', impact: 'NON_BLOCKING' },
+      ],
+    });
+    const request = createQARequest({
+      productOwnerSpecification,
+      technicalSpecification: createTechnicalSpecification({ readiness: 'PARTIALLY_READY' }),
+    });
+    const specification = createThreeBusinessRuleSpecification('PARTIALLY_READY');
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createQAAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(request);
+
+    expect(result.outcome).toBe('GENERATED');
+    expect(result.readiness).toBe('PARTIALLY_READY');
+    expect(result.validation.business).toMatchObject({ valid: true, issues: [] });
+    expect(result.artifacts).toHaveLength(3);
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it('rejeita Business Rule omitida sem retry, autocorreção ou artifacts', async () => {
+    const complete = createThreeBusinessRuleSpecification('PARTIALLY_READY');
+    const specification = createQASpecification({
+      ...complete,
+      traceability: {
+        ...complete.traceability,
+        summary: {
+          ...complete.traceability.summary,
+          businessRules: { total: 3, covered: 2 },
+        },
+        functionalCoverage: complete.traceability.functionalCoverage.filter(
+          ({ sourceId }) => sourceId !== 'BR-002',
+        ),
+      },
+    });
+    const request = createQARequest({
+      productOwnerSpecification: createProductOwnerSpecification({
+        readiness: 'PARTIALLY_READY',
+        businessRules: THREE_BUSINESS_RULES,
+        openQuestions: [
+          { id: 'Q-001', question: 'Qual o limite máximo de texto?', impact: 'NON_BLOCKING' },
+        ],
+      }),
+      technicalSpecification: createTechnicalSpecification({ readiness: 'PARTIALLY_READY' }),
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createQAAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(request);
+
+    expect(result.outcome).toBe('VALIDATION_REJECTED');
+    expect(result.outcome === 'VALIDATION_REJECTED' ? result.rejectedAt : null).toBe(
+      'BUSINESS_VALIDATION',
+    );
+    expect(result.validation.business?.issues.map(({ code }) => code)).toEqual([
+      QA_BUSINESS_VALIDATION_ISSUE_CODES.MISSING_BUSINESS_RULE_COVERAGE,
+    ]);
+    expect(result.artifacts).toEqual([]);
+    expect(result.metadata.generation).toBeNull();
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it('reproduz a rejeição real de DOD incompleto e aceita a cobertura corrigida com FakeAIProvider', async () => {
+    const validSpecification = createQASpecification();
+    const invalidSpecification = createQASpecification({
+      traceability: {
+        ...validSpecification.traceability,
+        matrix: [
+          {
+            ...validSpecification.traceability.matrix[0]!,
+            technicalSourceIds:
+              validSpecification.traceability.matrix[0]!.technicalSourceIds.filter(
+                (id) => id !== 'DOD-001',
+              ),
+            scenarioIds: validSpecification.traceability.matrix[0]!.scenarioIds.filter(
+              (id) => id !== 'QAE-001',
+            ),
+          },
+        ],
+      },
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [
+        { type: 'success', response: createQAAIResponse(invalidSpecification) },
+        { type: 'success', response: createQAAIResponse(validSpecification) },
+      ],
+    });
+
+    const rejected = await agent.execute(createQARequest());
+    const generated = await agent.execute(createQARequest());
+
+    expect(rejected.outcome).toBe('VALIDATION_REJECTED');
+    expect(rejected.outcome === 'VALIDATION_REJECTED' ? rejected.rejectedAt : null).toBe(
+      'BUSINESS_VALIDATION',
+    );
+    expect(rejected.validation.business?.issues.map(({ code }) => code)).toEqual([
+      QA_BUSINESS_VALIDATION_ISSUE_CODES.MISSING_DEFINITION_OF_DONE_COVERAGE,
+      QA_BUSINESS_VALIDATION_ISSUE_CODES.COVERAGE_SUMMARY_MISMATCH,
+    ]);
+    expect(rejected.artifacts).toEqual([]);
+    expect(generated.outcome).toBe('GENERATED');
+    expect(generated.validation.business).toMatchObject({ valid: true, issues: [] });
+    expect(generated.metadata.run.prompt.metadata.version).toBe('1.0.4');
+    expect(provider.calls).toHaveLength(2);
+  });
+
   it('rejeita category e readiness incoerentes sem retry ou autocorreção', async () => {
     const base = createQASpecification();
     const specification = createQASpecification({
@@ -273,6 +438,58 @@ describe('QAAgent', () => {
     expect(result.artifacts).toEqual([]);
     expect(result.metadata.generation).toBeNull();
     expect(provider.calls).toHaveLength(1);
+  });
+
+  it('rejeita duas associações de categoria incoerentes e aceita as relações corrigidas', async () => {
+    const validSpecification = createQASpecification();
+    const invalidSpecification = createQASpecification({
+      traceability: {
+        ...validSpecification.traceability,
+        functionalCoverage: [{ sourceId: 'AC-001', scenarioIds: ['QAN-001'] }],
+        technicalCoverage: [
+          { sourceId: 'DEC-001', scenarioIds: ['QAE-001'] },
+          validSpecification.traceability.technicalCoverage[1]!,
+        ],
+      },
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [
+        { type: 'success', response: createQAAIResponse(invalidSpecification) },
+        { type: 'success', response: createQAAIResponse(validSpecification) },
+      ],
+    });
+
+    const rejected = await agent.execute(createQARequest());
+    const generated = await agent.execute(createQARequest());
+
+    expect(rejected.outcome).toBe('VALIDATION_REJECTED');
+    expect(rejected.outcome === 'VALIDATION_REJECTED' ? rejected.rejectedAt : null).toBe(
+      'BUSINESS_VALIDATION',
+    );
+    expect(rejected.validation.business).toMatchObject({
+      valid: false,
+      expectedReadiness: 'READY',
+      issues: [
+        {
+          code: QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+          path: ['traceability', 'functionalCoverage', 0, 'scenarioIds'],
+        },
+        {
+          code: QA_BUSINESS_VALIDATION_ISSUE_CODES.CATEGORY_MISMATCH,
+          path: ['traceability', 'technicalCoverage', 0, 'scenarioIds'],
+        },
+      ],
+    });
+    expect(rejected.artifacts).toEqual([]);
+    expect(generated.outcome).toBe('GENERATED');
+    expect(generated.validation.business).toMatchObject({
+      valid: true,
+      expectedReadiness: 'READY',
+      issues: [],
+    });
+    expect(generated.metadata.run.prompt.metadata.version).toBe('1.0.4');
+    expect(generated.artifacts).toHaveLength(3);
+    expect(provider.calls).toHaveLength(2);
   });
 
   it.each([

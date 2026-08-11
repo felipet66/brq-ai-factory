@@ -28,11 +28,17 @@ function failureIdentity(
     readonly code: string;
     readonly stage: string;
     readonly sourceCode: string | null;
+    readonly reasonCode: string | null;
   } | null,
 ) {
   return failure === null
     ? null
-    : { code: failure.code, stage: failure.stage, sourceCode: failure.sourceCode };
+    : {
+        code: failure.code,
+        stage: failure.stage,
+        sourceCode: failure.sourceCode,
+        reasonCode: failure.reasonCode,
+      };
 }
 
 export type FactoryResultHashInput = Omit<FactoryExecutionResult, 'hashes'> & {

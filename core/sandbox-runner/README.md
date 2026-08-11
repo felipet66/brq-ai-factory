@@ -25,6 +25,19 @@ The main export has no host-execution capability. Docker is an explicit adapter 
 timeouts, cancellation, output hard limits, and cleanup. A sandbox run never implies approval to
 serve a preview, deploy, persist output, retry, or execute code directly on the host.
 
+## Factory profile defense and safe reasons
+
+The leaf `@brq/factory-execution-profile` owns `NODE_WEB_PREVIEW_24_V1`. The image contains an
+immutable Sandbox projection of that profile and pins both profile and snapshot hashes in labels.
+The host validates before Workspace, while the fixed `PREPARE` helper independently enforces the
+snapshot again. The standard parity matrix exercises both enforcers without Docker.
+
+Helpers may end stderr with exactly `BRQ_<STEP>_FAILED code=<CODE>`. The runner reads only the last
+non-empty line, requires the exact active step, bounds the marker and accepts only a reason code in
+that step's snapshot allowlist. Wrong-step, unknown, oversized, embedded or spoofed markers degrade
+to `reasonCode = null`. `EXIT_1` remains internal operational diagnosis and is not promoted to the
+Factory result or UI.
+
 ## Docker integration test
 
 The normal quality gates use a fake Docker executor. The real adapter test is deliberately opt-in

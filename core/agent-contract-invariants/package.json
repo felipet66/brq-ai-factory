@@ -1,0 +1,16 @@
+{
+  "name": "@brq/agent-contract-invariants",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "dependencies": {
+    "@brq/code-generator-agent": "0.1.0",
+    "@brq/developer-agent": "0.1.0",
+    "@brq/factory-execution-profile": "0.1.0",
+    "@brq/product-owner-agent": "0.1.0",
+    "@brq/qa-agent": "0.1.0"
+  }
+}

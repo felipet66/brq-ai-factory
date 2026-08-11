@@ -372,6 +372,51 @@ describe('execution history HTTP client', () => {
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 
+  it('carries nullable safe reason codes and profile hashes through the browser contract', async () => {
+    const successful = historyFactoryResult();
+    const factoryResult = historyFactoryResult({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_PREPARE',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'INLINE_ACTIVE_CONTENT',
+        stageId: 'SANDBOX_PREPARE',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_PREPARE'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'INLINE_ACTIVE_CONTENT',
+            }
+          : stage,
+      ),
+    });
+    const fetchImplementation = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(detailData({ status: 'FAILED', factoryResult }), EXECUTION_ID)),
+    );
+
+    const detail = await getExecution(EXECUTION_ID, { fetchImplementation });
+
+    expect(detail.factoryResult?.failure).toEqual({
+      kind: 'FACTORY_PIPELINE',
+      code: 'SANDBOX_STEP_FAILED',
+      sourceCode: null,
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+      stageId: 'SANDBOX_PREPARE',
+    });
+    expect(detail.factoryResult?.lineage).toMatchObject({
+      executionProfileHash: HASH,
+      generationProjectionHash: HASH,
+      profileValidationHash: HASH,
+    });
+    expect(JSON.stringify(detail.factoryResult)).not.toContain('EXIT_1');
+  });
+
   it('rejects an uncorrelated detail and an invalid execution identifier', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>(async () =>
       jsonResponse(successEnvelope(detailData({ executionId: OTHER_EXECUTION_ID }))),

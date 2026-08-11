@@ -1,6 +1,11 @@
 import { type CodeGeneratorAgentResult } from '@brq/code-generator-agent';
 import type { WorkspaceMaterializationResult, WorkspacePlan } from '@brq/controlled-workspace';
 import {
+  assertFactoryExecutionProfilePreflight,
+  createFactoryExecutionProfileValidator,
+  type FactoryExecutionProfileValidation,
+} from '@brq/factory-execution-profile';
+import {
   deriveExecutionIdentity,
   executionRequestSchema,
   executionResultSchema,
@@ -122,11 +127,13 @@ function failureFor(
   code: string,
   message: string,
   error?: unknown,
+  reasonCode: string | null = null,
 ): FactoryPipelineFailure {
   return {
     code,
     stage,
     sourceCode: sourceCode(error),
+    reasonCode,
     message,
   };
 }
@@ -168,7 +175,8 @@ function projectSandboxStage(step: SandboxRunResult['steps'][number]): FactoryPi
         : {
             code: step.failure?.code ?? FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
             stage: stageId,
-            sourceCode: sanitizeTechnicalCode(step.failure?.sourceCode),
+            sourceCode: null,
+            reasonCode: step.failure?.reasonCode ?? null,
             message:
               status === 'CANCELLED'
                 ? 'A execução isolada foi cancelada.'
@@ -194,6 +202,7 @@ function primaryFromExecution(result: ExecutionResult): PrimaryOutcome | null {
       code: result.failure?.code ?? FACTORY_PIPELINE_ERROR_CODES.EXECUTION_FAILED,
       stage: terminalStage,
       sourceCode: sanitizeTechnicalCode(result.failure?.sourceCode),
+      reasonCode: null,
       message: cancelled
         ? 'A execução funcional foi cancelada.'
         : 'A execução funcional não foi concluída.',
@@ -215,7 +224,8 @@ function primaryFromSandbox(result: SandboxRunResult): PrimaryOutcome | null {
     failure: {
       code: result.failure?.code ?? FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
       stage: terminalStage,
-      sourceCode: sanitizeTechnicalCode(result.failure?.sourceCode),
+      sourceCode: null,
+      reasonCode: result.failure?.reasonCode ?? interrupted?.failure?.reasonCode ?? null,
       message: cancelled
         ? 'A execução isolada foi cancelada.'
         : 'A execução isolada não concluiu todas as verificações.',
@@ -236,6 +246,23 @@ export function createFactoryPipelineCoordinator(
     });
   }
   const configuration = immutableClone(parsedConfiguration.data);
+  try {
+    assertFactoryExecutionProfilePreflight({
+      profile: configuration.executionProfile,
+      sandboxPolicyId: configuration.sandbox.policyId,
+      sandboxPolicyVersion: configuration.sandbox.policyVersion,
+      sandboxProfileSnapshotHash: configuration.sandbox.profileSnapshotHash,
+    });
+  } catch (error) {
+    throw new FactoryPipelineError('Preflight do Factory Execution Profile inválido.', {
+      code: FACTORY_PIPELINE_ERROR_CODES.INVALID_CONFIGURATION,
+      stage: 'EXECUTION',
+      cause: error,
+    });
+  }
+  const executionProfileValidator = createFactoryExecutionProfileValidator(
+    configuration.executionProfile,
+  );
   const logger = options.logger ?? createLogger();
   const observe = options.now ?? (() => performance.timeOrigin + performance.now());
 
@@ -325,6 +352,7 @@ export function createFactoryPipelineCoordinator(
       const ledger = createFactoryStageLedger(projectAgentStages(execution, startedAtMs));
       let primary = primaryFromExecution(execution);
       let codeGeneratorResult: CodeGeneratorAgentResult | null = null;
+      let profileValidation: FactoryExecutionProfileValidation | null = null;
       let workspacePlan: WorkspacePlan | null = null;
       let workspace: WorkspaceMaterializationResult | null = null;
       let materializationCandidate: WorkspaceMaterializationResult | null = null;
@@ -382,13 +410,14 @@ export function createFactoryPipelineCoordinator(
             execution,
             request,
             configuration.codeGenerator,
+            configuration.executionProfile,
           );
           const rawGenerationResult = await options.codeGeneratorAgent.execute(
             generationRequest,
             runOptions.signal === undefined ? undefined : { signal: runOptions.signal },
           );
-          codeGeneratorResult = parseCodeGeneratorBoundary(rawGenerationResult, generationRequest);
-          if (codeGeneratorResult.outcome === 'VALIDATION_REJECTED') {
+          const candidate = parseCodeGeneratorBoundary(rawGenerationResult, generationRequest);
+          if (candidate.outcome === 'VALIDATION_REJECTED') {
             const failure = failureFor(
               'CODE_GENERATOR',
               FACTORY_PIPELINE_ERROR_CODES.CODE_GENERATION_REJECTED,
@@ -397,11 +426,9 @@ export function createFactoryPipelineCoordinator(
             finishStage('CODE_GENERATOR', 'FAILED', null, failure);
             primary = { status: 'FAILED', terminalStage: 'CODE_GENERATOR', failure };
           } else {
-            finishStage(
-              'CODE_GENERATOR',
-              'SUCCESS',
-              codeGeneratorResult.bundle.hashes.generationHash,
-            );
+            assertNotAborted(runOptions.signal, 'CODE_GENERATOR', execution.executionId);
+            codeGeneratorResult = candidate;
+            finishStage('CODE_GENERATOR', 'SUCCESS', candidate.bundle.hashes.generationHash);
           }
         } catch (error) {
           const cancelled = cancellationRequested(error, runOptions.signal);
@@ -419,6 +446,62 @@ export function createFactoryPipelineCoordinator(
           primary = {
             status: cancelled ? 'CANCELLED' : 'FAILED',
             terminalStage: 'CODE_GENERATOR',
+            failure,
+          };
+        }
+      }
+
+      if (primary === null && codeGeneratorResult?.outcome === 'GENERATED') {
+        startStage('CODE_PROFILE_VALIDATION');
+        try {
+          assertNotAborted(runOptions.signal, 'CODE_PROFILE_VALIDATION', execution.executionId);
+          profileValidation = executionProfileValidator.validate({
+            bundleHash: codeGeneratorResult.bundle.hashes.bundleHash,
+            files: codeGeneratorResult.bundle.files.map((file) => ({
+              path: file.path,
+              content: file.content,
+              mediaType: file.mediaType,
+            })),
+          });
+          assertNotAborted(runOptions.signal, 'CODE_PROFILE_VALIDATION', execution.executionId);
+          if (!profileValidation.compatible) {
+            const failure = failureFor(
+              'CODE_PROFILE_VALIDATION',
+              FACTORY_PIPELINE_ERROR_CODES.CODE_PROFILE_VALIDATION_FAILED,
+              'O bundle gerado não é compatível com o Factory Execution Profile.',
+              undefined,
+              profileValidation.issues[0]?.reasonCode ?? null,
+            );
+            finishStage(
+              'CODE_PROFILE_VALIDATION',
+              'FAILED',
+              profileValidation.profileValidationHash,
+              failure,
+            );
+            primary = { status: 'FAILED', terminalStage: 'CODE_PROFILE_VALIDATION', failure };
+          } else {
+            finishStage(
+              'CODE_PROFILE_VALIDATION',
+              'SUCCESS',
+              profileValidation.profileValidationHash,
+            );
+          }
+        } catch (error) {
+          const cancelled = cancellationRequested(error, runOptions.signal);
+          const failure = failureFor(
+            'CODE_PROFILE_VALIDATION',
+            cancelled
+              ? FACTORY_PIPELINE_ERROR_CODES.CANCELLED
+              : FACTORY_PIPELINE_ERROR_CODES.CODE_PROFILE_VALIDATION_FAILED,
+            cancelled
+              ? 'A validação do execution profile foi cancelada.'
+              : 'O Factory Execution Profile não conseguiu validar o bundle gerado.',
+            error,
+          );
+          finishStage('CODE_PROFILE_VALIDATION', cancelled ? 'CANCELLED' : 'FAILED', null, failure);
+          primary = {
+            status: cancelled ? 'CANCELLED' : 'FAILED',
+            terminalStage: 'CODE_PROFILE_VALIDATION',
             failure,
           };
         }
@@ -635,7 +718,11 @@ export function createFactoryPipelineCoordinator(
           codeGeneratorVersion: configuration.codeGenerator.agentVersion,
           workspace,
           sandbox,
+          executionProfile: configuration.executionProfile,
+          profileValidation,
         }),
+        executionProfile: configuration.executionProfile,
+        profileValidation,
         failure,
       });
       logFactoryPipelineEvent(

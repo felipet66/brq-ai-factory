@@ -199,6 +199,7 @@ interface RawFactoryStage {
   durationMs: number | null;
   outputHash: string | null;
   failureCode: string | null;
+  reasonCode: string | null;
   resourceOutcome: string | null;
 }
 
@@ -215,6 +216,9 @@ interface RawFactoryLineage {
   workspaceHash: string | null;
   sandboxRequestHash: string | null;
   sandboxResultHash: string | null;
+  executionProfileHash: string | null;
+  generationProjectionHash: string | null;
+  profileValidationHash: string | null;
   factoryResultHash: string;
 }
 
@@ -222,6 +226,12 @@ interface RawFactoryProvenance {
   codeGeneratorAgentVersion: string | null;
   codeGeneratorContractVersion: string | null;
   codeGeneratorAssetBundleHash: string | null;
+  executionProfileId: string | null;
+  executionProfileVersion: string | null;
+  executionProfileContractVersion: string | null;
+  executionProfileHash: string | null;
+  generationProjectionHash: string | null;
+  profileValidationHash: string | null;
   workspaceVersion: string | null;
   workspaceContractVersion: string | null;
   workspacePolicyHash: string | null;
@@ -269,6 +279,7 @@ interface RawFactoryResult {
   failureKind: string | null;
   failureCode: string | null;
   failureSourceCode: string | null;
+  failureReasonCode: string | null;
   failureStageId: string | null;
   stages: RawFactoryStage[];
   lineage: RawFactoryLineage | null;
@@ -492,6 +503,7 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
             kind: raw.failureKind,
             code: raw.failureCode,
             sourceCode: raw.failureSourceCode,
+            reasonCode: raw.failureReasonCode,
             stageId: raw.failureStageId,
           },
     stages: raw.stages.map((stage) => ({
@@ -502,6 +514,7 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
       durationMs: stage.durationMs,
       outputHash: stage.outputHash,
       failureCode: stage.failureCode,
+      reasonCode: stage.reasonCode,
       resourceOutcome: stage.resourceOutcome,
     })),
     lineage:
@@ -520,6 +533,9 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
             workspaceHash: raw.lineage.workspaceHash,
             sandboxRequestHash: raw.lineage.sandboxRequestHash,
             sandboxResultHash: raw.lineage.sandboxResultHash,
+            executionProfileHash: raw.lineage.executionProfileHash,
+            generationProjectionHash: raw.lineage.generationProjectionHash,
+            profileValidationHash: raw.lineage.profileValidationHash,
             factoryResultHash: raw.lineage.factoryResultHash,
           },
     provenance:
@@ -529,6 +545,12 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
             codeGeneratorAgentVersion: raw.provenance.codeGeneratorAgentVersion,
             codeGeneratorContractVersion: raw.provenance.codeGeneratorContractVersion,
             codeGeneratorAssetBundleHash: raw.provenance.codeGeneratorAssetBundleHash,
+            executionProfileId: raw.provenance.executionProfileId,
+            executionProfileVersion: raw.provenance.executionProfileVersion,
+            executionProfileContractVersion: raw.provenance.executionProfileContractVersion,
+            executionProfileHash: raw.provenance.executionProfileHash,
+            generationProjectionHash: raw.provenance.generationProjectionHash,
+            profileValidationHash: raw.provenance.profileValidationHash,
             workspaceVersion: raw.provenance.workspaceVersion,
             workspaceContractVersion: raw.provenance.workspaceContractVersion,
             workspacePolicyHash: raw.provenance.workspacePolicyHash,
@@ -865,6 +887,7 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
         failureKind: factory.failure?.kind ?? null,
         failureCode: factory.failure?.code ?? null,
         failureSourceCode: factory.failure?.sourceCode ?? null,
+        failureReasonCode: factory.failure?.reasonCode ?? null,
         failureStageId: factory.failure?.stageId ?? null,
         stages: {
           create: factory.stages.map((stage, ordinal) => ({
@@ -876,6 +899,7 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
             durationMs: stage.durationMs,
             outputHash: stage.outputHash,
             failureCode: stage.failureCode,
+            reasonCode: stage.reasonCode,
             resourceOutcome: stage.resourceOutcome,
           })),
         },
@@ -885,6 +909,12 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
             codeGeneratorAgentVersion: provenance.codeGeneratorAgentVersion,
             codeGeneratorContractVersion: provenance.codeGeneratorContractVersion,
             codeGeneratorAssetBundleHash: provenance.codeGeneratorAssetBundleHash,
+            executionProfileId: provenance.executionProfileId,
+            executionProfileVersion: provenance.executionProfileVersion,
+            executionProfileContractVersion: provenance.executionProfileContractVersion,
+            executionProfileHash: provenance.executionProfileHash,
+            generationProjectionHash: provenance.generationProjectionHash,
+            profileValidationHash: provenance.profileValidationHash,
             workspaceVersion: provenance.workspaceVersion,
             workspaceContractVersion: provenance.workspaceContractVersion,
             workspacePolicyHash: provenance.workspacePolicyHash,

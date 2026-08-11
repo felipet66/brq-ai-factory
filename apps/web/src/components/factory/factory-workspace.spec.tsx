@@ -72,8 +72,9 @@ describe('FactoryWorkspace', () => {
     );
 
     const pipeline = screen.getByRole('list', { name: 'Factory technical pipeline' });
-    expect(within(pipeline).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(pipeline).getAllByRole('listitem')).toHaveLength(7);
     expect(within(pipeline).getByText('Code Generator')).toBeVisible();
+    expect(within(pipeline).getByText('Profile Validation')).toBeVisible();
     expect(within(pipeline).getByText('Controlled Workspace')).toBeVisible();
     expect(within(pipeline).getByText('Typecheck')).toBeVisible();
     expect(within(pipeline).getByText('Build')).toBeVisible();
@@ -84,6 +85,52 @@ describe('FactoryWorkspace', () => {
     expect(container).not.toHaveTextContent('stderr');
     expect(container).not.toHaveTextContent('containerId');
     expect(container).not.toHaveTextContent('console.log');
+  });
+
+  it('renders a safe Sandbox reason separately from its stable failure code', () => {
+    const successful = factoryResultFixture();
+    const factoryResult = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_PREPARE',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'INLINE_ACTIVE_CONTENT',
+        stageId: 'SANDBOX_PREPARE',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_PREPARE'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'INLINE_ACTIVE_CONTENT',
+            }
+          : stage,
+      ),
+    });
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ status: 'FAILED', factoryResult }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    const { container } = render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+    const pipeline = screen.getByRole('list', { name: 'Factory technical pipeline' });
+
+    expect(within(pipeline).getByText('Failure')).toBeVisible();
+    expect(within(pipeline).getByText('SANDBOX_STEP_FAILED')).toBeVisible();
+    expect(within(pipeline).getByText('Reason')).toBeVisible();
+    expect(within(pipeline).getByText('INLINE_ACTIVE_CONTENT')).toBeVisible();
+    expect(container).not.toHaveTextContent('EXIT_1');
+    expect(container).not.toHaveTextContent('stderr');
   });
 
   it('selects stations with pointer and arrow-key navigation', () => {

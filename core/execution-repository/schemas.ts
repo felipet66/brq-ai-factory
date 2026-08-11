@@ -139,6 +139,7 @@ export const persistedFactoryStageIdSchema = z.enum([
   'DEVELOPER',
   'QA',
   'CODE_GENERATOR',
+  'CODE_PROFILE_VALIDATION',
   'WORKSPACE_PLAN',
   'WORKSPACE_MATERIALIZATION',
   'SANDBOX_PREPARE',
@@ -157,6 +158,10 @@ export const persistedFactoryStageSchema = z
     durationMs: z.number().int().nonnegative().nullable(),
     outputHash: nullableHashSchema,
     failureCode: z.string().min(1).max(128).nullable(),
+    reasonCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
+      .nullable(),
     resourceOutcome: z
       .enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN'])
       .nullable(),
@@ -177,6 +182,9 @@ export const persistedFactoryLineageSchema = z
     workspaceHash: nullableHashSchema,
     sandboxRequestHash: nullableHashSchema,
     sandboxResultHash: nullableHashSchema,
+    executionProfileHash: nullableHashSchema,
+    generationProjectionHash: nullableHashSchema,
+    profileValidationHash: nullableHashSchema,
     factoryResultHash: z.string().regex(HASH_PATTERN),
   })
   .strict();
@@ -186,6 +194,12 @@ export const persistedFactoryProvenanceSchema = z
     codeGeneratorAgentVersion: semanticVersionSchema,
     codeGeneratorContractVersion: semanticVersionSchema.nullable(),
     codeGeneratorAssetBundleHash: nullableHashSchema,
+    executionProfileId: z.string().min(1).max(64).nullable(),
+    executionProfileVersion: semanticVersionSchema.nullable(),
+    executionProfileContractVersion: semanticVersionSchema.nullable(),
+    executionProfileHash: nullableHashSchema,
+    generationProjectionHash: nullableHashSchema,
+    profileValidationHash: nullableHashSchema,
     workspaceVersion: semanticVersionSchema.nullable(),
     workspaceContractVersion: semanticVersionSchema.nullable(),
     workspacePolicyHash: nullableHashSchema,
@@ -259,6 +273,10 @@ export const persistedFactoryResultSchema = z
         kind: z.literal('FACTORY_PIPELINE'),
         code: z.string().min(1).max(128),
         sourceCode: z.string().min(1).max(128).nullable(),
+        reasonCode: z
+          .string()
+          .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
+          .nullable(),
         stageId: z.union([
           persistedFactoryStageIdSchema,
           z.literal('EXECUTION'),
@@ -267,7 +285,7 @@ export const persistedFactoryResultSchema = z
       })
       .strict()
       .nullable(),
-    stages: z.array(persistedFactoryStageSchema).length(11),
+    stages: z.array(persistedFactoryStageSchema).length(12),
     lineage: persistedFactoryLineageSchema,
     provenance: persistedFactoryProvenanceSchema,
   })

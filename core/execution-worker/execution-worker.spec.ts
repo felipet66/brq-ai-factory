@@ -212,6 +212,7 @@ describe('execution worker', () => {
       ['DEVELOPER', 'FAILED'],
       ['QA', 'SKIPPED'],
       ['CODE_GENERATOR', 'SKIPPED'],
+      ['CODE_PROFILE_VALIDATION', 'SKIPPED'],
       ['WORKSPACE_PLAN', 'SKIPPED'],
       ['WORKSPACE_MATERIALIZATION', 'SKIPPED'],
       ['SANDBOX_PREPARE', 'SKIPPED'],

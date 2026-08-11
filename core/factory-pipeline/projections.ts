@@ -22,6 +22,11 @@ import {
   type ExecutionResult,
 } from '@brq/execution-engine';
 import {
+  projectGenerationProfileConstraints,
+  type FactoryExecutionProfile,
+  type FactoryExecutionProfileValidation,
+} from '@brq/factory-execution-profile';
+import {
   calculateSandboxRequestHash,
   sandboxRunRequestSchema,
   sandboxRunResultSchema,
@@ -44,7 +49,6 @@ import { canonicalJson } from './canonical-json';
 import { FACTORY_PIPELINE_ERROR_CODES, FactoryPipelineError } from './errors';
 import { deriveCodeGeneratorExecutionId } from './hashing';
 import { immutableClone } from './immutability';
-import { sanitizeTechnicalCode } from './sanitization';
 
 function boundaryViolation(message: string, stage: string, cause?: unknown): never {
   throw new FactoryPipelineError(message, {
@@ -85,6 +89,7 @@ export function projectExecutionToCodeGenerationRequest(
   rawExecutionResult: ExecutionResult,
   executionRequest: ExecutionRequest,
   configuration: FactoryPipelineConfiguration['codeGenerator'],
+  executionProfile: FactoryPipelineConfiguration['executionProfile'],
 ): CodeGenerationRequest {
   const result = parseBoundary(
     executionResultSchema,
@@ -155,6 +160,13 @@ export function projectExecutionToCodeGenerationRequest(
         technicalHandoffVerified: true,
       },
       model: configuration.model,
+      generationConstraints: [
+        {
+          id: 'constraint:factory-execution-profile',
+          serialization: 'JSON',
+          value: projectGenerationProfileConstraints(executionProfile),
+        },
+      ],
       ...(configuration.limits === undefined ? {} : { limits: configuration.limits }),
     }),
   );
@@ -498,7 +510,7 @@ export function projectFactorySandboxSummary(
           ? null
           : {
               ...step.failure,
-              sourceCode: sanitizeTechnicalCode(step.failure.sourceCode),
+              sourceCode: null,
             },
     })),
     hashes: result.hashes,
@@ -532,6 +544,8 @@ export function projectFactoryPipelineProvenance(input: {
   readonly codeGeneratorVersion: string;
   readonly workspace: WorkspaceMaterializationResult | null;
   readonly sandbox: SandboxRunResult | null;
+  readonly executionProfile: FactoryExecutionProfile;
+  readonly profileValidation: FactoryExecutionProfileValidation | null;
 }): Omit<FactoryPipelineProvenance, 'pipelineVersion' | 'contractVersion' | 'hashAlgorithm'> {
   const agents = projectFactoryAgentsSummary(input.execution);
   return immutableClone({
@@ -544,6 +558,15 @@ export function projectFactoryPipelineProvenance(input: {
       developer: agents.developer.agentVersion,
       qa: agents.qa.agentVersion,
       codeGenerator: input.codeGeneratorVersion,
+    },
+    executionProfile: {
+      profileId: input.executionProfile.identity.profileId,
+      version: input.executionProfile.identity.version,
+      contractVersion: input.executionProfile.identity.contractVersion,
+      profileHash: input.executionProfile.identity.profileHash,
+      generationProjectionHash: projectGenerationProfileConstraints(input.executionProfile)
+        .generationProjectionHash,
+      profileValidationHash: input.profileValidation?.profileValidationHash ?? null,
     },
     codeGenerator:
       input.codeGeneratorResult?.outcome === 'GENERATED'
@@ -633,6 +656,7 @@ export function projectAgentStages(
                 : FACTORY_PIPELINE_ERROR_CODES.EXECUTION_FAILED),
             stage: stageId,
             sourceCode: sourceFailure?.sourceCode ?? null,
+            reasonCode: null,
             message:
               status === 'CANCELLED'
                 ? 'A etapa foi cancelada.'

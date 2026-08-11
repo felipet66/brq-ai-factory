@@ -37,7 +37,7 @@ describe('inspection-only Playground runtime', () => {
     expect(catalog.agents.map(({ versions }) => versions.promptVersion)).toEqual([
       '1.0.1',
       '1.0.3',
-      '1.0.1',
+      '1.0.4',
     ]);
     expect(catalog.agents.every(({ examples }) => examples.length > 0)).toBe(true);
     expect(catalog.agents.every(({ examples }) => examples[0]?.candidate !== undefined)).toBe(true);
@@ -79,7 +79,15 @@ describe('inspection-only Playground runtime', () => {
       if (descriptor.agent === 'QA') {
         expect(result.prompt.instructions).toContain('blockingItems.length > 0');
         expect(result.prompt.instructions).toContain('functionalCoverage');
-        expect(result.prompt.instructions).toContain('ao menos um functionalSourceId da linha');
+        expect(result.prompt.instructions).toContain(
+          'ao menos uma correspondência, por igualdade exata',
+        );
+        expect(result.prompt.instructions).toContain('productOwnerSpecification.businessRules[]');
+        expect(result.prompt.instructions).toContain(
+          'businessRules.covered MUST ser EXATAMENTE igual a businessRules.total',
+        );
+        expect(result.prompt.instructions).toContain('auditoria relacional par-a-par');
+        expect(result.prompt.instructions).toContain('por igualdade exata');
       }
     }
   });

@@ -8,12 +8,13 @@ import {
 } from './state-machine';
 
 describe('Factory Pipeline state machine', () => {
-  it('uses one canonical fail-fast order with eleven functional stages', () => {
+  it('uses one canonical fail-fast order with twelve functional stages', () => {
     expect(FACTORY_PIPELINE_STAGE_IDS).toEqual([
       'PRODUCT_OWNER',
       'DEVELOPER',
       'QA',
       'CODE_GENERATOR',
+      'CODE_PROFILE_VALIDATION',
       'WORKSPACE_PLAN',
       'WORKSPACE_MATERIALIZATION',
       'SANDBOX_PREPARE',
@@ -24,6 +25,7 @@ describe('Factory Pipeline state machine', () => {
     ]);
     expect(subsequentFactoryPipelineStages('QA')).toEqual([
       'CODE_GENERATOR',
+      'CODE_PROFILE_VALIDATION',
       'WORKSPACE_PLAN',
       'WORKSPACE_MATERIALIZATION',
       'SANDBOX_PREPARE',

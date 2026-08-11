@@ -1,6 +1,6 @@
 {
   "id": "rules:qa",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "scope": "AGENT",
   "agent": "QA",
   "rules": [
@@ -10,7 +10,11 @@
     },
     {
       "id": "qa:functional-coverage",
-      "content": "Todo Acceptance Criterion e toda Business Rule MUST aparecer em ao menos um cenário, no mapa functionalCoverage e na matriz. Para cada traceability.functionalCoverage[]: cada scenarioId MUST apontar para um cenário existente cujo functionalReferences MUST incluir o mesmo sourceId da entrada; outros IDs funcionais válidos MAY coexistir. MUST NOT associar uma fonte funcional a cenário que não declare essa fonte."
+      "content": "Depois de finalizar todos os cenários, derive a cobertura funcional diretamente de productOwnerSpecification. Para CADA id de productOwnerSpecification.acceptanceCriteria[] e CADA id de productOwnerSpecification.businessRules[]: (1) ao menos um cenário MUST conter o id em functionalReferences; (2) traceability.functionalCoverage MUST conter exatamente uma entrada cujo sourceId seja igual ao id, com scenarioIds não vazio, e cada cenário listado MUST conter esse id em functionalReferences; (3) ao menos uma linha de traceability.matrix MUST conter o id em functionalSourceIds e MUST relacioná-lo a ao menos um cenário da mesma linha que contenha esse id em functionalReferences. MUST NOT omitir, renomear ou substituir IDs AC/BR. Outros IDs funcionais válidos MAY coexistir nos cenários."
+    },
+    {
+      "id": "qa:coverage-summary",
+      "content": "Calcule traceability.summary somente depois de finalizar cenários, functionalCoverage, technicalCoverage e matrix. acceptanceCriteria.total MUST ser a quantidade de IDs únicos em productOwnerSpecification.acceptanceCriteria[]; businessRules.total MUST ser a quantidade de IDs únicos em productOwnerSpecification.businessRules[]. Cada covered MUST ser a quantidade de IDs da categoria presentes simultaneamente nas três superfícies obrigatórias: referências dos cenários, mapa de cobertura e matriz. Como a cobertura integral é obrigatória, acceptanceCriteria.covered MUST ser igual a acceptanceCriteria.total e businessRules.covered MUST ser igual a businessRules.total. Recalcule esses quatro valores imediatamente antes de emitir o JSON; MUST NOT declarar como coberto um ID ausente em qualquer superfície."
     },
     {
       "id": "qa:technical-coverage",

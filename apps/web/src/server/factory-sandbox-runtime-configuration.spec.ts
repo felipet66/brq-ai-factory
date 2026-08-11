@@ -2,12 +2,14 @@
 
 import path from 'node:path';
 
+import { NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE } from '@brq/factory-execution-profile';
 import { describe, expect, it } from 'vitest';
 
 import {
   FACTORY_SANDBOX_NODE_VERSION,
   FACTORY_SANDBOX_POLICY,
   FACTORY_SANDBOX_POLICY_ID,
+  FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT,
   resolveFactorySandboxRuntimeConfiguration,
 } from './factory-sandbox-runtime-configuration';
 
@@ -47,6 +49,10 @@ describe('Factory Sandbox host configuration', () => {
     expect(configuration.image.reference).toContain('@sha256:');
     expect(configuration.image.requiredLabels).toEqual({
       'org.brq.sandbox.factory-profile': 'node-web-preview-24-v1',
+      'org.brq.sandbox.execution-profile-hash':
+        NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.identity.profileHash,
+      'org.brq.sandbox.execution-profile-snapshot-hash':
+        FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT.snapshotHash,
     });
   });
 

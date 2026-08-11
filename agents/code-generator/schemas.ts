@@ -14,7 +14,7 @@ import {
   knowledgeHashSchema,
   knowledgeSourceIdSchema,
 } from '@brq/knowledge-loader';
-import { canonicalizeJson } from '@brq/prompt-builder';
+import { canonicalizeJson, promptConstraintSchema } from '@brq/prompt-builder';
 import { validationIssueSchema, validationMetadataSchema } from '@brq/response-validator';
 import { identifierSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
@@ -110,6 +110,26 @@ export const codeGeneratorAgentLimitsSchema = z
   })
   .strict();
 
+export const codeGenerationConstraintSchema = promptConstraintSchema;
+
+const codeGenerationConstraintsSchema = z
+  .array(codeGenerationConstraintSchema)
+  .min(1)
+  .max(request.generationConstraints)
+  .superRefine((constraints, context) => {
+    const identifiers = new Set<string>();
+    constraints.forEach((constraint, index) => {
+      if (identifiers.has(constraint.id)) {
+        context.addIssue({
+          code: 'custom',
+          path: [index, 'id'],
+          message: 'As constraints de geração devem possuir IDs únicos.',
+        });
+      }
+      identifiers.add(constraint.id);
+    });
+  });
+
 export const codeGenerationRequestSchema = z
   .object({
     context: codeGeneratorAgentContextSchema,
@@ -121,6 +141,7 @@ export const codeGenerationRequestSchema = z
       .min(1)
       .max(request.modelCharacters)
       .refine((value) => value === value.trim() && value.trim().length > 0),
+    generationConstraints: codeGenerationConstraintsSchema.optional(),
     limits: codeGeneratorAgentLimitsSchema.optional(),
   })
   .strict()

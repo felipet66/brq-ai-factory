@@ -35,6 +35,7 @@ function createTerminalFactoryResult(
     code: status === 'CANCELLED' ? 'FACTORY_PIPELINE_CANCELLED' : 'FACTORY_PIPELINE_STAGE_FAILED',
     stage: stageId,
     sourceCode: null,
+    reasonCode: null,
     message: status === 'CANCELLED' ? 'Execução cancelada.' : 'Etapa rejeitada.',
   };
 
@@ -330,6 +331,7 @@ describe('In-memory Factory execution history', () => {
       code: 'FACTORY_PIPELINE_SANDBOX_FAILED',
       stage: 'SANDBOX_TEST' as const,
       sourceCode: 'SANDBOX_STEP_FAILED',
+      reasonCode: null,
       message: 'Falha funcional sanitizada.',
     };
     Object.assign(sandboxTest, { status: 'FAILED', outputHash: null, failure });

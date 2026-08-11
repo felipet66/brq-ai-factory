@@ -8,10 +8,7 @@ import {
   readStdin,
   reportSuccess,
   runHelper,
-  sourcePathsFromManifest,
-  testPathsFromSources,
-  validateOptionalPackage,
-  validatePreviewSource,
+  validateExecutionProfileFiles,
   validateWorkspaceEnvelope,
   verifyPreparedWorkspace,
   writeJsonFile,
@@ -22,13 +19,7 @@ await runHelper('PREPARE', async () => {
   parseWorkspaceArguments(process.argv.slice(2));
   const input = await readStdin(640 * 1024);
   const envelope = validateWorkspaceEnvelope(JSON.parse(input));
-  const packageFile = envelope.files.find((file) => file.path === 'package.json');
-  if (packageFile !== undefined) validateOptionalPackage(packageFile.content);
-  assertCondition(
-    envelope.files.some((file) => file.path === 'index.html'),
-    'INDEX_HTML_REQUIRED',
-  );
-  for (const file of envelope.files) validatePreviewSource(file.path, file.content);
+  validateExecutionProfileFiles(envelope.files);
 
   await mkdir(WORKSPACE_ROOT, { recursive: true, mode: 0o700 });
   assertCondition((await realpath(WORKSPACE_ROOT)) === WORKSPACE_ROOT, 'WORKSPACE_ALIAS');
@@ -45,7 +36,6 @@ await runHelper('PREPARE', async () => {
       contentHash,
     })),
   });
-  const manifest = await verifyPreparedWorkspace();
-  testPathsFromSources(sourcePathsFromManifest(manifest));
+  await verifyPreparedWorkspace();
   reportSuccess(`BRQ_PREPARE_OK files=${envelope.files.length} bytes=${envelope.totalBytes}`);
 });

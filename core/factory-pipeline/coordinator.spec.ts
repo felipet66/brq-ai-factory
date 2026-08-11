@@ -5,10 +5,17 @@ import path from 'node:path';
 import { createAgentRunner } from '@brq/agent-runner';
 import { createArtifactGenerator } from '@brq/artifact-generator';
 import {
+  createFactoryExecutionProfileValidator,
+  FACTORY_EXECUTION_PROFILE_REASON_CODES,
+  projectGenerationProfileConstraints,
+  type FactoryExecutionProfileValidator,
+} from '@brq/factory-execution-profile';
+import {
   CODE_GENERATOR_CONTRACT_LIMITS,
   createCodeGeneratorAgent,
   loadCodeGeneratorPromptAssets,
   type CodeGeneratorAgentResult,
+  type GeneratedCodeProposal,
 } from '@brq/code-generator-agent';
 import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/filesystem';
 import {
@@ -104,6 +111,7 @@ const temporaryRoots: string[] = [];
 let request: ExecutionRequest;
 let execution: ExecutionResult;
 let generated: Extract<CodeGeneratorAgentResult, { outcome: 'GENERATED' }>;
+let profileIncompatible: Extract<CodeGeneratorAgentResult, { outcome: 'GENERATED' }>;
 let rejected: Extract<CodeGeneratorAgentResult, { outcome: 'VALIDATION_REJECTED' }>;
 
 type Mutable<T> = T extends readonly (infer Item)[]
@@ -125,7 +133,7 @@ function createSandboxResult(
   const failure = input.failure ?? null;
   return finalizeSandboxRunResult({
     request: sandboxRequest,
-    policy: createSandboxExecutionPolicyFixture(),
+    policy: createSandboxExecutionPolicyFixture({ policyId: configuration.sandbox.policyId }),
     effectiveLimits: DEFAULT_SANDBOX_LIMITS,
     runtime: createSandboxRuntimeObservationFixture(),
     status,
@@ -144,6 +152,16 @@ async function codeGeneratorResultFor(
   proposal = createGeneratedCodeProposal({
     files: [
       {
+        path: 'index.html',
+        content:
+          '<!doctype html><html><body><script type="module" src="./core/order-query/index.js"></script></body></html>\n',
+        encoding: 'UTF-8',
+        mediaType: 'text/html',
+        purpose: 'SOURCE',
+        sourceModuleIds: [],
+        sourcePlanItemIds: ['PLAN-001'],
+      },
+      {
         path: 'core/order-query/index.ts',
         content: 'export const ready = true;\n',
         encoding: 'UTF-8',
@@ -152,8 +170,18 @@ async function codeGeneratorResultFor(
         sourceModuleIds: ['MOD-001'],
         sourcePlanItemIds: ['PLAN-001'],
       },
+      {
+        path: 'core/order-query/index.test.ts',
+        content:
+          'import assert from "node:assert/strict";\nimport test from "node:test";\nimport { ready } from "./index.js";\ntest("ready", () => assert.equal(ready, true));\n',
+        encoding: 'UTF-8',
+        mediaType: 'text/typescript',
+        purpose: 'TEST',
+        sourceModuleIds: ['MOD-001'],
+        sourcePlanItemIds: ['PLAN-001'],
+      },
     ],
-    entrypoints: ['core/order-query/index.ts'],
+    entrypoints: ['index.html'],
   }),
 ): Promise<CodeGeneratorAgentResult> {
   const knowledgeLoader = await createKnowledgeLoader({
@@ -194,9 +222,64 @@ async function codeGeneratorResultFor(
       executionResult,
       executionRequest,
       configuration.codeGenerator,
+      configuration.executionProfile,
     ),
   );
 }
+
+function validateGeneratedBundle(
+  validator: FactoryExecutionProfileValidator,
+  bundle: Extract<CodeGeneratorAgentResult, { outcome: 'GENERATED' }>['bundle'],
+) {
+  return validator.validate({
+    bundleHash: bundle.hashes.bundleHash,
+    files: bundle.files.map((file) => ({
+      path: file.path,
+      content: file.content,
+      mediaType: file.mediaType,
+    })),
+  });
+}
+
+function profileProposalFile(input: {
+  readonly path: string;
+  readonly content: string;
+  readonly mediaType: GeneratedCodeProposal['files'][number]['mediaType'];
+  readonly purpose: GeneratedCodeProposal['files'][number]['purpose'];
+  readonly coversModule?: boolean;
+}): GeneratedCodeProposal['files'][number] {
+  return {
+    path: input.path,
+    content: input.content,
+    encoding: 'UTF-8',
+    mediaType: input.mediaType,
+    purpose: input.purpose,
+    sourceModuleIds: input.coversModule === true ? ['MOD-001'] : [],
+    sourcePlanItemIds: ['PLAN-001'],
+  };
+}
+
+const ROOT_HTML_FILE = profileProposalFile({
+  path: 'index.html',
+  content:
+    '<!doctype html><html><body><script type="module" src="./core/order-query/index.js"></script></body></html>\n',
+  mediaType: 'text/html',
+  purpose: 'SOURCE',
+});
+const TYPESCRIPT_SOURCE_FILE = profileProposalFile({
+  path: 'core/order-query/index.ts',
+  content: 'export const ready = true;\n',
+  mediaType: 'text/typescript',
+  purpose: 'SOURCE',
+  coversModule: true,
+});
+const TYPESCRIPT_TEST_FILE = profileProposalFile({
+  path: 'core/order-query/index.test.ts',
+  content:
+    'import assert from "node:assert/strict";\nimport test from "node:test";\nimport { ready } from "./index.js";\ntest("ready", () => assert.equal(ready, true));\n',
+  mediaType: 'text/typescript',
+  purpose: 'TEST',
+});
 
 async function createHarness(
   overrides: {
@@ -309,6 +392,26 @@ beforeAll(async () => {
   const generatedResult = await codeGeneratorResultFor(execution, request);
   if (generatedResult.outcome !== 'GENERATED') throw new Error('Expected generated fixture.');
   generated = generatedResult;
+  const incompatibleResult = await codeGeneratorResultFor(
+    execution,
+    request,
+    createGeneratedCodeProposal({
+      files: [
+        profileProposalFile({
+          path: 'core/order-query/index.html',
+          content: '<!doctype html><html><body>HTML only</body></html>\n',
+          mediaType: 'text/html',
+          purpose: 'SOURCE',
+          coversModule: true,
+        }),
+      ],
+      entrypoints: ['core/order-query/index.html'],
+    }),
+  );
+  if (incompatibleResult.outcome !== 'GENERATED') {
+    throw new Error('Expected Factory Code Profile incompatible generated fixture.');
+  }
+  profileIncompatible = incompatibleResult;
   const unsafe = createGeneratedCodeProposal({
     files: [
       {
@@ -354,8 +457,8 @@ describe('FactoryPipelineCoordinator', () => {
           },
         },
         configuration: {
+          ...configuration,
           codeGenerator: { agentVersion: '1.0.0', model: '' },
-          sandbox: { policyId: 'NODE_NONE_24_V1' },
         },
       }),
     ).toThrowError(
@@ -376,7 +479,7 @@ describe('FactoryPipelineCoordinator', () => {
     const result = await coordinator.execute(request);
 
     expect(result.status).toBe('SUCCESS');
-    expect(result.stages).toHaveLength(11);
+    expect(result.stages).toHaveLength(12);
     expect(result.stages.every((stage) => stage.status === 'SUCCESS')).toBe(true);
     expect(result.generation.hashes?.bundleHash).toBe(generated.bundle.hashes.bundleHash);
     expect(result.lineage.generatedBundleHash).toBe(generated.bundle.hashes.bundleHash);
@@ -388,9 +491,310 @@ describe('FactoryPipelineCoordinator', () => {
       'SUCCESS',
     ]);
     expect(result.hashes.sandboxResultHash).toBe(result.sandbox.hashes?.sandboxResultHash);
+    expect(result.stages.find((stage) => stage.stageId === 'CODE_GENERATOR')?.outputHash).toBe(
+      generated.bundle.hashes.generationHash,
+    );
     expect(Object.isFrozen(result)).toBe(true);
     await expect(access(path.join(rootPath, result.workspace.workspaceId!))).rejects.toBeDefined();
     expect(JSON.stringify(result)).not.toContain('export const ready');
+  });
+
+  it('validates compatible and incompatible bundles deterministically against the fixed profile', () => {
+    const validator = createFactoryExecutionProfileValidator(configuration.executionProfile);
+    const generationRequest = projectExecutionToCodeGenerationRequest(
+      execution,
+      request,
+      configuration.codeGenerator,
+      configuration.executionProfile,
+    );
+    const compatible = validateGeneratedBundle(validator, generated.bundle);
+    const repeatedCompatible = validateGeneratedBundle(validator, generated.bundle);
+    const incompatible = validateGeneratedBundle(validator, profileIncompatible.bundle);
+    const repeatedIncompatible = validateGeneratedBundle(validator, profileIncompatible.bundle);
+
+    expect(compatible).toEqual(repeatedCompatible);
+    expect(generationRequest.generationConstraints).toEqual([
+      {
+        id: 'constraint:factory-execution-profile',
+        serialization: 'JSON',
+        value: projectGenerationProfileConstraints(configuration.executionProfile),
+      },
+    ]);
+    expect(compatible.compatible).toBe(true);
+    expect(compatible.issues).toEqual([]);
+    expect(incompatible).toEqual(repeatedIncompatible);
+    expect(incompatible.compatible).toBe(false);
+    expect(incompatible.issues.map((issue) => issue.reasonCode)).toEqual([
+      FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+      FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_SUPPORTED_SOURCE,
+      FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES,
+    ]);
+    expect(incompatible.profileValidationHash).not.toBe(compatible.profileValidationHash);
+    expect(Object.isFrozen(compatible)).toBe(true);
+    expect(Object.isFrozen(incompatible)).toBe(true);
+  });
+
+  it('enforces the complete Factory profile matrix without narrowing the generic Code Generator', async () => {
+    const javascriptSource = profileProposalFile({
+      path: 'core/order-query/index.js',
+      content: 'export const ready = true;\n',
+      mediaType: 'text/javascript',
+      purpose: 'SOURCE',
+      coversModule: true,
+    });
+    const javascriptTest = profileProposalFile({
+      path: 'core/order-query/index.test.js',
+      content:
+        'import assert from "node:assert/strict";\nimport test from "node:test";\nimport { ready } from "./index.js";\ntest("ready", () => assert.equal(ready, true));\n',
+      mediaType: 'text/javascript',
+      purpose: 'TEST',
+    });
+    const scenarios: readonly {
+      readonly name: string;
+      readonly files: GeneratedCodeProposal['files'];
+      readonly entrypoint: string;
+      readonly issues: readonly string[];
+    }[] = [
+      {
+        name: 'HTML only',
+        files: [
+          profileProposalFile({
+            path: 'core/order-query/index.html',
+            content: '<!doctype html><html><body>HTML only</body></html>\n',
+            mediaType: 'text/html',
+            purpose: 'SOURCE',
+            coversModule: true,
+          }),
+        ],
+        entrypoint: 'core/order-query/index.html',
+        issues: [
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_SUPPORTED_SOURCE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES,
+        ],
+      },
+      {
+        name: 'CSS only',
+        files: [
+          profileProposalFile({
+            path: 'core/order-query/styles.css',
+            content: 'body { color: #123456; }\n',
+            mediaType: 'text/css',
+            purpose: 'STYLE',
+            coversModule: true,
+          }),
+        ],
+        entrypoint: 'core/order-query/styles.css',
+        issues: [
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_SUPPORTED_SOURCE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES,
+        ],
+      },
+      {
+        name: 'TSX only',
+        files: [
+          profileProposalFile({
+            path: 'core/order-query/index.tsx',
+            content: 'export const view = <main>Ready</main>;\n',
+            mediaType: 'text/typescript',
+            purpose: 'SOURCE',
+            coversModule: true,
+          }),
+        ],
+        entrypoint: 'core/order-query/index.tsx',
+        issues: [
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.UNSUPPORTED_SOURCE_PROFILE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_SUPPORTED_SOURCE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES,
+        ],
+      },
+      {
+        name: 'JSX only',
+        files: [
+          profileProposalFile({
+            path: 'core/order-query/index.jsx',
+            content: 'export const view = <main>Ready</main>;\n',
+            mediaType: 'text/javascript',
+            purpose: 'SOURCE',
+            coversModule: true,
+          }),
+        ],
+        entrypoint: 'core/order-query/index.jsx',
+        issues: [
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.UNSUPPORTED_SOURCE_PROFILE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_SUPPORTED_SOURCE,
+          FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES,
+        ],
+      },
+      {
+        name: 'TypeScript without test',
+        files: [ROOT_HTML_FILE, TYPESCRIPT_SOURCE_FILE],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [FACTORY_EXECUTION_PROFILE_REASON_CODES.NO_TEST_FILES],
+      },
+      {
+        name: 'TypeScript with test',
+        files: [ROOT_HTML_FILE, TYPESCRIPT_SOURCE_FILE, TYPESCRIPT_TEST_FILE],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [],
+      },
+      {
+        name: 'JavaScript with test',
+        files: [ROOT_HTML_FILE, javascriptSource, javascriptTest],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [],
+      },
+      {
+        name: 'CommonJS JavaScript',
+        files: [
+          ROOT_HTML_FILE,
+          profileProposalFile({
+            path: 'core/order-query/index.js',
+            content: 'const ready = true;\nmodule.exports = { ready };\n',
+            mediaType: 'text/javascript',
+            purpose: 'SOURCE',
+            coversModule: true,
+          }),
+          javascriptTest,
+        ],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [FACTORY_EXECUTION_PROFILE_REASON_CODES.DEPENDENCY_UNSUPPORTED],
+      },
+      {
+        name: 'TypeScript with auxiliary HTML and CSS',
+        files: [
+          ROOT_HTML_FILE,
+          TYPESCRIPT_SOURCE_FILE,
+          TYPESCRIPT_TEST_FILE,
+          profileProposalFile({
+            path: 'core/order-query/details.html',
+            content: '<section>Details</section>\n',
+            mediaType: 'text/html',
+            purpose: 'SOURCE',
+          }),
+          profileProposalFile({
+            path: 'core/order-query/styles.css',
+            content: 'body { color: #123456; }\n',
+            mediaType: 'text/css',
+            purpose: 'STYLE',
+          }),
+        ],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [],
+      },
+      {
+        name: 'mixed TypeScript and TSX',
+        files: [
+          ROOT_HTML_FILE,
+          TYPESCRIPT_SOURCE_FILE,
+          TYPESCRIPT_TEST_FILE,
+          profileProposalFile({
+            path: 'core/order-query/view.tsx',
+            content: 'export const view = <main>Ready</main>;\n',
+            mediaType: 'text/typescript',
+            purpose: 'SOURCE',
+          }),
+        ],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [FACTORY_EXECUTION_PROFILE_REASON_CODES.UNSUPPORTED_SOURCE_PROFILE],
+      },
+      {
+        name: 'external package dependency',
+        files: [
+          ROOT_HTML_FILE,
+          TYPESCRIPT_SOURCE_FILE,
+          TYPESCRIPT_TEST_FILE,
+          profileProposalFile({
+            path: 'package.json',
+            content: '{"type":"module","dependencies":{"left-pad":"1.3.0"}}\n',
+            mediaType: 'application/json',
+            purpose: 'CONFIGURATION',
+          }),
+        ],
+        entrypoint: ROOT_HTML_FILE.path,
+        issues: [FACTORY_EXECUTION_PROFILE_REASON_CODES.PACKAGE_POLICY],
+      },
+    ];
+    const validator = createFactoryExecutionProfileValidator(configuration.executionProfile);
+
+    for (const scenario of scenarios) {
+      const result = await codeGeneratorResultFor(
+        execution,
+        request,
+        createGeneratedCodeProposal({
+          files: scenario.files,
+          entrypoints: [scenario.entrypoint],
+        }),
+      );
+      expect(result.outcome, `${scenario.name} must remain generic-generator valid`).toBe(
+        'GENERATED',
+      );
+      if (result.outcome !== 'GENERATED') continue;
+      const validation = validateGeneratedBundle(validator, result.bundle);
+      expect(
+        validation.issues.map((issue) => issue.reasonCode),
+        scenario.name,
+      ).toEqual(scenario.issues);
+      expect(validation.compatible, scenario.name).toBe(scenario.issues.length === 0);
+    }
+  }, 30_000);
+
+  it('rejects an incompatible Factory Code Profile before every workspace and Sandbox call', async () => {
+    const rootPath = await mkdtemp(path.join(tmpdir(), 'brq-factory-pipeline-profile-'));
+    temporaryRoots.push(rootPath);
+    const realWorkspace = createFilesystemControlledWorkspace({ rootPath, logger });
+    const plan = vi.fn(realWorkspace.plan);
+    const materialize = vi.fn(realWorkspace.materialize);
+    const release = vi.fn(realWorkspace.release);
+    const sandboxRun = vi.fn();
+    const { coordinator } = await createHarness({
+      codeGeneratorAgent: { execute: async () => profileIncompatible },
+      workspace: { plan, materialize, release },
+      sandboxRunner: { run: sandboxRun },
+    });
+
+    const first = await coordinator.execute(request);
+    const expectedValidation = validateGeneratedBundle(
+      createFactoryExecutionProfileValidator(configuration.executionProfile),
+      profileIncompatible.bundle,
+    );
+
+    expect(first.status).toBe('FAILED');
+    expect(first.terminalStage).toBe('CODE_PROFILE_VALIDATION');
+    expect(first.failure?.code).toBe(FACTORY_PIPELINE_ERROR_CODES.CODE_PROFILE_VALIDATION_FAILED);
+    expect(first.failure?.reasonCode).toBe(
+      FACTORY_EXECUTION_PROFILE_REASON_CODES.INDEX_HTML_REQUIRED,
+    );
+    expect(first.stages.find((stage) => stage.stageId === 'CODE_GENERATOR')).toMatchObject({
+      status: 'SUCCESS',
+      outputHash: profileIncompatible.bundle.hashes.generationHash,
+    });
+    expect(first.stages.find((stage) => stage.stageId === 'CODE_PROFILE_VALIDATION')).toMatchObject(
+      {
+        status: 'FAILED',
+        outputHash: expectedValidation.profileValidationHash,
+      },
+    );
+    expect(
+      first.stages
+        .slice(first.stages.findIndex((stage) => stage.stageId === 'WORKSPACE_PLAN'))
+        .every((stage) => stage.status === 'SKIPPED'),
+    ).toBe(true);
+    expect(first.workspace).toMatchObject({
+      planStatus: 'SKIPPED',
+      materializationStatus: 'SKIPPED',
+      releaseStatus: 'NOT_REQUIRED',
+    });
+    expect(first.sandbox.status).toBe('SKIPPED');
+    expect(first.generation).toMatchObject({ status: 'SUCCESS', outcome: 'GENERATED' });
+    expect(plan).not.toHaveBeenCalled();
+    expect(materialize).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(sandboxRun).not.toHaveBeenCalled();
+    expect(JSON.stringify(first)).not.toContain('export const ready');
   });
 
   it('preserves a functional TEST failure and releases the workspace without throwing', async () => {
@@ -400,6 +804,7 @@ describe('FactoryPipelineCoordinator', () => {
       stage: SANDBOX_RUNNER_ERROR_STAGES.TEST,
       message: 'A etapa falhou.',
       sourceCode: 'private diagnostic must not cross boundary',
+      reasonCode: 'TEST_FAILED',
     };
     const successful = createSandboxStepResultsFixture();
     const steps: readonly SandboxStepResult[] = [
@@ -428,7 +833,9 @@ describe('FactoryPipelineCoordinator', () => {
     );
     expect(result.stages.find((stage) => stage.stageId === 'SANDBOX_TEST')?.status).toBe('FAILED');
     expect(result.failure?.sourceCode).toBeNull();
+    expect(result.failure?.reasonCode).toBe('TEST_FAILED');
     expect(result.sandbox.steps[3]?.failure?.sourceCode).toBeNull();
+    expect(result.sandbox.steps[3]?.failure?.reasonCode).toBe('TEST_FAILED');
     expect(JSON.stringify(result)).not.toContain('private diagnostic');
     expect(result.workspace.releaseStatus).toBe('RELEASED');
   });
@@ -439,6 +846,7 @@ describe('FactoryPipelineCoordinator', () => {
       stage: SANDBOX_RUNNER_ERROR_STAGES.CLEANUP,
       message: 'Cleanup failed.',
       sourceCode: 'REMOVE_FAILED',
+      reasonCode: null,
     };
     const { coordinator } = await createHarness({
       sandboxRunner: {
@@ -498,7 +906,7 @@ describe('FactoryPipelineCoordinator', () => {
     });
     const result = await coordinator.execute(request);
     expect(result.status).toBe('FAILED');
-    expect(result.generation.outcome).toBe('VALIDATION_REJECTED');
+    expect(result.generation.outcome).toBeNull();
     expect(result.failure?.code).toBe(FACTORY_PIPELINE_ERROR_CODES.CODE_GENERATION_REJECTED);
     expect(result.workspace.planStatus).toBe('SKIPPED');
     expect(sandboxRun).not.toHaveBeenCalled();

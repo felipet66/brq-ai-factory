@@ -79,6 +79,7 @@ export type FactoryPipelineStageId =
   | 'DEVELOPER'
   | 'QA'
   | 'CODE_GENERATOR'
+  | 'CODE_PROFILE_VALIDATION'
   | 'WORKSPACE_PLAN'
   | 'WORKSPACE_MATERIALIZATION'
   | 'SANDBOX_PREPARE'
@@ -95,6 +96,7 @@ export interface ExecutionHistoryFactoryStage {
   readonly durationMs: number | null;
   readonly outputHash: string | null;
   readonly failureCode: string | null;
+  readonly reasonCode: string | null;
   readonly resourceOutcome:
     'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
 }
@@ -128,6 +130,7 @@ export interface ExecutionHistoryFactoryResult {
     readonly kind: 'FACTORY_PIPELINE';
     readonly code: string;
     readonly sourceCode: string | null;
+    readonly reasonCode: string | null;
     readonly stageId: FactoryPipelineStageId | 'EXECUTION' | 'SANDBOX';
   } | null;
   readonly stages: readonly ExecutionHistoryFactoryStage[];
@@ -144,12 +147,21 @@ export interface ExecutionHistoryFactoryResult {
     readonly workspaceHash: string | null;
     readonly sandboxRequestHash: string | null;
     readonly sandboxResultHash: string | null;
+    readonly executionProfileHash: string | null;
+    readonly generationProjectionHash: string | null;
+    readonly profileValidationHash: string | null;
     readonly factoryResultHash: string;
   };
   readonly provenance: {
     readonly codeGeneratorAgentVersion: string;
     readonly codeGeneratorContractVersion: string | null;
     readonly codeGeneratorAssetBundleHash: string | null;
+    readonly executionProfileId: string | null;
+    readonly executionProfileVersion: string | null;
+    readonly executionProfileContractVersion: string | null;
+    readonly executionProfileHash: string | null;
+    readonly generationProjectionHash: string | null;
+    readonly profileValidationHash: string | null;
     readonly workspaceVersion: string | null;
     readonly workspaceContractVersion: string | null;
     readonly workspacePolicyHash: string | null;

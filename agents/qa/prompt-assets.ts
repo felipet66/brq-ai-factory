@@ -14,13 +14,13 @@ import { safeFilenameSchema, semanticVersionSchema } from '@brq/shared/schemas/c
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { z } from 'zod';
 
-import rawArtifactSpecification from '../../prompts/qa/1.0.1/artifact-specification.json' with { type: 'json' };
-import rawQARules from '../../prompts/qa/1.0.1/qa-rules.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/qa/1.0.1/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/qa/1.0.1/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/qa/1.0.1/output-contract.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/qa/1.0.1/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/qa/1.0.1/template.json' with { type: 'json' };
+import rawArtifactSpecification from '../../prompts/qa/1.0.4/artifact-specification.json' with { type: 'json' };
+import rawQARules from '../../prompts/qa/1.0.4/qa-rules.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/qa/1.0.4/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/qa/1.0.4/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/qa/1.0.4/output-contract.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/qa/1.0.4/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/qa/1.0.4/template.json' with { type: 'json' };
 import { deepFreeze } from './immutability';
 
 const QA_AGENT = 'QA' as const;
@@ -58,8 +58,8 @@ const QA_ARTIFACT_IDENTITIES = [
     mediaType: 'text/markdown',
   },
 ] as const;
-const QA_RELEASE_1_0_1_BUNDLE_HASH =
-  '618302c7dc8ddcec7c7087789e966a74259631d4a716d125c9adefa8a5c665b9';
+const QA_RELEASE_1_0_4_BUNDLE_HASH =
+  'd72d8c454438a3a523e9aa034211a171db12ac49e0a2736f12d4139fe6fb20bd';
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 const assetFilenameSchema = z
@@ -397,7 +397,7 @@ function assertArtifactSpecification(
       assertEqual(
         template[field],
         expected[field],
-        'A identidade de um template de artifact não corresponde ao release 1.0.1.',
+        'A identidade de um template de artifact não corresponde ao release 1.0.4.',
       );
     }
   });
@@ -407,7 +407,7 @@ export function parseQAPromptAssets(sources: QAPromptAssetSources): QAPromptAsse
   try {
     const manifest = parseManifest(sources.manifest);
     assertEqual(manifest.id, 'assets:qa', 'O ID do manifesto é inválido.');
-    assertEqual(manifest.version, '1.0.1', 'A versão do bundle é inválida.');
+    assertEqual(manifest.version, '1.0.4', 'A versão do bundle é inválida.');
     assertEqual(manifest.schemaVersion, '1.0.0', 'A versão do schema do manifesto é inválida.');
 
     const template = promptTemplateSchema.parse(sources.template) as PromptTemplate;
@@ -480,8 +480,8 @@ export function parseQAPromptAssets(sources: QAPromptAssetSources): QAPromptAsse
     });
     assertEqual(
       bundleHash,
-      QA_RELEASE_1_0_1_BUNDLE_HASH,
-      'O conteúdo do bundle não corresponde ao release QA 1.0.1.',
+      QA_RELEASE_1_0_4_BUNDLE_HASH,
+      'O conteúdo do bundle não corresponde ao release QA 1.0.4.',
     );
 
     return deepFreeze({

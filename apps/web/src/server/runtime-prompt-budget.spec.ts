@@ -62,6 +62,7 @@ import { createApplicationRuntime } from './runtime';
 const KNOWLEDGE_ROOT = fileURLToPath(new URL('../../../../knowledge', import.meta.url));
 const FITTING_PAYLOAD_BYTES = 400 * 1024;
 const REAL_WORKFLOW_TEST_TIMEOUT_MS = 10_000;
+const QA_1_0_3_DENSE_PROMPT_USED_BYTES = 422_131;
 
 function fill(length: number): string {
   return 'x'.repeat(length);
@@ -298,6 +299,7 @@ describe('AI Factory host Prompt Builder budget', () => {
         .valid,
     ).toBe(true);
     const qaAssets = loadQAPromptAssets();
+    expect(qaAssets.manifest.version).toBe('1.0.4');
     const qaRequest = createQARequest({
       productOwnerSpecification: denseProductOwnerSpecification,
       technicalSpecification: denseTechnicalSpecification,
@@ -307,6 +309,7 @@ describe('AI Factory host Prompt Builder budget', () => {
     const qaPrompt = promptBuilder.build(
       toPromptBuildInput(createQAAgentRunRequest(qaRequest, qaContexts, qaAssets).prompt),
     );
+    expect(qaPrompt.metadata.version).toBe('1.0.4');
 
     expect({
       productOwnerKnowledgeBytes: Buffer.byteLength(productOwnerKnowledge.content, 'utf8'),
@@ -349,14 +352,37 @@ describe('AI Factory host Prompt Builder budget', () => {
     );
     expect(qaPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 412_211,
-      instructionsBytes: 38_775,
+      usedBytes: 426_475,
+      instructionsBytes: 50_007,
       inputBytes: 362_258,
-      outputContractBytes: 11_178,
+      outputContractBytes: 14_210,
     });
+    expect(qaPrompt.budget.usedBytes - QA_1_0_3_DENSE_PROMPT_USED_BYTES).toBe(4_344);
+    expect(
+      (qaPrompt.budget.usedBytes - QA_1_0_3_DENSE_PROMPT_USED_BYTES) /
+        QA_1_0_3_DENSE_PROMPT_USED_BYTES,
+    ).toBeLessThan(0.011);
     expect(qaPrompt.rendered.instructions).toContain('blockingItems.length > 0');
     expect(qaPrompt.rendered.instructions).toContain('functionalCoverage');
-    expect(qaPrompt.rendered.instructions).toContain('ao menos um functionalSourceId da linha');
+    expect(qaPrompt.rendered.instructions).toContain(
+      'um functionalSourceId em functionalReferences',
+    );
+    expect(qaPrompt.rendered.instructions).toContain('productOwnerSpecification.businessRules[]');
+    expect(qaPrompt.rendered.instructions).toContain(
+      'businessRules.covered MUST ser EXATAMENTE igual a businessRules.total',
+    );
+    expect(qaPrompt.rendered.instructions).toContain('auditoria relacional par-a-par');
+    expect(qaPrompt.rendered.instructions).toContain(
+      'functionalReferences contém, por igualdade exata, o sourceId da entrada',
+    );
+    expect(qaPrompt.rendered.instructions).toContain(
+      'technicalReferences contém, por igualdade exata, o sourceId da entrada',
+    );
+    expect(qaPrompt.rendered.instructions).toContain('technicalSpecification.decisions[]');
+    expect(qaPrompt.rendered.instructions).toContain('technicalSpecification.definitionOfDone[]');
+    expect(qaPrompt.rendered.instructions).toContain(
+      'definitionOfDone.total são as quantidades de IDs únicos',
+    );
     expect(qaPrompt.budget.usedBytes).toBeLessThan(AI_FACTORY_PROMPT_BUILDER_MAX_BYTES);
   });
 
@@ -410,7 +436,7 @@ describe('AI Factory host Prompt Builder budget', () => {
         '1.0.1',
       );
       expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.3');
-      expect(promptRecords.find((record) => record.agent === 'QA')?.version).toBe('1.0.1');
+      expect(promptRecords.find((record) => record.agent === 'QA')?.version).toBe('1.0.4');
       expect(promptRecords.every((record) => record.maxBytes === 512 * 1024)).toBe(true);
       expect(
         promptRecords.find((record) => record.agent === 'DEVELOPER')?.usedBytes,

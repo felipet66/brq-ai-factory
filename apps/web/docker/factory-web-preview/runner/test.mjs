@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 
 import {
   BUILD_ROOT,
+  REQUIRED_TEST_REASON,
   containedPath,
+  isTestPath,
   parseWorkspaceArguments,
   reportSuccess,
   runHelper,
@@ -15,12 +17,9 @@ await runHelper('TEST', async () => {
   await verifyPreparedWorkspace();
   const buildManifest = await verifyBuildOutput();
   const tests = buildManifest.files
-    .filter(
-      (file) =>
-        file.visibility === 'TEST' && /(?:^|\/)(?:tests?\/.*|.*\.test)\.js$/u.test(file.path),
-    )
+    .filter((file) => file.visibility === 'TEST' && isTestPath(file.path))
     .map((file) => file.path);
-  if (tests.length === 0) throw new Error('NO_TEST_FILES');
+  if (tests.length === 0) throw new Error(REQUIRED_TEST_REASON);
   const exitCode = await new Promise((resolve, reject) => {
     const child = spawn(
       '/usr/local/bin/node',

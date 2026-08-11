@@ -600,6 +600,34 @@ describe('DockerSandboxRunner', () => {
     expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(1);
   });
 
+  it('keeps EXIT_1 internal while projecting an allowlisted helper reason separately', async () => {
+    const executor = new FakeDockerExecutor();
+    executor.stepResults.push(
+      commandResult({
+        exitCode: 1,
+        stderr: capture('generated diagnostic\nBRQ_PREPARE_FAILED code=INLINE_ACTIVE_CONTENT\n'),
+      }),
+    );
+    const policy = {
+      ...createSandboxExecutionPolicyFixture(),
+      policyId: 'NODE_WEB_PREVIEW_24_V1',
+    } as const;
+    const { runner, request } = await createHarness({ executor, policy });
+
+    const result = await runner.run(request);
+
+    expect(result.failure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+      sourceCode: 'EXIT_1',
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+    });
+    expect(result.steps[0]?.failure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+      sourceCode: 'EXIT_1',
+      reasonCode: 'INLINE_ACTIVE_CONTENT',
+    });
+  });
+
   it('fails a successful pipeline when cleanup absence cannot be confirmed', async () => {
     const executor = new FakeDockerExecutor();
     executor.cleanupResult = commandResult({ exitCode: 1 });

@@ -238,7 +238,7 @@ describe('Prisma execution record repository', () => {
     });
     expect(restored?.observation?.observabilityVersion).toBe('2.0.0');
     expect(await context.client.executionFactoryResult.count()).toBe(1);
-    expect(await context.client.executionFactoryStageResult.count()).toBe(11);
+    expect(await context.client.executionFactoryStageResult.count()).toBe(12);
     expect(await context.client.executionFactoryLineage.count()).toBe(1);
     expect(await context.client.executionFactoryProvenance.count()).toBe(1);
     expect(await context.client.executionFactoryToolchainVersion.count()).toBeGreaterThan(0);

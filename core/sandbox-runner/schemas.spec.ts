@@ -176,6 +176,7 @@ describe('sandbox public schemas and result projection', () => {
       stage: 'CLEANUP',
       message: 'A remoção da sandbox não pôde ser confirmada.',
       sourceCode: 'CONTAINER_REMAINS',
+      reasonCode: null,
     };
     const result = finalizeSandboxRunResult({
       request,
@@ -201,12 +202,14 @@ describe('sandbox public schemas and result projection', () => {
       stage: 'CLEANUP',
       message: 'A remoção da sandbox não pôde ser confirmada.',
       sourceCode: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
+      reasonCode: null,
     };
     const cancelledFailure: SandboxFailure = {
       code: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
       stage: 'PREPARE',
       message: 'A etapa foi cancelada.',
       sourceCode: null,
+      reasonCode: null,
     };
     const steps: readonly SandboxStepResult[] = [
       {
@@ -326,6 +329,7 @@ describe('sandbox public schemas and result projection', () => {
         stage: 'BUILD' as const,
         message: 'A etapa excedeu os recursos.',
         sourceCode: 'OOM',
+        reasonCode: null,
       },
     };
     expect(sandboxStepResultSchema.safeParse(failed).success).toBe(true);
@@ -362,6 +366,7 @@ describe('sandbox public schemas and result projection', () => {
           stage: 'START',
           message: 'A inicialização foi cancelada.',
           sourceCode: null,
+          reasonCode: null,
         },
       }).success,
     ).toBe(true);
@@ -376,6 +381,7 @@ describe('sandbox public schemas and result projection', () => {
           stage: 'START',
           message: 'A etapa foi cancelada.',
           sourceCode: null,
+          reasonCode: null,
         },
       }).success,
     ).toBe(false);
@@ -463,6 +469,7 @@ function failedBuild(): { readonly failure: SandboxFailure; readonly step: Sandb
     stage: 'BUILD',
     message: 'A etapa BUILD terminou com falha.',
     sourceCode: 'EXIT_NONZERO',
+    reasonCode: 'BUILD_EMIT',
   };
   return {
     failure,

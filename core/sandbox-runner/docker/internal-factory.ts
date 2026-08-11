@@ -33,6 +33,7 @@ import {
   type SandboxExecutionPolicy,
 } from '../policies';
 import { finalizeSandboxRunResult } from '../result-projector';
+import { extractSandboxHelperReasonCode } from '../reason-codes';
 import { sandboxRunRequestSchema } from '../schemas';
 import {
   buildArtifactExportArguments,
@@ -164,12 +165,14 @@ function stableFailure(input: {
   readonly stage: SandboxRunnerErrorStage;
   readonly message: string;
   readonly sourceCode?: string | null;
+  readonly reasonCode?: string | null;
 }): SandboxFailure {
   return Object.freeze({
     code: input.code,
     stage: input.stage,
     message: input.message,
     sourceCode: input.sourceCode ?? null,
+    reasonCode: input.reasonCode ?? null,
   });
 }
 
@@ -552,6 +555,11 @@ function terminalStep(input: {
       sourceCode:
         input.result.sourceCode ??
         (input.result.exitCode === null ? 'NO_EXIT_CODE' : `EXIT_${input.result.exitCode}`),
+      reasonCode: extractSandboxHelperReasonCode({
+        policyId: input.policy.policyId,
+        stepId: input.stepId,
+        stderr: input.result.stderr.value,
+      }),
     });
   }
   return Object.freeze({

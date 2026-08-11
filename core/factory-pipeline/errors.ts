@@ -6,6 +6,7 @@ export const FACTORY_PIPELINE_ERROR_CODES = Object.freeze({
   INVALID_APPROVAL: 'FACTORY_PIPELINE_INVALID_APPROVAL',
   CODE_GENERATION_REJECTED: 'FACTORY_PIPELINE_CODE_GENERATION_REJECTED',
   CODE_GENERATION_FAILED: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+  CODE_PROFILE_VALIDATION_FAILED: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
   WORKSPACE_PLAN_FAILED: 'FACTORY_PIPELINE_WORKSPACE_PLAN_FAILED',
   WORKSPACE_MATERIALIZATION_FAILED: 'FACTORY_PIPELINE_WORKSPACE_MATERIALIZATION_FAILED',
   WORKSPACE_RELEASE_FAILED: 'FACTORY_PIPELINE_WORKSPACE_RELEASE_FAILED',
@@ -23,6 +24,7 @@ export class FactoryPipelineError extends Error {
   readonly stage: string;
   readonly executionId: string | undefined;
   readonly sourceCode: string | undefined;
+  readonly reasonCode: string | undefined;
   readonly result: FactoryExecutionResult | undefined;
 
   constructor(
@@ -32,6 +34,7 @@ export class FactoryPipelineError extends Error {
       readonly stage: string;
       readonly executionId?: string;
       readonly sourceCode?: string;
+      readonly reasonCode?: string;
       readonly result?: FactoryExecutionResult;
       readonly cause?: unknown;
     },
@@ -42,6 +45,7 @@ export class FactoryPipelineError extends Error {
     this.stage = options.stage;
     this.executionId = options.executionId;
     this.sourceCode = options.sourceCode;
+    this.reasonCode = options.reasonCode;
     this.result = options.result;
   }
 }

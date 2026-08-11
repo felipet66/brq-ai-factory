@@ -28,6 +28,7 @@ export function factoryPipelineLogContext(input: {
             code: input.failure.code,
             stage: input.failure.stage,
             ...(input.failure.sourceCode === null ? {} : { sourceCode: input.failure.sourceCode }),
+            ...(input.failure.reasonCode === null ? {} : { reasonCode: input.failure.reasonCode }),
           },
         }),
   };
