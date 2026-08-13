@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 
 export interface ExecutionFormValues {
+  readonly deliveryMode: 'GREENFIELD' | 'CHANGE';
   readonly projectName: string;
   readonly objective: string;
 }
@@ -19,6 +20,8 @@ const PROJECT_NAME_MAX_LENGTH = 200;
 const OBJECTIVE_MAX_LENGTH = 16_000;
 
 export function ExecutionForm({ loading, onSubmit }: ExecutionFormProps) {
+  const [deliveryMode, setDeliveryMode] =
+    useState<ExecutionFormValues['deliveryMode']>('GREENFIELD');
   const [projectName, setProjectName] = useState('');
   const [objective, setObjective] = useState('');
   const [errors, setErrors] = useState<FormErrors>({ projectName: null, objective: null });
@@ -47,13 +50,36 @@ export function ExecutionForm({ loading, onSubmit }: ExecutionFormProps) {
     setErrors(nextErrors);
     if (nextErrors.projectName !== null || nextErrors.objective !== null) return;
 
-    void onSubmit({ projectName: normalizedProjectName, objective: normalizedObjective });
+    void onSubmit({
+      deliveryMode,
+      projectName: normalizedProjectName,
+      objective: normalizedObjective,
+    });
   }
 
   return (
     <form className="execution-form" onSubmit={handleSubmit} aria-busy={loading} noValidate>
       <fieldset className="execution-form__fields" disabled={loading}>
         <legend className="sr-only">Workflow request</legend>
+
+        <div className="form-field">
+          <label htmlFor="delivery-mode">Delivery Mode</label>
+          <select
+            id="delivery-mode"
+            name="deliveryMode"
+            value={deliveryMode}
+            aria-describedby="delivery-mode-help"
+            onChange={(event) =>
+              setDeliveryMode(event.target.value as ExecutionFormValues['deliveryMode'])
+            }
+          >
+            <option value="GREENFIELD">New project (Greenfield)</option>
+            <option value="CHANGE">Change an existing project</option>
+          </select>
+          <p id="delivery-mode-help" className="form-field__help">
+            Select whether the workflow creates a new project or changes an existing one.
+          </p>
+        </div>
 
         <div className="form-field">
           <div className="form-field__heading">

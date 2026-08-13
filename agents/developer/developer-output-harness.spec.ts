@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { productOwnerSpecificationSchema } from '@brq/product-owner-agent';
 import {
-  productOwnerSpecificationSchema,
-  type ProductOwnerSpecification,
-} from '@brq/product-owner-agent';
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
+import { deliveryIntentSchema } from '@brq/shared/schemas/delivery-intent.schema';
 import { jsonValueSchema } from '@brq/shared/schemas/json-value.schema';
 import type { JsonObject, JsonValue } from '@brq/shared/types/json-value';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { createProductOwnerSpecification } from '../product-owner/testing/product-owner-fixtures';
 import {
   diagnoseDeveloperOutput,
+  type DiagnoseDeveloperOutputRequest,
   type DeveloperOutputDiagnosticReport,
 } from './testing/developer-output-harness';
 import { createTechnicalSpecification } from './testing/developer-fixtures';
@@ -41,6 +44,7 @@ function diagnose(value: JsonValue): DeveloperOutputDiagnosticReport {
   return diagnoseDeveloperOutput({
     candidate: value,
     productOwnerSpecification: createProductOwnerSpecification(),
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     businessContextSource: 'DEFAULT_FIXTURE',
   });
 }
@@ -55,11 +59,13 @@ describe('Developer output local diagnostic harness', () => {
       issues: [],
       metadata: {
         contractId: 'contract:developer-technical-specification',
-        contractVersion: '1.0.3',
+        contractVersion: '1.0.4',
         contractHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         schemaHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         candidateHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         businessContextSource: 'DEFAULT_FIXTURE',
+        deliveryIntentVersion: '1.0.0',
+        deliveryMode: 'GREENFIELD',
       },
     });
     expect(Object.isFrozen(result)).toBe(true);
@@ -72,12 +78,24 @@ describe('Developer output local diagnostic harness', () => {
     const wrapped = diagnosticFileInput({
       candidate: candidate(),
       productOwnerSpecification: createProductOwnerSpecification(),
+      deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     });
 
     expect(diagnoseDeveloperOutput(direct).stage).toBe('PASSED');
     expect(diagnoseDeveloperOutput(wrapped).stage).toBe('PASSED');
     expect(direct.businessContextSource).toBe('DEFAULT_FIXTURE');
     expect(wrapped.businessContextSource).toBe('PROVIDED');
+    expect(direct.deliveryIntent).toEqual(GREENFIELD_DELIVERY_INTENT);
+    expect(wrapped.deliveryIntent).toEqual(GREENFIELD_DELIVERY_INTENT);
+  });
+
+  it('requires an explicit delivery intent in wrapped diagnostic inputs', () => {
+    expect(() =>
+      diagnosticFileInput({
+        candidate: candidate(),
+        productOwnerSpecification: createProductOwnerSpecification(),
+      }),
+    ).toThrow();
   });
 
   it('requires development, explicit raw access and the ignored local directory for file input', () => {
@@ -166,13 +184,38 @@ describe('Developer output local diagnostic harness', () => {
       ],
     });
   });
+
+  it('diagnoses changeType according to the explicit delivery intent', () => {
+    const modified = candidate();
+    firstObject(modified, 'components')['changeType'] = 'MODIFY';
+    firstObject(modified, 'modules')['changeType'] = 'DELETE';
+    const request = {
+      candidate: modified,
+      productOwnerSpecification: createProductOwnerSpecification(),
+      businessContextSource: 'PROVIDED' as const,
+    };
+
+    const greenfield = diagnoseDeveloperOutput({
+      ...request,
+      deliveryIntent: GREENFIELD_DELIVERY_INTENT,
+    });
+    expect(greenfield).toMatchObject({
+      stage: 'BUSINESS_VALIDATION',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: 'DEVELOPER_CHANGE_TYPE_NOT_ALLOWED' }),
+      ]),
+    });
+
+    expect(
+      diagnoseDeveloperOutput({ ...request, deliveryIntent: CHANGE_DELIVERY_INTENT }).stage,
+    ).toBe('PASSED');
+    expect(
+      diagnoseDeveloperOutput({ ...request, deliveryIntent: CHANGE_DELIVERY_INTENT }).metadata,
+    ).toMatchObject({ deliveryIntentVersion: '1.0.0', deliveryMode: 'CHANGE' });
+  });
 });
 
-function diagnosticFileInput(value: unknown): {
-  readonly candidate: JsonValue;
-  readonly productOwnerSpecification: ProductOwnerSpecification;
-  readonly businessContextSource: 'DEFAULT_FIXTURE' | 'PROVIDED';
-} {
+function diagnosticFileInput(value: unknown): DiagnoseDeveloperOutputRequest {
   const parsed = jsonValueSchema.parse(value);
   if (
     parsed !== null &&
@@ -186,6 +229,7 @@ function diagnosticFileInput(value: unknown): {
         parsed['productOwnerSpecification'] === undefined
           ? createProductOwnerSpecification()
           : productOwnerSpecificationSchema.parse(parsed['productOwnerSpecification']),
+      deliveryIntent: deliveryIntentSchema.parse(parsed['deliveryIntent']),
       businessContextSource:
         parsed['productOwnerSpecification'] === undefined ? 'DEFAULT_FIXTURE' : 'PROVIDED',
     };
@@ -194,6 +238,7 @@ function diagnosticFileInput(value: unknown): {
   return {
     candidate: parsed,
     productOwnerSpecification: createProductOwnerSpecification(),
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     businessContextSource: 'DEFAULT_FIXTURE',
   };
 }

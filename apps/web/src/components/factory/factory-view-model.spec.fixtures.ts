@@ -89,6 +89,8 @@ export function factoryResultFixture(
       outputHash: plainHash(String((index % 9) + 1)),
       failureCode: null,
       reasonCode: null,
+      profileRuleId: null,
+      diagnosticSummary: null,
       resourceOutcome: stageId.startsWith('SANDBOX_') ? 'NONE' : null,
     })),
     lineage: {
@@ -222,6 +224,13 @@ export function factoryExecutionFixture(
           agentVersion: '1.0.1',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           hashes: {
             assetBundleHash: FACTORY_HASHES.common,
             knowledgeContextHash: FACTORY_HASHES.common,
@@ -237,6 +246,14 @@ export function factoryExecutionFixture(
           agentVersion: '1.0.1',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_READY' },
+              { sourceStage: 'DEVELOPER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           hashes: {
             assetBundleHash: FACTORY_HASHES.common,
             knowledgeContextHash: FACTORY_HASHES.common,
@@ -252,6 +269,15 @@ export function factoryExecutionFixture(
           agentVersion: '1.0.0',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_READY' },
+              { sourceStage: 'DEVELOPER', code: 'SOURCE_READY' },
+              { sourceStage: 'QA', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           hashes: {
             assetBundleHash: FACTORY_HASHES.common,
             knowledgeContextHash: FACTORY_HASHES.common,

@@ -9,6 +9,10 @@ describe('ExecutionForm', () => {
   it('exposes accessible fields with the public limits', () => {
     render(<ExecutionForm loading={false} onSubmit={vi.fn()} />);
 
+    expect(screen.getByLabelText('Delivery Mode')).toHaveValue('GREENFIELD');
+    expect(screen.getByLabelText('Delivery Mode')).toHaveAccessibleDescription(
+      'Select whether the workflow creates a new project or changes an existing one.',
+    );
     expect(screen.getByLabelText('Project Name')).toHaveAttribute('maxlength', '200');
     expect(screen.getByLabelText('Objective')).toHaveAttribute('maxlength', '16000');
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeEnabled();
@@ -24,10 +28,14 @@ describe('ExecutionForm', () => {
     fireEvent.change(screen.getByLabelText('Objective'), {
       target: { value: '  Let customers track their orders.  ' },
     });
+    fireEvent.change(screen.getByLabelText('Delivery Mode'), {
+      target: { value: 'CHANGE' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Execute Workflow' }));
 
     expect(onSubmit).toHaveBeenCalledOnce();
     expect(onSubmit).toHaveBeenCalledWith({
+      deliveryMode: 'CHANGE',
       projectName: 'Customer Portal',
       objective: 'Let customers track their orders.',
     });
@@ -51,6 +59,7 @@ describe('ExecutionForm', () => {
   it('disables every control while loading', () => {
     render(<ExecutionForm loading onSubmit={vi.fn()} />);
 
+    expect(screen.getByLabelText('Delivery Mode')).toBeDisabled();
     expect(screen.getByLabelText('Project Name')).toBeDisabled();
     expect(screen.getByLabelText('Objective')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeDisabled();

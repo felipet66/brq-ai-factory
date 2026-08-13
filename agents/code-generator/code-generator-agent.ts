@@ -18,10 +18,12 @@ import type {
 } from './contracts';
 import {
   CODE_GENERATOR_AGENT_ERROR_CODES,
+  CODE_GENERATOR_SOURCE_REASON_CODES,
   CodeGeneratorAgentError,
   sanitizeCodeGeneratorSourceCode,
   type CodeGeneratorAgentErrorCode,
   type CodeGeneratorAgentStage,
+  type CodeGeneratorSourceReasonCode,
 } from './errors';
 import { calculateTechnicalSpecificationHash } from './hashing';
 import { deepFreeze } from './immutability';
@@ -55,6 +57,9 @@ function elapsed(now: () => number, startedAt: number): number {
 
 function safeSourceCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  if (error instanceof AgentRunError && error.sourceCode === 'AI_PROVIDER_CACHE_MISS') {
+    return sanitizeCodeGeneratorSourceCode(error.sourceCode);
+  }
   return sanitizeCodeGeneratorSourceCode(error.code);
 }
 
@@ -75,6 +80,7 @@ function codeGeneratorError(
     readonly request?: CodeGenerationRequest;
     readonly rawRequest?: unknown;
     readonly sourceCode?: string;
+    readonly reasonCode?: CodeGeneratorSourceReasonCode;
     readonly cause?: unknown;
   },
 ): CodeGeneratorAgentError {
@@ -98,6 +104,7 @@ function codeGeneratorError(
       ? { traceId: identity.traceId }
       : {}),
     ...(options.sourceCode === undefined ? {} : { sourceCode: options.sourceCode }),
+    ...(options.reasonCode === undefined ? {} : { reasonCode: options.reasonCode }),
     ...(options.cause === undefined ? {} : { cause: options.cause }),
   });
 }
@@ -144,30 +151,47 @@ function assertNotAborted(
 
 function assertEligibleSource(request: CodeGenerationRequest, durationMs: number): void {
   const calculatedHash = calculateTechnicalSpecificationHash(request.technicalSpecification);
-  const unsupportedChange = [
-    ...request.technicalSpecification.components,
-    ...request.technicalSpecification.modules,
-  ].some((item) => item.changeType !== 'CREATE');
   const portableModulePaths = new Set<string>();
-  const unsupportedModulePath = request.technicalSpecification.modules.some((module) => {
+  let unsupportedModulePath = false;
+  let collidingModulePath = false;
+  request.technicalSpecification.modules.forEach((module) => {
     const inspection = inspectCodeGeneratorPath(module.path);
     const collides = portableModulePaths.has(inspection.portableKey);
     portableModulePaths.add(inspection.portableKey);
-    return inspection.reason !== null || inspection.limitExceeded || collides;
+    unsupportedModulePath ||= inspection.reason !== null || inspection.limitExceeded;
+    collidingModulePath ||= collides;
   });
-  if (
-    request.context.executionId !== request.approval.executionId ||
-    request.technicalSpecification.readiness !== 'READY' ||
-    calculatedHash !== request.declaredTechnicalSpecificationHash ||
-    unsupportedChange ||
-    unsupportedModulePath
-  ) {
+
+  const reject = (reasonCode: CodeGeneratorSourceReasonCode): never => {
     throw codeGeneratorError('A TechnicalSpecification não está elegível para geração.', {
       code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
       stage: 'SOURCE_VALIDATION',
       durationMs,
       request,
+      reasonCode,
     });
+  };
+
+  if (request.context.executionId !== request.approval.executionId) {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.EXECUTION_MISMATCH);
+  }
+  if (request.technicalSpecification.readiness !== 'READY') {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.READINESS_NOT_READY);
+  }
+  if (calculatedHash !== request.declaredTechnicalSpecificationHash) {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.HASH_MISMATCH);
+  }
+  if (
+    request.technicalSpecification.components.some((item) => item.changeType !== 'CREATE') ||
+    request.technicalSpecification.modules.some((item) => item.changeType !== 'CREATE')
+  ) {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.CHANGE_TYPE_NOT_CREATE);
+  }
+  if (unsupportedModulePath) {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.MODULE_PATH_UNSUPPORTED);
+  }
+  if (collidingModulePath) {
+    reject(CODE_GENERATOR_SOURCE_REASON_CODES.MODULE_PATH_COLLISION);
   }
 }
 
@@ -216,6 +240,7 @@ function translateError(
       ...(request === undefined ? {} : { request }),
       ...(rawRequest === undefined ? {} : { rawRequest }),
       ...(error.sourceCode === undefined ? {} : { sourceCode: error.sourceCode }),
+      ...(error.reasonCode === undefined ? {} : { reasonCode: error.reasonCode }),
       cause: error.cause ?? error,
     });
   }
@@ -338,6 +363,10 @@ export function createCodeGeneratorAgent(
         stage = 'RUNNER_EXECUTION';
         const run = await options.agentRunner.run(runRequest, {
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+          ...(runOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: runOptions.sourceExecutionId }),
         });
         logger.info('code-generator.run.completed', {
           ...requestLogContext(request, assets),

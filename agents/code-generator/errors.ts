@@ -31,14 +31,38 @@ export const CODE_GENERATOR_AGENT_STAGES = [
   'FINALIZATION',
 ] as const;
 
+export const CODE_GENERATOR_SOURCE_REASON_CODES = Object.freeze({
+  EXECUTION_MISMATCH: 'SOURCE_EXECUTION_MISMATCH',
+  READINESS_NOT_READY: 'SOURCE_READINESS_NOT_READY',
+  HASH_MISMATCH: 'SOURCE_HASH_MISMATCH',
+  CHANGE_TYPE_NOT_CREATE: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+  MODULE_PATH_UNSUPPORTED: 'SOURCE_MODULE_PATH_UNSUPPORTED',
+  MODULE_PATH_COLLISION: 'SOURCE_MODULE_PATH_COLLISION',
+  HANDOFF_NOT_VERIFIED: 'SOURCE_HANDOFF_NOT_VERIFIED',
+  QA_READINESS_NOT_READY: 'SOURCE_QA_READINESS_NOT_READY',
+} as const);
+
 export type CodeGeneratorAgentErrorCode =
   (typeof CODE_GENERATOR_AGENT_ERROR_CODES)[keyof typeof CODE_GENERATOR_AGENT_ERROR_CODES];
 export type CodeGeneratorAgentStage = (typeof CODE_GENERATOR_AGENT_STAGES)[number];
+export type CodeGeneratorSourceReasonCode =
+  (typeof CODE_GENERATOR_SOURCE_REASON_CODES)[keyof typeof CODE_GENERATOR_SOURCE_REASON_CODES];
+
+const SAFE_SOURCE_REASON_CODES = new Set<string>(Object.values(CODE_GENERATOR_SOURCE_REASON_CODES));
+
+export function sanitizeCodeGeneratorSourceReasonCode(
+  code: unknown,
+): CodeGeneratorSourceReasonCode | undefined {
+  return typeof code === 'string' && SAFE_SOURCE_REASON_CODES.has(code)
+    ? (code as CodeGeneratorSourceReasonCode)
+    : undefined;
+}
 
 const SAFE_SOURCE_CODES = new Set<string>([
   ...Object.values(AGENT_RUN_ERROR_CODES),
   ...Object.values(KNOWLEDGE_ERROR_CODES),
   ...Object.values(RESPONSE_VALIDATOR_ERROR_CODES),
+  'AI_PROVIDER_CACHE_MISS',
   'CODE_GENERATOR_PROMPT_ASSETS_INVALID',
 ]);
 
@@ -55,6 +79,7 @@ export interface CodeGeneratorAgentErrorOptions {
   readonly requestId?: string;
   readonly traceId?: string;
   readonly sourceCode?: string;
+  readonly reasonCode?: CodeGeneratorSourceReasonCode;
   readonly cause?: unknown;
 }
 
@@ -67,6 +92,7 @@ export class CodeGeneratorAgentError extends Error {
   readonly requestId: string | undefined;
   readonly traceId: string | undefined;
   readonly sourceCode: string | undefined;
+  readonly reasonCode: CodeGeneratorSourceReasonCode | undefined;
 
   constructor(message: string, options: CodeGeneratorAgentErrorOptions) {
     super(message, { cause: options.cause });
@@ -79,5 +105,6 @@ export class CodeGeneratorAgentError extends Error {
     this.requestId = options.requestId;
     this.traceId = options.traceId;
     this.sourceCode = sanitizeCodeGeneratorSourceCode(options.sourceCode);
+    this.reasonCode = sanitizeCodeGeneratorSourceReasonCode(options.reasonCode);
   }
 }

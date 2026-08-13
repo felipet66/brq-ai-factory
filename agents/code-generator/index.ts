@@ -14,10 +14,13 @@ export * from './contracts';
 export {
   CODE_GENERATOR_AGENT_ERROR_CODES,
   CODE_GENERATOR_AGENT_STAGES,
+  CODE_GENERATOR_SOURCE_REASON_CODES,
   CodeGeneratorAgentError,
+  sanitizeCodeGeneratorSourceReasonCode,
   type CodeGeneratorAgentErrorCode,
   type CodeGeneratorAgentErrorOptions,
   type CodeGeneratorAgentStage,
+  type CodeGeneratorSourceReasonCode,
 } from './errors';
 export { projectCodeGeneratorPromptContexts } from './knowledge-projection';
 export {

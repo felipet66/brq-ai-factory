@@ -8,6 +8,9 @@ describe('Execution Engine schemas', () => {
   it('não aceita executionId fornecido pelo caller e mantém estados restritos', () => {
     const request = createExecutionRequestFixture();
     expect(executionRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      executionRequestSchema.safeParse({ ...request, deliveryIntent: undefined }).success,
+    ).toBe(false);
     expect(executionRequestSchema.safeParse({ ...request, executionId: 'caller-id' }).success).toBe(
       false,
     );

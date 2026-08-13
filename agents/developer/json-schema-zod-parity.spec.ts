@@ -164,7 +164,7 @@ function expectParity(candidate: JsonValue, expected: boolean): void {
 describe('Developer JSON Schema and Zod parity', () => {
   describe('accepted contract boundaries', () => {
     it('accepts the complete canonical TechnicalSpecification fixture', () => {
-      expect(assets.manifest.version).toBe('1.0.3');
+      expect(assets.manifest.version).toBe('1.0.4');
       expectParity(baseSpecification(), true);
     });
 

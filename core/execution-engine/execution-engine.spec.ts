@@ -44,7 +44,7 @@ describe('Execution Engine', () => {
       orchestrator: { execute },
       logger: createLogger({ sink: () => undefined }),
       now: incrementalClock(1_000, 10),
-    }).execute(request, { signal: controller.signal });
+    }).execute(request, { signal: controller.signal, cacheMode: 'REQUIRE_HIT' });
 
     expect(result.executionId).toBe(workflowRequest.executionId);
     expect(result.executionId).toMatch(/^execution-[a-f0-9]{32}$/);
@@ -62,7 +62,10 @@ describe('Execution Engine', () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.timeline)).toBe(true);
     expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute).toHaveBeenCalledWith(workflowRequest, { signal: controller.signal });
+    expect(execute).toHaveBeenCalledWith(workflowRequest, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+    });
   });
 
   it('mantém ID e hashes estáveis apesar de timestamps observacionais diferentes', async () => {
@@ -97,9 +100,29 @@ describe('Execution Engine', () => {
     expect(result.status).toBe('FAILED');
     expect(result.failure).toMatchObject({
       kind: 'WORKFLOW_FAILED',
-      sourceCode: 'ORCHESTRATOR_QA_FAILED',
+      sourceCode: 'QA_BUSINESS_VALIDATION_FAILED',
     });
     expect(result.workflowResult).toEqual(failedWorkflow);
+  });
+
+  it('preserva um cache miss seguro do agente no resultado terminal', async () => {
+    const failedWorkflow = {
+      ...createTerminalWorkflowResultFixture(successfulWorkflow, 'FAILED'),
+      failure: {
+        ...createTerminalWorkflowResultFixture(successfulWorkflow, 'FAILED').failure,
+        sourceCode: 'AI_PROVIDER_CACHE_MISS',
+      },
+    } as WorkflowResult;
+    const result = await createExecutionEngine({
+      orchestrator: { execute: async () => failedWorkflow },
+      logger: createLogger({ sink: () => undefined }),
+      now: incrementalClock(),
+    }).execute(request);
+
+    expect(result.failure).toMatchObject({
+      kind: 'WORKFLOW_FAILED',
+      sourceCode: 'AI_PROVIDER_CACHE_MISS',
+    });
   });
 
   it('propaga falha técnica com WorkflowResult parcial validado', async () => {

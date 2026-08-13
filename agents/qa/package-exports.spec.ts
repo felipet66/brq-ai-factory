@@ -2,6 +2,9 @@ import {
   QA_AGENT_ERROR_CODES,
   QA_BUSINESS_VALIDATION_ISSUE_CODES,
   QA_READINESS_VALUES,
+  compileCanonicalQASpecification,
+  createDeterministicQAAgent,
+  createDeterministicQAAgentRunner,
   createQAAgent,
   deriveQAReadiness,
   loadQAPromptAssets,
@@ -25,6 +28,9 @@ describe('@brq/qa-agent package exports', () => {
     const resultTypeCheck: QAAgentResult | undefined = undefined;
 
     expect(createQAAgent).toBeTypeOf('function');
+    expect(createDeterministicQAAgent).toBeTypeOf('function');
+    expect(createDeterministicQAAgentRunner).toBeTypeOf('function');
+    expect(compileCanonicalQASpecification).toBeTypeOf('function');
     expect(qaAgentRequestSchema.safeParse(request).success).toBe(true);
     expect(qaSpecificationSchema.safeParse(specification).success).toBe(true);
     expect(qaAgentResultSchema).toBeDefined();

@@ -20,6 +20,8 @@ export function requestLogContext(
     requestId: request.context.requestId,
     traceId: request.context.traceId,
     model: request.model,
+    deliveryIntentVersion: request.deliveryIntent.version,
+    deliveryMode: request.deliveryIntent.mode,
     assetBundleId: assets.manifest.id,
     assetBundleVersion: assets.manifest.version,
     assetBundleHash: assets.hashes.bundleHash,

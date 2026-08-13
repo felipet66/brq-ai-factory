@@ -51,6 +51,9 @@ function elapsed(now: () => number, startedAt: number): number {
 
 function safeSourceCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  if (error instanceof AgentRunError && error.sourceCode === 'AI_PROVIDER_CACHE_MISS') {
+    return sanitizeProductOwnerSourceCode(error.sourceCode);
+  }
   return sanitizeProductOwnerSourceCode(error.code);
 }
 
@@ -313,6 +316,10 @@ export function createProductOwnerAgent(
         stage = 'RUNNER_EXECUTION';
         const run = await options.agentRunner.run(runRequest, {
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+          ...(runOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: runOptions.sourceExecutionId }),
         });
         logger.info('product_owner.run.completed', {
           ...requestLogContext(request, assets),

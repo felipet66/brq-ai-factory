@@ -181,6 +181,7 @@ interface RawProvenanceStage {
   agentVersion: string;
   outcome: string;
   readiness: string | null;
+  readinessDecision: unknown | null;
   assetBundleHash: string;
   knowledgeContextHash: string;
   promptHash: string;
@@ -200,6 +201,10 @@ interface RawFactoryStage {
   outputHash: string | null;
   failureCode: string | null;
   reasonCode: string | null;
+  profileRuleId: string | null;
+  diagnosticCount: number | null;
+  diagnosticCodes: unknown | null;
+  diagnosticTruncated: boolean | null;
   resourceOutcome: string | null;
 }
 
@@ -280,6 +285,10 @@ interface RawFactoryResult {
   failureCode: string | null;
   failureSourceCode: string | null;
   failureReasonCode: string | null;
+  failureProfileRuleId: string | null;
+  failureDiagnosticCount: number | null;
+  failureDiagnosticCodes: unknown | null;
+  failureDiagnosticTruncated: boolean | null;
   failureStageId: string | null;
   stages: RawFactoryStage[];
   lineage: RawFactoryLineage | null;
@@ -349,6 +358,22 @@ const aggregateInclude = {
 
 function iso(value: Date | null): string | null {
   return value === null ? null : value.toISOString();
+}
+
+function mapDiagnosticSummary(stage: RawFactoryStage | undefined): unknown {
+  if (stage === undefined) return null;
+  if (
+    stage.diagnosticCount === null &&
+    stage.diagnosticCodes === null &&
+    stage.diagnosticTruncated === null
+  ) {
+    return null;
+  }
+  return {
+    diagnosticCount: stage.diagnosticCount,
+    diagnosticCodes: stage.diagnosticCodes,
+    truncated: stage.diagnosticTruncated,
+  };
 }
 
 function mapHashes(raw: RawHashes | null) {
@@ -472,6 +497,16 @@ function mapObservation(raw: RawExecutionRecord): unknown {
 
 function mapFactoryResult(raw: RawFactoryResult | null): unknown {
   if (raw === null) return null;
+  const terminalDiagnosticSummary =
+    raw.failureDiagnosticCount === null &&
+    raw.failureDiagnosticCodes === null &&
+    raw.failureDiagnosticTruncated === null
+      ? null
+      : {
+          diagnosticCount: raw.failureDiagnosticCount,
+          diagnosticCodes: raw.failureDiagnosticCodes,
+          truncated: raw.failureDiagnosticTruncated,
+        };
   return {
     factoryVersion: raw.factoryVersion,
     contractVersion: raw.contractVersion,
@@ -504,6 +539,8 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
             code: raw.failureCode,
             sourceCode: raw.failureSourceCode,
             reasonCode: raw.failureReasonCode,
+            profileRuleId: raw.failureProfileRuleId,
+            diagnosticSummary: terminalDiagnosticSummary,
             stageId: raw.failureStageId,
           },
     stages: raw.stages.map((stage) => ({
@@ -515,6 +552,8 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
       outputHash: stage.outputHash,
       failureCode: stage.failureCode,
       reasonCode: stage.reasonCode,
+      profileRuleId: stage.profileRuleId,
+      diagnosticSummary: mapDiagnosticSummary(stage),
       resourceOutcome: stage.resourceOutcome,
     })),
     lineage:
@@ -649,6 +688,7 @@ function mapRecord(value: unknown): ExecutionRecord {
                 agentVersion: stage.agentVersion,
                 outcome: stage.outcome,
                 readiness: stage.readiness,
+                readinessDecision: stage.readinessDecision,
                 assetBundleHash: stage.assetBundleHash,
                 knowledgeContextHash: stage.knowledgeContextHash,
                 promptHash: stage.promptHash,
@@ -888,6 +928,15 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
         failureCode: factory.failure?.code ?? null,
         failureSourceCode: factory.failure?.sourceCode ?? null,
         failureReasonCode: factory.failure?.reasonCode ?? null,
+        failureProfileRuleId: factory.failure?.profileRuleId ?? null,
+        failureDiagnosticCount: factory.failure?.diagnosticSummary?.diagnosticCount ?? null,
+        failureDiagnosticTruncated: factory.failure?.diagnosticSummary?.truncated ?? null,
+        ...(factory.failure?.diagnosticSummary === null ||
+        factory.failure?.diagnosticSummary === undefined
+          ? {}
+          : {
+              failureDiagnosticCodes: [...factory.failure.diagnosticSummary.diagnosticCodes],
+            }),
         failureStageId: factory.failure?.stageId ?? null,
         stages: {
           create: factory.stages.map((stage, ordinal) => ({
@@ -900,6 +949,12 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
             outputHash: stage.outputHash,
             failureCode: stage.failureCode,
             reasonCode: stage.reasonCode,
+            profileRuleId: stage.profileRuleId,
+            diagnosticCount: stage.diagnosticSummary?.diagnosticCount ?? null,
+            diagnosticTruncated: stage.diagnosticSummary?.truncated ?? null,
+            ...(stage.diagnosticSummary === null
+              ? {}
+              : { diagnosticCodes: [...stage.diagnosticSummary.diagnosticCodes] }),
             resourceOutcome: stage.resourceOutcome,
           })),
         },
@@ -1310,6 +1365,17 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
                       agentVersion: stage.agentVersion,
                       outcome: stage.outcome,
                       readiness: stage.readiness,
+                      ...(stage.readinessDecision === null
+                        ? {}
+                        : {
+                            readinessDecision: {
+                              version: stage.readinessDecision.version,
+                              readiness: stage.readinessDecision.readiness,
+                              decisiveFactors: stage.readinessDecision.decisiveFactors.map(
+                                (factor) => ({ ...factor }),
+                              ),
+                            },
+                          }),
                       assetBundleHash: stage.assetBundleHash,
                       knowledgeContextHash: stage.knowledgeContextHash,
                       promptHash: stage.promptHash,
@@ -1451,6 +1517,17 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
                       agentVersion: stage.agentVersion,
                       outcome: stage.outcome,
                       readiness: stage.readiness,
+                      ...(stage.readinessDecision === null
+                        ? {}
+                        : {
+                            readinessDecision: {
+                              version: stage.readinessDecision.version,
+                              readiness: stage.readinessDecision.readiness,
+                              decisiveFactors: stage.readinessDecision.decisiveFactors.map(
+                                (factor) => ({ ...factor }),
+                              ),
+                            },
+                          }),
                       assetBundleHash: stage.assetBundleHash,
                       knowledgeContextHash: stage.knowledgeContextHash,
                       promptHash: stage.promptHash,

@@ -38,6 +38,8 @@ export type WorkflowResult = DeepReadonly<z.infer<typeof workflowResultSchema>>;
 
 export interface OrchestratorExecutionOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateOrchestratorOptions {

@@ -1,5 +1,5 @@
 import { createAgentRunner } from '@brq/agent-runner';
-import type { AIProvider } from '@brq/ai-provider';
+import { createCachedAIProvider, type AIProvider, type AIResponseCache } from '@brq/ai-provider';
 import { OpenAIProvider } from '@brq/ai-provider/openai';
 import { createArtifactGenerator } from '@brq/artifact-generator';
 import {
@@ -17,14 +17,20 @@ import {
   createPersistentExecutionEngine,
   createRepositoryBackedFactoryExecutionHistory,
   createRepositoryBackedExecutionHistory,
+  PrismaExecutionRequestSnapshotRepository,
+  terminalExecutionRecordStatusSchema,
   type ExecutionRecordRepository,
   type FactoryExecutionRecordRepository,
 } from '@brq/execution-repository';
 import { PrismaExecutionRecordRepository } from '@brq/execution-repository/prisma';
 import {
   createExecutionDispatcher,
+  createCacheOnlyExecutionDispatcher,
+  createExecutionRerunDispatcher,
+  createSnapshottingExecutionDispatcher,
   createExecutionWorker,
   type ExecutionDispatcher,
+  type ExecutionRerunDispatcher,
   type ExecutionWorker,
 } from '@brq/execution-worker';
 import {
@@ -47,7 +53,7 @@ import { createOrchestrator } from '@brq/orchestrator';
 import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
 import { createProductOwnerAgent, loadProductOwnerPromptAssets } from '@brq/product-owner-agent';
 import { createPromptBuilder } from '@brq/prompt-builder';
-import { createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
+import { createDeterministicQAAgent, createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
 import { createDevelopmentResponseValidator } from '@brq/response-validator/development';
 import type { SandboxRunner } from '@brq/sandbox-runner';
@@ -55,7 +61,7 @@ import {
   createDockerArtifactCapturingSandboxRunner,
   createDockerSandboxRunner,
 } from '@brq/sandbox-runner/docker';
-import { createPrismaClient, type DatabaseClient } from '@brq/prisma';
+import { createPrismaClient, PrismaAIResponseCache, type DatabaseClient } from '@brq/prisma';
 import { createLogger, type Logger } from '@brq/shared/logger/logger';
 
 import type { AuthenticatedPrincipal } from './auth/contracts';
@@ -80,6 +86,8 @@ import {
 
 export interface ApplicationRuntimeOptions {
   readonly aiProvider?: AIProvider;
+  readonly aiResponseCache?: AIResponseCache;
+  readonly qaExecutionMode?: 'DETERMINISTIC' | 'GENERATIVE';
   readonly environment?: NodeJS.ProcessEnv;
   readonly knowledgeRoot?: string;
   readonly knowledgeSource?: KnowledgeSource;
@@ -182,8 +190,16 @@ async function composeExecutionCore(
 ) {
   const environment = options.environment ?? process.env;
   const knowledgeRoot = resolveAIFactoryKnowledgeRoot(environment, options.knowledgeRoot);
-  const aiProvider =
+  const baseAIProvider =
     options.aiProvider ?? OpenAIProvider.fromEnvironment(environment, { logger, now });
+  const aiProvider =
+    options.aiResponseCache === undefined
+      ? baseAIProvider
+      : createCachedAIProvider({
+          provider: baseAIProvider,
+          cache: options.aiResponseCache,
+          logger,
+        });
   const source = options.knowledgeSource ?? createAIFactoryKnowledgeSource(knowledgeRoot);
   const knowledgeLoader = await createKnowledgeLoader({ source, logger, now });
   const promptBuilder = createPromptBuilder({
@@ -223,15 +239,27 @@ async function composeExecutionCore(
     logger,
     now,
   });
-  const qaAgent = createQAAgent({
-    knowledgeLoader,
-    agentRunner,
-    responseValidator,
-    artifactGenerator,
-    promptAssets: loadQAPromptAssets(),
-    logger,
-    now,
-  });
+  const qaPromptAssets = loadQAPromptAssets();
+  const qaAgent =
+    options.qaExecutionMode === 'GENERATIVE'
+      ? createQAAgent({
+          knowledgeLoader,
+          agentRunner,
+          responseValidator,
+          artifactGenerator,
+          promptAssets: qaPromptAssets,
+          logger,
+          now,
+        })
+      : createDeterministicQAAgent({
+          knowledgeLoader,
+          promptBuilder,
+          responseValidator,
+          artifactGenerator,
+          promptAssets: qaPromptAssets,
+          logger,
+          now,
+        });
   const orchestrator = createOrchestrator({
     productOwnerAgent,
     developerAgent,
@@ -328,6 +356,11 @@ function resolveFactoryBoundaries(
 export async function createApplicationFactoryRuntime(
   options: ApplicationFactoryRuntimeOptions = {},
 ): Promise<FactoryPipelineCoordinator> {
+  if (options.qaExecutionMode === 'GENERATIVE') {
+    throw new TypeError(
+      'A Factory crítica exige QA determinístico; QA generativo é somente consultivo.',
+    );
+  }
   const now = options.now ?? Date.now;
   const baseLogger = options.logger ?? createLogger();
   const repository = options.executionRepository ?? createInMemoryExecutionRecordRepository();
@@ -406,6 +439,7 @@ const runtimeState = (runtimeGlobal.__brqAiFactoryRuntimeState ??= {
 export function getExecutionEngine(): Promise<ExecutionEngine> {
   runtimeState.runtime ??= getExecutionRepository().then((executionRepository) =>
     createApplicationRuntime({
+      aiResponseCache: new PrismaAIResponseCache(getDatabaseClient()),
       executionHistory: runtimeState.executionHistory,
       executionRepository,
       logger: runtimeState.logger,
@@ -417,6 +451,7 @@ export function getExecutionEngine(): Promise<ExecutionEngine> {
 export function getFactoryPipeline(): Promise<FactoryPipelineCoordinator> {
   runtimeState.factoryRuntime ??= getExecutionRepository().then((executionRepository) =>
     createApplicationFactoryRuntime({
+      aiResponseCache: new PrismaAIResponseCache(getDatabaseClient()),
       factoryExecutionHistory: runtimeState.factoryExecutionHistory,
       executionRepository,
       logger: runtimeState.logger,
@@ -474,6 +509,40 @@ export async function getExecutionDispatcherForPrincipal(
   });
 }
 
+export async function getExecutionRerunDispatcherForPrincipal(
+  principal: AuthenticatedPrincipal,
+): Promise<ExecutionRerunDispatcher> {
+  await getApplicationWorkerRuntime();
+  const repository = new PrismaExecutionRecordRepository(getDatabaseClient(), {
+    access: 'OWNER',
+    userId: principal.userId,
+  });
+  const queueDispatcher = createExecutionDispatcher({
+    queue: getJobQueue(),
+    repository,
+    logger: runtimeState.logger,
+  });
+  return createExecutionRerunDispatcher({
+    snapshots: new PrismaExecutionRequestSnapshotRepository(getDatabaseClient(), principal.userId),
+    sourceEligibility: {
+      async inspectExecution(executionId) {
+        const source = await repository.findByExecutionId(executionId);
+        if (source === null) return null;
+        return Object.freeze({
+          executionId,
+          terminal: terminalExecutionRecordStatusSchema.safeParse(source.status).success,
+          codeGeneratorSucceeded:
+            source.factoryResult?.stages.some(
+              (stage) => stage.stageId === 'CODE_GENERATOR' && stage.status === 'SUCCESS',
+            ) === true,
+        });
+      },
+    },
+    checkpoints: new PrismaAIResponseCache(getDatabaseClient()),
+    cacheOnlyDispatcher: createCacheOnlyExecutionDispatcher(queueDispatcher),
+  });
+}
+
 export function createPrincipalExecutionDispatcher(
   options: PrincipalExecutionDispatcherOptions,
 ): ExecutionDispatcher {
@@ -481,10 +550,19 @@ export function createPrincipalExecutionDispatcher(
     access: 'OWNER',
     userId: options.principal.userId,
   });
-  return createExecutionDispatcher({
+  const dispatcher = createExecutionDispatcher({
     queue: options.queue,
     repository,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
+  return createSnapshottingExecutionDispatcher({
+    dispatcher,
+    snapshots: new PrismaExecutionRequestSnapshotRepository(
+      options.client,
+      options.principal.userId,
+    ),
+    ownerId: options.principal.userId,
     ...(options.now === undefined ? {} : { now: options.now }),
   });
 }

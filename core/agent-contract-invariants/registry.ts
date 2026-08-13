@@ -26,6 +26,9 @@ function deepFreeze<Value>(value: Value): Readonly<Value> {
 }
 
 function classificationsFor(code: string): readonly AgentContractInvariantClassification[] {
+  if (code === DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED) {
+    return ['AI_AUTHORED', 'REDUNDANT'];
+  }
   if (/_(?:READINESS_MISMATCH|COVERAGE_SUMMARY_MISMATCH|INCOMPLETE_SPECIFICATION)$/u.test(code)) {
     return ['SYSTEM_DERIVED', 'REDUNDANT'];
   }
@@ -46,7 +49,9 @@ function ownerFor(
   classifications: readonly AgentContractInvariantClassification[],
 ): AgentContractInvariantOwner {
   if (classifications.includes('SYSTEM_DERIVED')) return 'BACKEND_DERIVATION';
-  if (classifications.includes('CROSS_REFERENCE')) return 'BUSINESS_VALIDATION';
+  if (classifications.includes('AI_AUTHORED') || classifications.includes('CROSS_REFERENCE')) {
+    return 'BUSINESS_VALIDATION';
+  }
   return 'SCHEMA';
 }
 
@@ -91,17 +96,23 @@ function profileRules(
 const PROMPT_CONTRACTS = [
   {
     layer: 'PRODUCT_OWNER',
-    bundleVersion: '1.0.1',
+    bundleVersion: '1.0.2',
     requiredRuleIds: [
       'product-owner:traceable-ids',
       'product-owner:dependency-references',
+      'product-owner:uncertainty-eligibility',
+      'product-owner:validation-eligibility',
+      'product-owner:greenfield-readiness',
+      'product-owner:real-uncertainty',
+      'product-owner:readiness-preflight',
       'product-owner:ready',
     ],
   },
   {
     layer: 'DEVELOPER',
-    bundleVersion: '1.0.3',
+    bundleVersion: '1.0.4',
     requiredRuleIds: [
+      'developer:delivery-intent-change-type',
       'developer:traceability',
       'developer:component-module-ownership',
       'developer:flow-step-ownership',

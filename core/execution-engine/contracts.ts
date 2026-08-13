@@ -41,6 +41,8 @@ export type ExecutionResult = DeepReadonly<z.infer<typeof executionResultSchema>
 
 export interface ExecutionOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateExecutionEngineOptions {

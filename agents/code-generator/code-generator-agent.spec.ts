@@ -29,7 +29,7 @@ import {
 } from '../../core/ai-provider/fake/fake-ai-provider';
 import { FakeKnowledgeSource } from '../../core/knowledge-loader/testing/fake-knowledge-source';
 import { createCodeGeneratorAgent } from './code-generator-agent';
-import { CODE_GENERATOR_AGENT_ERROR_CODES } from './errors';
+import { CODE_GENERATOR_AGENT_ERROR_CODES, CODE_GENERATOR_SOURCE_REASON_CODES } from './errors';
 import {
   calculateBundleContentHash,
   calculateCodeGenerationHash,
@@ -169,12 +169,15 @@ async function createHarness(options: HarnessOptions = {}) {
   const provider = new FakeAIProvider(
     options.outcomes ?? [{ type: 'success', response: createCodeGeneratorAIResponse() }],
   );
+  const exactCacheProvider = Object.assign(provider, {
+    capabilities: Object.freeze({ exactResponseCache: true as const }),
+  });
   const agentRunner = createAgentRunner({
     promptBuilder: createPromptBuilder({
       configuration: { maxBytes: CODE_GENERATOR_CONTRACT_LIMITS.request.promptBytes },
       logger,
     }),
-    aiProvider: provider,
+    aiProvider: exactCacheProvider,
     logger,
   });
   const agent = createCodeGeneratorAgent({
@@ -193,7 +196,11 @@ describe('CodeGeneratorAgent', () => {
     const request = createCodeGenerationRequest();
     const snapshot = structuredClone(request);
     const controller = new AbortController();
-    const result = await agent.execute(request, { signal: controller.signal });
+    const result = await agent.execute(request, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: request.context.executionId,
+    });
 
     expect(result.outcome).toBe('GENERATED');
     if (result.outcome !== 'GENERATED') throw new Error('Expected generated result.');
@@ -215,6 +222,8 @@ describe('CodeGeneratorAgent', () => {
     expect(result.metadata.generation.bundleContentHash).toBe(result.bundle.bundleContentHash);
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]?.options.signal).toBe(controller.signal);
+    expect(provider.calls[0]?.options.cacheMode).toBe('REQUIRE_HIT');
+    expect(provider.calls[0]?.options.sourceExecutionId).toBe(request.context.executionId);
     expect(provider.calls[0]?.request.maxOutputTokens).toBe(131_072);
     expect(request).toEqual(snapshot);
     expect(Object.isFrozen(request)).toBe(false);
@@ -244,10 +253,43 @@ describe('CodeGeneratorAgent', () => {
     expect(result.outcome).toBe('GENERATED');
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]?.request.input).toContain('sourceId: constraint:factory-profile-test');
-    expect(provider.calls[0]?.request.input).toContain('"projectionVersion":"1.1.0"');
+    expect(provider.calls[0]?.request.input).toContain('"projectionVersion":"1.3.0"');
     expect(provider.calls[0]?.request.input).toContain('"suffixes":[".test.js",".test.ts"]');
     expect(provider.calls[0]?.request.input).toContain('"requiredEntrypoint":"index.html"');
     expect(provider.calls[0]?.request.input).toContain('"packageManager":"NONE"');
+    expect(provider.calls[0]?.request.input).toContain(
+      '"forbiddenLeadingSchemePattern":"^[A-Za-z][A-Za-z0-9+.-]*:"',
+    );
+    expect(provider.calls[0]?.request.input).toContain('"forbidParentTraversalSegment":true');
+    expect(provider.calls[0]?.request.input).toContain(
+      '"parentTraversalScope":"PATH_BEFORE_FIRST_QUERY_OR_FRAGMENT"',
+    );
+    expect(provider.calls[0]?.request.input).toContain(
+      '"siblingModuleComposition":"ROOT_OR_SHARED_MODULE_WITHOUT_PARENT_TRAVERSAL"',
+    );
+    expect(provider.calls[0]?.request.input).toContain(
+      'shared or root-level composition module so every import remains permitted without parent traversal',
+    );
+    expect(provider.calls[0]?.request.input).toContain('"requiredDiagnosticCount":0');
+    expect(provider.calls[0]?.request.input).toContain(
+      '"javaScriptParameterTyping":"INFERENCE_OR_JSDOC_REQUIRED"',
+    );
+    expect(provider.calls[0]?.request.input).toContain(
+      '"nullableDomAccess":"EXPLICIT_NARROWING_REQUIRED"',
+    );
+    expect(provider.calls[0]?.request.input).toContain('"moduleResolution":"BUNDLER"');
+    expect(provider.calls[0]?.request.input).toContain('"ambientTypePackages":[]');
+    expect(provider.calls[0]?.request.input).toContain(
+      'export function test(name: string, body: TestBody): void; export default test;',
+    );
+    expect(provider.calls[0]?.request.input).toContain(
+      'deepEqual(actual: unknown, expected: unknown, message?: string): void;',
+    );
+    expect(provider.calls[0]?.request.input).toContain('throws(body: () => unknown): void;');
+    expect(provider.calls[0]?.request.input).toContain('"unlistedTestApis":"FORBIDDEN"');
+    expect(provider.calls[0]?.request.input).toContain(
+      'Every generated .ts and .js source or test file MUST produce exactly zero TypeScript diagnostics',
+    );
     expect(provider.calls[0]?.request.instructions).toContain('MUST obey every supplied rule');
     expect(provider.calls[0]?.request.instructions).toContain(
       'Um bundle que viole qualquer regra fornecida é inválido',
@@ -719,6 +761,7 @@ describe('CodeGeneratorAgent', () => {
     [
       'non-ready source',
       () => createCodeGeneratorTechnicalSpecification({ readiness: 'PARTIALLY_READY' }),
+      CODE_GENERATOR_SOURCE_REASON_CODES.READINESS_NOT_READY,
     ],
     [
       'MODIFY component',
@@ -730,6 +773,7 @@ describe('CodeGeneratorAgent', () => {
           ),
         });
       },
+      CODE_GENERATOR_SOURCE_REASON_CODES.CHANGE_TYPE_NOT_CREATE,
     ],
     [
       'DELETE module',
@@ -741,10 +785,11 @@ describe('CodeGeneratorAgent', () => {
           ),
         });
       },
+      CODE_GENERATOR_SOURCE_REASON_CODES.CHANGE_TYPE_NOT_CREATE,
     ],
   ])(
     'rejects %s during source preflight before Knowledge and provider',
-    async (_name, sourceFactory) => {
+    async (_name, sourceFactory, reasonCode) => {
       const technicalSpecification = sourceFactory();
       const request = createCodeGenerationRequest({
         technicalSpecification,
@@ -758,6 +803,7 @@ describe('CodeGeneratorAgent', () => {
       await expect(agent.execute(request)).rejects.toMatchObject({
         code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
         stage: 'SOURCE_VALIDATION',
+        reasonCode,
       });
       expect(provider.calls).toHaveLength(0);
       expect(source.readCalls).toHaveLength(sourceReadsBefore);
@@ -789,6 +835,7 @@ describe('CodeGeneratorAgent', () => {
     await expect(agent.execute(request)).rejects.toMatchObject({
       code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
       stage: 'SOURCE_VALIDATION',
+      reasonCode: CODE_GENERATOR_SOURCE_REASON_CODES.MODULE_PATH_UNSUPPORTED,
     });
     expect(provider.calls).toHaveLength(0);
     expect(source.readCalls).toHaveLength(sourceReadsBefore);
@@ -821,6 +868,7 @@ describe('CodeGeneratorAgent', () => {
       await expect(agent.execute(request)).rejects.toMatchObject({
         code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
         stage: 'SOURCE_VALIDATION',
+        reasonCode: CODE_GENERATOR_SOURCE_REASON_CODES.MODULE_PATH_COLLISION,
       });
       expect(provider.calls).toHaveLength(0);
       expect(source.readCalls).toHaveLength(sourceReadsBefore);
@@ -867,6 +915,7 @@ describe('CodeGeneratorAgent', () => {
         createCodeGenerationRequest({
           declaredTechnicalSpecificationHash: `sha256:${'0'.repeat(64)}`,
         }),
+      CODE_GENERATOR_SOURCE_REASON_CODES.HASH_MISMATCH,
     ],
     [
       'approval execution',
@@ -877,16 +926,34 @@ describe('CodeGeneratorAgent', () => {
             executionId: 'another-execution',
           },
         }),
+      CODE_GENERATOR_SOURCE_REASON_CODES.EXECUTION_MISMATCH,
     ],
-  ])('rejects mismatched %s evidence before provider invocation', async (_case, requestFactory) => {
-    const request = requestFactory();
-    const { agent, provider } = await createHarness();
+  ])(
+    'rejects mismatched %s evidence before provider invocation',
+    async (_case, requestFactory, reasonCode) => {
+      const request = requestFactory();
+      const { agent, provider } = await createHarness();
 
-    await expect(agent.execute(request)).rejects.toMatchObject({
-      code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
-      stage: 'SOURCE_VALIDATION',
+      await expect(agent.execute(request)).rejects.toMatchObject({
+        code: CODE_GENERATOR_AGENT_ERROR_CODES.SOURCE_NOT_APPROVED,
+        stage: 'SOURCE_VALIDATION',
+        reasonCode,
+      });
+      expect(provider.calls).toHaveLength(0);
+    },
+  );
+
+  it('approves a READY CREATE source under its explicit create-only capability', async () => {
+    const request = createCodeGenerationRequest();
+    const { agent, provider } = await createHarness({ outcomes: [{ type: 'malformed_json' }] });
+
+    const result = await agent.execute(request);
+
+    expect(result).toMatchObject({
+      outcome: 'VALIDATION_REJECTED',
+      rejectedAt: 'RESPONSE_VALIDATION',
     });
-    expect(provider.calls).toHaveLength(0);
+    expect(provider.calls).toHaveLength(1);
   });
 
   it('honors explicit prompt budget before provider and never truncates silently', async () => {

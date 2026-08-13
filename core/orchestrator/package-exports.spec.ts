@@ -1,4 +1,5 @@
 import {
+  ORCHESTRATOR_CONTRACT_VERSION,
   ORCHESTRATOR_ERROR_CODES,
   createOrchestrator,
   workflowRequestSchema,
@@ -19,6 +20,7 @@ describe('@brq/orchestrator package exports', () => {
     expect(workflowResultSchema).toBeDefined();
     expect(resultTypeCheck).toBeUndefined();
     expect(ORCHESTRATOR_ERROR_CODES.CANCELLED).toBe('ORCHESTRATOR_CANCELLED');
+    expect(ORCHESTRATOR_CONTRACT_VERSION).toBe('1.1.0');
   });
 
   it('não expõe helpers internos de hashing, estado, métricas ou logging', async () => {

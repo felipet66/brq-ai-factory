@@ -3,6 +3,7 @@ import type { ProductOwnerSpecification } from '@brq/product-owner-agent';
 import { calculateCanonicalJsonHash } from '@brq/prompt-builder';
 import { createResponseValidator, type ValidationIssue } from '@brq/response-validator';
 import { createLogger } from '@brq/shared/logger/logger';
+import type { DeliveryIntent } from '@brq/shared/types/delivery-intent';
 import type { JsonValue } from '@brq/shared/types/json-value';
 import type { z } from 'zod';
 
@@ -36,12 +37,15 @@ export interface DeveloperOutputDiagnosticReport {
     readonly schemaHash: string | null;
     readonly candidateHash: string;
     readonly businessContextSource: 'DEFAULT_FIXTURE' | 'PROVIDED';
+    readonly deliveryIntentVersion: DeliveryIntent['version'];
+    readonly deliveryMode: DeliveryIntent['mode'];
   };
 }
 
 export interface DiagnoseDeveloperOutputRequest {
   readonly candidate: JsonValue;
   readonly productOwnerSpecification: ProductOwnerSpecification;
+  readonly deliveryIntent: DeliveryIntent;
   readonly businessContextSource: 'DEFAULT_FIXTURE' | 'PROVIDED';
 }
 
@@ -110,7 +114,7 @@ function diagnosticRunResult(candidate: JsonValue, outputContractHash: string): 
       metadata: {
         promptId: 'prompt:developer',
         agent: 'DEVELOPER',
-        version: '1.0.3',
+        version: '1.0.4',
         schemaVersion: '1.0.0',
         templateHash: DIAGNOSTIC_HASH_A,
         promptHash: DIAGNOSTIC_HASH_B,
@@ -191,6 +195,8 @@ export function diagnoseDeveloperOutput(
     schemaHash: validation.metadata.schemaHash,
     candidateHash: validation.metadata.source.responseHash,
     businessContextSource: request.businessContextSource,
+    deliveryIntentVersion: request.deliveryIntent.version,
+    deliveryMode: request.deliveryIntent.mode,
   };
 
   if (
@@ -209,6 +215,7 @@ export function diagnoseDeveloperOutput(
   const businessValidation = validateDeveloperBusinessRules(
     specification.data,
     request.productOwnerSpecification,
+    request.deliveryIntent,
   );
   if (!businessValidation.valid) {
     return report('BUSINESS_VALIDATION', businessValidation.issues.map(businessIssue), metadata);

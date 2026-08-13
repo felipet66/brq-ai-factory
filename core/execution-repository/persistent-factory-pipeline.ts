@@ -117,6 +117,11 @@ export function createPersistentFactoryPipeline(
   };
 
   return Object.freeze({
+    ...(options.pipeline.preflight === undefined
+      ? {}
+      : {
+          preflight: options.pipeline.preflight.bind(options.pipeline),
+        }),
     async execute(
       rawRequest: ExecutionRequest,
       runOptions?: FactoryPipelineRunOptions,
@@ -124,6 +129,9 @@ export function createPersistentFactoryPipeline(
       const parsed = executionRequestSchema.safeParse(rawRequest);
       if (!parsed.success) return options.pipeline.execute(rawRequest, runOptions);
       const request = parsed.data;
+      await options.pipeline.preflight?.(
+        runOptions?.signal === undefined ? undefined : { signal: runOptions.signal },
+      );
       const existing = await options.repository.findByWorkflowId(request.workflowId);
       const jobId = existing?.job?.jobId;
       if (existing === null) {

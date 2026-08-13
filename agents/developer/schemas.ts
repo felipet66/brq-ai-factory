@@ -18,6 +18,7 @@ import {
 } from '@brq/product-owner-agent';
 import { validationIssueSchema, validationMetadataSchema } from '@brq/response-validator';
 import { identifierSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
+import { deliveryIntentSchema } from '@brq/shared/schemas/delivery-intent.schema';
 import { z } from 'zod';
 
 import {
@@ -126,6 +127,7 @@ export const developerAgentRequestSchema = z
   .object({
     context: developerAgentContextSchema,
     productOwnerSpecification: productOwnerSpecificationSchema,
+    deliveryIntent: deliveryIntentSchema,
     model: boundedText(request.modelCharacters),
     limits: developerAgentLimitsSchema.optional(),
   })
@@ -588,6 +590,7 @@ const resultMetadataBase = {
   knowledge: developerKnowledgeMetadataSchema,
   run: developerRunMetadataSchema,
   sourceSpecificationHash: knowledgeHashSchema,
+  sourcePromptContextHash: knowledgeHashSchema,
   sourceReadiness: productOwnerReadinessSchema,
 };
 
@@ -881,7 +884,7 @@ export const developerAgentResultSchema = z
       sourceSpecificationContext !== undefined &&
       (sourceSpecificationContext.serialization !== 'JSON' ||
         sourceSpecificationContext.references.length !== 0 ||
-        sourceSpecificationContext.contentHash !== result.metadata.sourceSpecificationHash)
+        sourceSpecificationContext.contentHash !== result.metadata.sourcePromptContextHash)
     ) {
       addMismatch(
         context,

@@ -1,4 +1,5 @@
 import type { AIResponse } from '../../../core/ai-provider/contracts';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import type { JsonValue } from '@brq/shared/types/json-value';
 
 import type { ProductOwnerAgentRequest, ProductOwnerSpecification } from '../contracts';
@@ -24,6 +25,7 @@ export function createProductOwnerRequest(
       constraints: ['Não inventar integrações ainda não informadas.'],
       priority: 'HIGH',
     },
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     additionalContext: 'A primeira versão atende somente pedidos nacionais.',
     model: 'fake-model',
     ...overrides,

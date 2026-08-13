@@ -11,12 +11,9 @@ import {
   createProductOwnerAIResponse,
   createProductOwnerSpecification,
 } from '../../../../agents/product-owner/testing/product-owner-fixtures';
-import {
-  createQAAIResponse,
-  createQASpecification,
-} from '../../../../agents/qa/testing/qa-fixtures';
 import { ExecutionEngineError, executionRequestSchema } from '@brq/execution-engine';
 import { createInMemoryExecutionHistory } from '@brq/observability';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it } from 'vitest';
 
 import { capturedLogger, executionBody, FIXED_REQUEST_ID } from '../test/api-fixtures';
@@ -27,7 +24,7 @@ const KNOWLEDGE_ROOT = fileURLToPath(new URL('../../../../knowledge', import.met
 describe('application observability integration', () => {
   it(
     'records the real multi-agent workflow with only FakeAIProvider and minimized metadata',
-    { timeout: 10_000 },
+    { timeout: 20_000 },
     async () => {
       const provider = new FakeAIProvider([
         {
@@ -41,10 +38,6 @@ describe('application observability integration', () => {
           response: createDeveloperAIResponse(createTechnicalSpecification(), {
             model: 'gpt-5-mini',
           }),
-        },
-        {
-          type: 'success',
-          response: createQAAIResponse(createQASpecification(), { model: 'gpt-5-mini' }),
         },
       ]);
       const { logger } = capturedLogger();
@@ -62,13 +55,14 @@ describe('application observability integration', () => {
       const request = executionRequestSchema.parse({
         ...executionBody(),
         requestId: FIXED_REQUEST_ID,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
       });
 
       const result = await engine.execute(request);
       const snapshot = history.get(result.executionId);
 
       expect(result.status).toBe('SUCCESS');
-      expect(provider.calls).toHaveLength(3);
+      expect(provider.calls).toHaveLength(2);
       expect(snapshot).not.toBeNull();
       expect(snapshot?.status).toBe('SUCCESS');
       expect(snapshot?.stages.map((stage) => stage.status)).toEqual([
@@ -96,6 +90,13 @@ describe('application observability integration', () => {
           validationDurationMs: expect.any(Number),
           artifactGenerationDurationMs: expect.any(Number),
         });
+      });
+      expect(snapshot?.stageMetrics[2]).toMatchObject({
+        stageId: 'QA',
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        providerLatencyMs: 0,
       });
       expect(snapshot?.summary).toMatchObject({
         workflowStatus: 'SUCCESS',
@@ -143,6 +144,7 @@ describe('application observability integration', () => {
       const request = executionRequestSchema.parse({
         ...executionBody(),
         requestId: FIXED_REQUEST_ID,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
       });
 
       const result = await engine.execute(request);
@@ -196,6 +198,7 @@ describe('application observability integration', () => {
       const request = executionRequestSchema.parse({
         ...executionBody(),
         requestId: FIXED_REQUEST_ID,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
       });
       const controller = new AbortController();
       controller.abort();

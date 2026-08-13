@@ -2,11 +2,16 @@ import {
   productOwnerSpecificationSchema,
   type ProductOwnerSpecification,
 } from '@brq/product-owner-agent';
+import {
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it } from 'vitest';
 
 import {
   createDeveloperBusinessStructureRejection,
   deriveDeveloperReadiness,
+  explainDeveloperReadiness,
   DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES,
   type DeveloperBusinessValidationInput,
   validateDeveloperBusinessRules,
@@ -69,10 +74,18 @@ function validSpecification(
   return {
     readiness: 'READY',
     architecture: {},
-    components: [{ id: 'CMP-001', moduleIds: ['MOD-001'], dependsOnComponentIds: [] }],
+    components: [
+      {
+        id: 'CMP-001',
+        changeType: 'CREATE',
+        moduleIds: ['MOD-001'],
+        dependsOnComponentIds: [],
+      },
+    ],
     modules: [
       {
         id: 'MOD-001',
+        changeType: 'CREATE',
         path: 'core/example',
         componentId: 'CMP-001',
         dependsOnModuleIds: [],
@@ -211,10 +224,29 @@ describe('Developer Business Validation', () => {
     },
   );
 
+  it('distinguishes propagated source readiness from an equal local readiness enum', () => {
+    expect(explainDeveloperReadiness('PARTIALLY_READY', [], [])).toEqual({
+      version: '1.0.0',
+      readiness: 'PARTIALLY_READY',
+      decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_PARTIALLY_READY' }],
+    });
+    expect(
+      explainDeveloperReadiness('READY', [{ id: 'TQ-private', impact: 'NON_BLOCKING' }], []),
+    ).toEqual({
+      version: '1.0.0',
+      readiness: 'PARTIALLY_READY',
+      decisiveFactors: [{ sourceStage: 'DEVELOPER', code: 'NON_BLOCKING_QUESTION_PRESENT' }],
+    });
+  });
+
   it('accepts a coherent specification and deeply freezes the report', () => {
     const specification = validSpecification();
     const snapshot = structuredClone(specification);
-    const result = validateDeveloperBusinessRules(specification, sourceSpecification());
+    const result = validateDeveloperBusinessRules(
+      specification,
+      sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
+    );
 
     expect(result).toEqual({
       valid: true,
@@ -228,6 +260,50 @@ describe('Developer Business Validation', () => {
     expect(Object.isFrozen(specification)).toBe(false);
   });
 
+  it('enforces CREATE for greenfield and preserves explicit change semantics for non-greenfield', () => {
+    const greenfield = validSpecification();
+    expect(
+      validateDeveloperBusinessRules(greenfield, sourceSpecification(), GREENFIELD_DELIVERY_INTENT)
+        .valid,
+    ).toBe(true);
+
+    const existingCodeChange = validSpecification({
+      components: greenfield.components.map((component) => ({
+        ...component,
+        changeType: 'MODIFY' as const,
+      })),
+      modules: greenfield.modules.map((module) => ({
+        ...module,
+        changeType: 'DELETE' as const,
+      })),
+    });
+    const greenfieldRejection = validateDeveloperBusinessRules(
+      existingCodeChange,
+      sourceSpecification(),
+      GREENFIELD_DELIVERY_INTENT,
+    );
+    expect(greenfieldRejection.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED,
+          path: ['components', 0, 'changeType'],
+        }),
+        expect.objectContaining({
+          code: DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED,
+          path: ['modules', 0, 'changeType'],
+        }),
+      ]),
+    );
+
+    expect(
+      validateDeveloperBusinessRules(
+        existingCodeChange,
+        sourceSpecification(),
+        CHANGE_DELIVERY_INTENT,
+      ).valid,
+    ).toBe(true);
+  });
+
   it('accepts an explicit Data Model with no changes and empty collections', () => {
     const result = validateDeveloperBusinessRules(
       validSpecification({
@@ -239,6 +315,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result).toMatchObject({ valid: true, issues: [] });
@@ -264,6 +341,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result).toMatchObject({ valid: true, issues: [] });
@@ -275,6 +353,7 @@ describe('Developer Business Validation', () => {
         components: [{ id: 'CMP-001', moduleIds: [], dependsOnComponentIds: [] }],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -309,6 +388,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -335,6 +415,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -357,6 +438,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -378,6 +460,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -399,6 +482,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -420,6 +504,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -447,6 +532,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues).toContainEqual(
@@ -477,6 +563,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
     const codes = result.issues.map(({ code }) => code);
 
@@ -510,6 +597,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
     const codes = result.issues.map(({ code }) => code);
 
@@ -536,6 +624,7 @@ describe('Developer Business Validation', () => {
         },
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.issues.map(({ code }) => code)).toEqual(
@@ -562,6 +651,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       source,
+      CHANGE_DELIVERY_INTENT,
     );
     const codes = result.issues.map(({ code }) => code);
 
@@ -583,6 +673,7 @@ describe('Developer Business Validation', () => {
     const readyResult = validateDeveloperBusinessRules(
       validSpecification(empty),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
     const clarificationResult = validateDeveloperBusinessRules(
       validSpecification({
@@ -597,6 +688,7 @@ describe('Developer Business Validation', () => {
           { id: 'Q-001', question: 'Qual decisão funcional está pendente?', impact: 'BLOCKING' },
         ],
       }),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(
@@ -618,6 +710,7 @@ describe('Developer Business Validation', () => {
         openQuestions: [{ id: 'TQ-001', impact: 'NON_BLOCKING' }],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.expectedReadiness).toBe('PARTIALLY_READY');
@@ -666,6 +759,7 @@ describe('Developer Business Validation', () => {
         ],
       }),
       sourceSpecification(),
+      CHANGE_DELIVERY_INTENT,
     );
 
     expect(result.valid).toBe(false);

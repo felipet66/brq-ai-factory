@@ -8,6 +8,8 @@ import {
 import { isoDateTimeSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
 import { z } from 'zod';
 
+import { EXECUTION_CONTRACT_VERSION } from './version';
+
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const nullableHashSchema = hashSchema.nullable();
 
@@ -23,6 +25,7 @@ const executionRequestShape = {
   workflowId: workflowRequestSchema.shape.workflowId,
   requestId: workflowRequestSchema.shape.requestId,
   traceId: workflowRequestSchema.shape.traceId,
+  deliveryIntent: workflowRequestSchema.shape.deliveryIntent,
   demand: workflowRequestSchema.shape.demand,
   additionalContext: workflowRequestSchema.shape.additionalContext,
   agents: workflowRequestSchema.shape.agents,
@@ -50,6 +53,7 @@ export const executionIdentitySchema = z
   .object({
     executionId: z.string().regex(/^execution-[a-f0-9]{32}$/),
     executionRequestHash: hashSchema,
+    workflowRequestHash: hashSchema,
   })
   .strict();
 
@@ -72,7 +76,7 @@ export const executionTimelineEventSchema = z
 export const executionMetadataSchema = z
   .object({
     engineVersion: semanticVersionSchema,
-    contractVersion: semanticVersionSchema,
+    contractVersion: z.literal(EXECUTION_CONTRACT_VERSION),
     attempt: z.literal(1),
   })
   .strict();
@@ -201,6 +205,7 @@ export const executionResultSchema = z
         });
       }
       if (
+        result.hashes.workflowRequestHash !== result.workflowResult.hashes.requestHash ||
         result.hashes.workflowHash !== result.workflowResult.hashes.workflowHash ||
         result.hashes.lineageHash !== result.workflowResult.hashes.lineageHash ||
         result.hashes.provenanceHash !== result.workflowResult.hashes.provenanceHash

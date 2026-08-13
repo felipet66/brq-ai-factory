@@ -6,6 +6,7 @@ import type { SandboxLimitReductions } from './configuration';
 import type { SandboxExecutionPolicy, SandboxPolicyRegistry } from './policies';
 import type {
   sandboxContextSchema,
+  sandboxDiagnosticSummarySchema,
   sandboxFailureSchema,
   sandboxHashesSchema,
   sandboxLineageSchema,
@@ -33,6 +34,7 @@ export type SandboxContext = DeepReadonly<z.infer<typeof sandboxContextSchema>>;
 export type SandboxStatus = z.infer<typeof sandboxStatusSchema>;
 export type SandboxStepStatus = z.infer<typeof sandboxStepStatusSchema>;
 export type SandboxResourceOutcome = z.infer<typeof sandboxResourceOutcomeSchema>;
+export type SandboxDiagnosticSummary = DeepReadonly<z.infer<typeof sandboxDiagnosticSummarySchema>>;
 export type SandboxFailure = DeepReadonly<z.infer<typeof sandboxFailureSchema>>;
 export type SandboxOutputSummary = DeepReadonly<z.infer<typeof sandboxOutputSummarySchema>>;
 export type SandboxStepResult = DeepReadonly<z.infer<typeof sandboxStepResultSchema>>;
@@ -55,7 +57,13 @@ export interface SandboxRunOptions {
   readonly signal?: AbortSignal;
 }
 
+export interface SandboxPreflightOptions {
+  readonly policyId: string;
+  readonly signal?: AbortSignal;
+}
+
 export interface SandboxRunner {
+  preflight?(options: SandboxPreflightOptions): Promise<void>;
   run(request: SandboxRunRequest, options?: SandboxRunOptions): Promise<SandboxRunResult>;
 }
 

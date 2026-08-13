@@ -14,13 +14,13 @@ import { safeFilenameSchema, semanticVersionSchema } from '@brq/shared/schemas/c
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { z } from 'zod';
 
-import rawArtifactSpecification from '../../prompts/developer/1.0.3/artifact-specification.json' with { type: 'json' };
-import rawDeveloperRules from '../../prompts/developer/1.0.3/developer-rules.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/developer/1.0.3/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/developer/1.0.3/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/developer/1.0.3/output-contract.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/developer/1.0.3/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/developer/1.0.3/template.json' with { type: 'json' };
+import rawArtifactSpecification from '../../prompts/developer/1.0.4/artifact-specification.json' with { type: 'json' };
+import rawDeveloperRules from '../../prompts/developer/1.0.4/developer-rules.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/developer/1.0.4/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/developer/1.0.4/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/developer/1.0.4/output-contract.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/developer/1.0.4/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/developer/1.0.4/template.json' with { type: 'json' };
 import { deepFreeze } from './immutability';
 
 const DEVELOPER_AGENT = 'DEVELOPER' as const;
@@ -58,8 +58,8 @@ const DEVELOPER_ARTIFACT_IDENTITIES = [
     mediaType: 'application/json',
   },
 ] as const;
-const DEVELOPER_RELEASE_1_0_3_BUNDLE_HASH =
-  '0bd8155f3d81a382ea1ee673c1ff31e64adb3d93be5c753ad873412a139daea7';
+const DEVELOPER_RELEASE_1_0_4_BUNDLE_HASH =
+  '90cc14824bdb1abf6879692a8a0924171434f30ec956caa25ef03463ba611a9a';
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 const assetFilenameSchema = z
@@ -400,7 +400,7 @@ function assertArtifactSpecification(
       assertEqual(
         template[field],
         expected[field],
-        'A identidade de um template de artifact não corresponde ao release 1.0.3.',
+        'A identidade de um template de artifact não corresponde ao release 1.0.4.',
       );
     }
   });
@@ -412,7 +412,7 @@ export function parseDeveloperPromptAssets(
   try {
     const manifest = parseManifest(sources.manifest);
     assertEqual(manifest.id, 'assets:developer', 'O ID do manifesto é inválido.');
-    assertEqual(manifest.version, '1.0.3', 'A versão do bundle é inválida.');
+    assertEqual(manifest.version, '1.0.4', 'A versão do bundle é inválida.');
     assertEqual(manifest.schemaVersion, '1.0.0', 'A versão do schema do manifesto é inválida.');
 
     const template = promptTemplateSchema.parse(sources.template) as PromptTemplate;
@@ -485,8 +485,8 @@ export function parseDeveloperPromptAssets(
     });
     assertEqual(
       bundleHash,
-      DEVELOPER_RELEASE_1_0_3_BUNDLE_HASH,
-      'O conteúdo do bundle não corresponde ao release Developer 1.0.3.',
+      DEVELOPER_RELEASE_1_0_4_BUNDLE_HASH,
+      'O conteúdo do bundle não corresponde ao release Developer 1.0.4.',
     );
 
     return deepFreeze({

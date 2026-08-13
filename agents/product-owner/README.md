@@ -15,11 +15,13 @@ O pacote não persiste dados, não altera estados de execução, não implementa
 
 ## Assets versionados
 
-O release histórico `prompts/product-owner/1.0.0` permanece imutável. O bundle ativo
-`prompts/product-owner/1.0.1` explicita que cada valor de `backlogItems[].dependencyIds` deve
-referenciar um ID existente em `dependencies[].id`. Essa evolução apenas alinha as instruções
-declarativas à invariante já aplicada pela Business Validation; o JSON Schema e a própria Business
-Validation não foram alterados.
+Os releases históricos `prompts/product-owner/1.0.0` e `1.0.1` permanecem imutáveis. O bundle ativo
+`prompts/product-owner/1.0.2` mantém a regra de referências de dependência e define, nas instruções
+confiáveis, que somente decisões concretas com impacto funcional material são elegíveis para
+`openQuestions`. Em GREENFIELD completo, defaults convencionais, locais e reversíveis não criam
+dúvidas nem premissas com validação pendente; incerteza concreta continua preservando
+`PARTIALLY_READY` e `REQUIRES_CLARIFICATION`. O JSON Schema e a Business Validation não foram
+alterados.
 
 ## API pública
 

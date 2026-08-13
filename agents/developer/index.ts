@@ -3,6 +3,7 @@ export {
   DEVELOPER_READINESS_VALUES,
   createDeveloperBusinessStructureRejection,
   deriveDeveloperReadiness,
+  explainDeveloperReadiness,
   validateDeveloperBusinessRules,
   type DeveloperBusinessValidationInput,
   type DeveloperBusinessValidationIssueCode,
@@ -11,7 +12,10 @@ export {
 } from './business-validation';
 export * from './contracts';
 export { createDeveloperAgent } from './developer-agent';
-export { projectDeveloperPromptContexts } from './knowledge-projection';
+export {
+  calculateDeveloperSourcePromptContextHash,
+  projectDeveloperPromptContexts,
+} from './knowledge-projection';
 export {
   DEVELOPER_AGENT_ERROR_CODES,
   DEVELOPER_AGENT_STAGES,

@@ -1,6 +1,7 @@
 import type { AIResponse } from '../../../core/ai-provider/contracts';
 import { createTechnicalSpecification } from '../../developer/testing/developer-fixtures';
 import { createProductOwnerSpecification } from '../../product-owner/testing/product-owner-fixtures';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import type { JsonValue } from '@brq/shared/types/json-value';
 
 import type { QAAgentRequest, QASpecification } from '../contracts';
@@ -18,6 +19,7 @@ export function createQARequest(overrides: Partial<QAAgentRequest> = {}): QAAgen
     },
     productOwnerSpecification: createProductOwnerSpecification(),
     technicalSpecification: createTechnicalSpecification(),
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     model: 'fake-model',
     ...overrides,
   };

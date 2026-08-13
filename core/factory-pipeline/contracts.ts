@@ -63,6 +63,13 @@ export type FactoryExecutionResult = DeepReadonly<z.infer<typeof factoryExecutio
 
 export interface FactoryPipelineRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  /** Execution whose immutable AI checkpoints are the source of a cache-only replay. */
+  readonly sourceExecutionId?: string;
+}
+
+export interface FactoryPipelinePreflightOptions {
+  readonly signal?: AbortSignal;
 }
 
 /** Minimal lifecycle port consumed by the coordinator; no filesystem implementation leaks in. */
@@ -86,6 +93,7 @@ export interface CreateFactoryPipelineCoordinatorOptions {
 }
 
 export interface FactoryPipelineCoordinator {
+  preflight?(options?: FactoryPipelinePreflightOptions): Promise<void>;
   execute(
     request: ExecutionRequest,
     options?: FactoryPipelineRunOptions,

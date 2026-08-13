@@ -40,6 +40,7 @@ const SAFE_SOURCE_CODES = new Set<string>([
   ...Object.values(ARTIFACT_GENERATOR_ERROR_CODES),
   ...Object.values(KNOWLEDGE_ERROR_CODES),
   ...Object.values(RESPONSE_VALIDATOR_ERROR_CODES),
+  'AI_PROVIDER_CACHE_MISS',
   'QA_PROMPT_ASSETS_INVALID',
 ]);
 

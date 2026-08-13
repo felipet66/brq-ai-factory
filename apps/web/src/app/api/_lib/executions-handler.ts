@@ -1,6 +1,10 @@
 import type { ExecutionRecordRepository } from '@brq/execution-repository';
 import type { ExecutionDispatcher } from '@brq/execution-worker';
 import { jobRecordSchema } from '@brq/job-queue';
+import {
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
 import type { Logger } from '@brq/shared/logger/logger';
 
 import type { AuthenticatedPrincipal, RequestAuthenticator } from '@/server/auth/contracts';
@@ -75,10 +79,18 @@ export function createExecutionsHandler(options: ExecutionsHandlerOptions) {
       const parsed = executionHttpRequestSchema.safeParse(body);
       if (!parsed.success) throw invalidRequest(parsed.error);
 
+      const { deliveryMode, ...executionRequest } = parsed.data;
+      const deliveryIntent =
+        deliveryMode === 'GREENFIELD' ? GREENFIELD_DELIVERY_INTENT : CHANGE_DELIVERY_INTENT;
+
       const dispatcher = await resolveExecutionDispatcher(() =>
         options.getExecutionDispatcher(principal),
       );
-      const job = await dispatchExecution(dispatcher, { ...parsed.data, requestId });
+      const job = await dispatchExecution(dispatcher, {
+        ...executionRequest,
+        requestId,
+        deliveryIntent,
+      });
       const validJob = jobRecordSchema.safeParse(job);
       if (!validJob.success || validJob.data.status !== 'QUEUED') {
         throw new HttpApiError('O contrato de despacho não pôde ser processado.', {

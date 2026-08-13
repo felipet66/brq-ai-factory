@@ -34,6 +34,7 @@ export function createProductOwnerRequest(request: WorkflowRequest): ProductOwne
     ...(request.additionalContext === undefined
       ? {}
       : { additionalContext: request.additionalContext }),
+    deliveryIntent: request.deliveryIntent,
     model: agent.model,
     ...(agent.limits === undefined ? {} : { limits: agent.limits }),
   });
@@ -47,6 +48,7 @@ export function createDeveloperRequest(
   return developerAgentRequestSchema.parse({
     context: context(request, agent),
     productOwnerSpecification,
+    deliveryIntent: request.deliveryIntent,
     model: agent.model,
     ...(agent.limits === undefined ? {} : { limits: agent.limits }),
   });
@@ -62,6 +64,7 @@ export function createQARequest(
     context: context(request, agent),
     productOwnerSpecification,
     technicalSpecification,
+    deliveryIntent: request.deliveryIntent,
     model: agent.model,
     ...(agent.limits === undefined ? {} : { limits: agent.limits }),
   });

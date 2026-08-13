@@ -118,6 +118,7 @@ export function errorLogContext(error: CodeGeneratorAgentError): LogContext {
     stage: error.stage,
     errorCode: error.code,
     ...(error.sourceCode === undefined ? {} : { sourceCode: error.sourceCode }),
+    ...(error.reasonCode === undefined ? {} : { reasonCode: error.reasonCode }),
     durationMs: error.durationMs,
   };
 }

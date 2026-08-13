@@ -28,7 +28,7 @@ COPY --chown=0:0 --chmod=0444 runner/test.mjs /opt/brq/runner/test.mjs
 
 ENV PATH=/usr/local/bin:/usr/bin:/bin
 
-LABEL org.brq.sandbox.helper-abi="1.0.0" \
+LABEL org.brq.sandbox.helper-abi="1.1.0" \
   org.brq.sandbox.dependency-snapshot="none" \
   org.brq.sandbox.runtime-node="24.19.0" \
   org.brq.sandbox.toolchain.node="24.19.0" \

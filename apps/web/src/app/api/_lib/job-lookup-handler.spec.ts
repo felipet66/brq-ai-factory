@@ -77,7 +77,7 @@ describe('job lookup HTTP adapter', () => {
         },
         metadata: {
           requestId: FIXED_REQUEST_ID,
-          apiVersion: '3.2.0',
+          apiVersion: '4.1.0',
           executionId: EXECUTION_ID,
         },
         errors: [],

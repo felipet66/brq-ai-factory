@@ -1,5 +1,6 @@
 import type { AIResponse } from '../../../core/ai-provider/contracts';
 import { createProductOwnerSpecification } from '../../product-owner/testing/product-owner-fixtures';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import type { JsonValue } from '@brq/shared/types/json-value';
 
 import type { DeveloperAgentRequest, TechnicalSpecification } from '../contracts';
@@ -18,6 +19,7 @@ export function createDeveloperRequest(
       traceId: 'trace-developer-001',
     },
     productOwnerSpecification: createProductOwnerSpecification(),
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     model: 'fake-model',
     ...overrides,
   };
@@ -47,7 +49,7 @@ export function createTechnicalSpecification(
         id: 'CMP-001',
         name: 'Aplicação de consulta',
         kind: 'APPLICATION',
-        changeType: 'MODIFY',
+        changeType: 'CREATE',
         responsibility: 'Coordenar a consulta do andamento do pedido.',
         moduleIds: ['MOD-001'],
         dependsOnComponentIds: [],

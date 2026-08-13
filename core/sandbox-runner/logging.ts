@@ -39,6 +39,9 @@ export function sandboxLogContext(input: {
             stage: input.failure.stage,
             ...(input.failure.sourceCode === null ? {} : { sourceCode: input.failure.sourceCode }),
             ...(input.failure.reasonCode === null ? {} : { reasonCode: input.failure.reasonCode }),
+            ...(input.failure.diagnosticSummary === null
+              ? {}
+              : { diagnosticSummary: input.failure.diagnosticSummary }),
           },
         }),
   };

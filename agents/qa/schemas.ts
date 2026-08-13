@@ -19,6 +19,7 @@ import {
 } from '@brq/product-owner-agent';
 import { validationIssueSchema, validationMetadataSchema } from '@brq/response-validator';
 import { identifierSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
+import { deliveryIntentSchema } from '@brq/shared/schemas/delivery-intent.schema';
 import { z } from 'zod';
 
 import {
@@ -105,6 +106,7 @@ export const qaAgentRequestSchema = z
     context: qaAgentContextSchema,
     productOwnerSpecification: productOwnerSpecificationSchema,
     technicalSpecification: technicalSpecificationSchema,
+    deliveryIntent: deliveryIntentSchema,
     model: boundedText(request.modelCharacters),
     limits: qaAgentLimitsSchema.optional(),
   })

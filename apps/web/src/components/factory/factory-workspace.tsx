@@ -7,8 +7,10 @@ import { AgentDetailPanel } from './agent-detail-panel';
 import { AgentStation } from './agent-station';
 import { resolveAgentVisualState, type AgentVisualPresentation } from './agent-visual-state';
 import { ExecutionHeader } from './execution-header';
+import { ExecutionRerunControl } from './execution-rerun-control';
 import { FactoryActivityFeed } from './factory-activity-feed';
 import { FactoryProgress } from './factory-progress';
+import { FactoryReadinessTrace } from './factory-readiness-trace';
 import { FactoryTechnicalPipeline } from './factory-technical-pipeline';
 import type { FactoryAgentId, FactoryViewModel } from './factory-view-model';
 import { KnowledgeStage } from './knowledge-stage';
@@ -103,7 +105,17 @@ export function FactoryWorkspace({
         </ol>
       </section>
 
+      <FactoryReadinessTrace trace={model.readinessTrace} />
       <FactoryTechnicalPipeline stages={model.technicalStages} />
+      <ExecutionRerunControl
+        executionId={model.execution.executionId}
+        eligible={
+          model.execution.status === 'FAILED' &&
+          model.technicalStages.some(
+            (stage) => stage.id === 'CODE_GENERATOR' && stage.sourceStatus === 'SUCCESS',
+          )
+        }
+      />
       <PreviewControl
         executionId={model.execution.executionId}
         factoryApproved={model.previewCandidate !== null}

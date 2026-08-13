@@ -24,3 +24,6 @@ Rejeições funcionais retornam `WorkflowResult` com status `FAILED`. Falhas té
 cancelamentos lançam `OrchestratorError` com o resultado parcial terminal disponível em `result`.
 
 Timeline e métricas temporais são observacionais e nunca participam dos hashes determinísticos.
+O contrato público `1.1.0`, exposto em cada `WorkflowResult`, inclui `deliveryIntent` no request e
+evidência categórica de readiness na provenance; a mesma versão atua como domínio do
+`workflowHash`.

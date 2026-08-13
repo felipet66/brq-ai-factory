@@ -21,6 +21,7 @@ import {
   qaSpecificationStructureSchema,
   validateQABusinessRules,
 } from '@brq/qa-agent';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { z } from 'zod';
 
 import {
@@ -53,6 +54,7 @@ export const qaPlaygroundInputSchema = z
     const compatibility = validateDeveloperBusinessRules(
       input.technicalSpecification,
       input.productOwnerSpecification,
+      GREENFIELD_DELIVERY_INTENT,
     );
     if (!compatibility.valid) {
       context.addIssue({
@@ -110,6 +112,7 @@ export function createPlaygroundAgentAdapters(): readonly PromptInspectorAgentAd
       const request = productOwnerAgentRequestSchema.parse({
         context: requestContext('PRODUCT_OWNER', PLAYGROUND_AGENT_VERSION),
         demand: { title: input.projectName, description: input.objective },
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
         model: PLAYGROUND_MODEL,
       });
       return {
@@ -162,6 +165,7 @@ export function createPlaygroundAgentAdapters(): readonly PromptInspectorAgentAd
       const request = developerAgentRequestSchema.parse({
         context: requestContext('DEVELOPER', PLAYGROUND_AGENT_VERSION),
         productOwnerSpecification: input.productOwnerSpecification,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
         model: PLAYGROUND_MODEL,
       });
       return {
@@ -182,6 +186,7 @@ export function createPlaygroundAgentAdapters(): readonly PromptInspectorAgentAd
       return validateDeveloperBusinessRules(
         technicalSpecificationStructureSchema.parse(candidate),
         input.productOwnerSpecification,
+        GREENFIELD_DELIVERY_INTENT,
       );
     },
   };
@@ -220,6 +225,7 @@ export function createPlaygroundAgentAdapters(): readonly PromptInspectorAgentAd
         context: requestContext('QA', PLAYGROUND_AGENT_VERSION),
         productOwnerSpecification: input.productOwnerSpecification,
         technicalSpecification: input.technicalSpecification,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
         model: PLAYGROUND_MODEL,
       });
       return {

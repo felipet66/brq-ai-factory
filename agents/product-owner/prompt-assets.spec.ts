@@ -10,13 +10,20 @@ import historicalOutputContract from '../../prompts/product-owner/1.0.0/output-c
 import historicalProductOwnerRules from '../../prompts/product-owner/1.0.0/product-owner-rules.json' with { type: 'json' };
 import historicalSecurityRules from '../../prompts/product-owner/1.0.0/security-rules.json' with { type: 'json' };
 import historicalTemplate from '../../prompts/product-owner/1.0.0/template.json' with { type: 'json' };
-import rawArtifactSpecification from '../../prompts/product-owner/1.0.1/artifact-specification.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/product-owner/1.0.1/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/product-owner/1.0.1/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/product-owner/1.0.1/output-contract.json' with { type: 'json' };
-import rawProductOwnerRules from '../../prompts/product-owner/1.0.1/product-owner-rules.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/product-owner/1.0.1/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/product-owner/1.0.1/template.json' with { type: 'json' };
+import historical101ArtifactSpecification from '../../prompts/product-owner/1.0.1/artifact-specification.json' with { type: 'json' };
+import historical101GlobalRules from '../../prompts/product-owner/1.0.1/global-rules.json' with { type: 'json' };
+import historical101Manifest from '../../prompts/product-owner/1.0.1/manifest.json' with { type: 'json' };
+import historical101OutputContract from '../../prompts/product-owner/1.0.1/output-contract.json' with { type: 'json' };
+import historical101ProductOwnerRules from '../../prompts/product-owner/1.0.1/product-owner-rules.json' with { type: 'json' };
+import historical101SecurityRules from '../../prompts/product-owner/1.0.1/security-rules.json' with { type: 'json' };
+import historical101Template from '../../prompts/product-owner/1.0.1/template.json' with { type: 'json' };
+import rawArtifactSpecification from '../../prompts/product-owner/1.0.2/artifact-specification.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/product-owner/1.0.2/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/product-owner/1.0.2/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/product-owner/1.0.2/output-contract.json' with { type: 'json' };
+import rawProductOwnerRules from '../../prompts/product-owner/1.0.2/product-owner-rules.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/product-owner/1.0.2/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/product-owner/1.0.2/template.json' with { type: 'json' };
 
 import {
   loadProductOwnerPromptAssets,
@@ -28,8 +35,8 @@ import {
 } from './prompt-assets';
 
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/;
-const PRODUCT_OWNER_BUNDLE_1_0_1_HASH =
-  '32d7454be1bb61eb6dbe28bd582d943bed76c9fbd501d631e13e0bd69d4a8275';
+const PRODUCT_OWNER_BUNDLE_1_0_2_HASH =
+  '69b9dc4313a586103250636c05a89d4776703d9ad2afd33593c508799576c29a';
 const HISTORICAL_PRODUCT_OWNER_1_0_0_HASHES = {
   manifest: '24bf6cf1b4189658aab7b981e512869621c62856ac481a47ab9b6af3de0cbf25',
   template: '1ae371f673885b38d6218fa01ecd16a4e1d2ffa2d68e1f7cdee7143365257b16',
@@ -38,6 +45,15 @@ const HISTORICAL_PRODUCT_OWNER_1_0_0_HASHES = {
   productOwnerRules: '785978b6f29d6eb3c3f208fd4391f0b3cdae5fef45b6685997ea61af2e41a501',
   outputContract: '1924336aafb19f8dd042784c0437486ad43312c6d83abe39531cee35b5fdf8d7',
   artifactSpecification: '9cbeb1bcf59bff3872f63750bf2a2c150b3d4832a1a171d7c5b9beffd15e858e',
+} as const;
+const HISTORICAL_PRODUCT_OWNER_1_0_1_HASHES = {
+  manifest: '2536186a85bff696f92af9dd41f651f187463004332af26c4903df865ed43210',
+  template: 'c1951f227d47b31784b5acf560c6fdfd9ed96de144c487dabf6e969c4e6041a3',
+  globalRules: 'eaa5d555158cdba2cb5229d81a7917d5e0d8d0591b309c9229195fbdbf8f2715',
+  securityRules: '0177cbe77feaa7ef6a46b414c0ea6fc025fabc3aa84e9ece98c7cf126478fbbc',
+  productOwnerRules: '97ab120b4abad544a371f40df1c09a72f1bfb41b5c44793965a4e930f35fad5f',
+  outputContract: 'edca2491368f9b9288ad00cddaaf0f387ee3a569939590877a14894e882dab07',
+  artifactSpecification: '077e40ca61773a9a60dd3bcfe683fc793a7180409dafaaad076725c04bee5a87',
 } as const;
 const CANONICAL_ARTIFACT_FILENAMES = ['story.md', 'acceptance.md', 'backlog.json'];
 const SPECIFICATION_PROPERTIES = [
@@ -125,13 +141,13 @@ describe('Product Owner prompt assets', () => {
 
     expect(bundle.manifest).toMatchObject({
       id: 'assets:product-owner',
-      version: '1.0.1',
+      version: '1.0.2',
       schemaVersion: '1.0.0',
       agent: 'PRODUCT_OWNER',
     });
     expect(bundle.template).toMatchObject({
       id: 'prompt:product-owner',
-      version: '1.0.1',
+      version: '1.0.2',
       agent: 'PRODUCT_OWNER',
     });
     expect(
@@ -141,14 +157,14 @@ describe('Product Owner prompt assets', () => {
       { id: 'rules:security-baseline', version: '1.0.0', scope: 'SECURITY', agent: null },
       {
         id: 'rules:product-owner',
-        version: '1.0.1',
+        version: '1.0.2',
         scope: 'AGENT',
         agent: 'PRODUCT_OWNER',
       },
     ]);
     expect(bundle.outputContract).toMatchObject({
       id: 'contract:product-owner-specification',
-      version: '1.0.1',
+      version: '1.0.2',
       format: 'JSON_SCHEMA',
     });
     expect(bundle.validationContract).toMatchObject({
@@ -161,15 +177,15 @@ describe('Product Owner prompt assets', () => {
     expect(bundle.artifactSpecification.templates.map(({ filename }) => filename)).toEqual(
       CANONICAL_ARTIFACT_FILENAMES,
     );
-    expect(bundle.artifactSpecification.version).toBe('1.0.1');
+    expect(bundle.artifactSpecification.version).toBe('1.0.2');
     expect(loadProductOwnerPromptAssets()).toBe(bundle);
     expect(Object.isFrozen(bundle)).toBe(true);
     expect(Object.isFrozen(bundle.template.sections)).toBe(true);
     expect(Object.isFrozen(bundle.artifactSpecification.templates)).toBe(true);
   });
 
-  it('preserves the immutable Product Owner 1.0.0 assets while activating 1.0.1', () => {
-    const historicalHashes = {
+  it('preserves the immutable Product Owner 1.0.0 and 1.0.1 assets while activating 1.0.2', () => {
+    const historical100Hashes = {
       manifest: calculateCanonicalJsonHash(historicalManifest as unknown as JsonValue),
       template: calculateCanonicalJsonHash(historicalTemplate as unknown as JsonValue),
       globalRules: calculateCanonicalJsonHash(historicalGlobalRules as unknown as JsonValue),
@@ -182,10 +198,27 @@ describe('Product Owner prompt assets', () => {
         historicalArtifactSpecification as unknown as JsonValue,
       ),
     };
+    const historical101Hashes = {
+      manifest: calculateCanonicalJsonHash(historical101Manifest as unknown as JsonValue),
+      template: calculateCanonicalJsonHash(historical101Template as unknown as JsonValue),
+      globalRules: calculateCanonicalJsonHash(historical101GlobalRules as unknown as JsonValue),
+      securityRules: calculateCanonicalJsonHash(historical101SecurityRules as unknown as JsonValue),
+      productOwnerRules: calculateCanonicalJsonHash(
+        historical101ProductOwnerRules as unknown as JsonValue,
+      ),
+      outputContract: calculateCanonicalJsonHash(
+        historical101OutputContract as unknown as JsonValue,
+      ),
+      artifactSpecification: calculateCanonicalJsonHash(
+        historical101ArtifactSpecification as unknown as JsonValue,
+      ),
+    };
 
     expect(historicalManifest.version).toBe('1.0.0');
-    expect(historicalHashes).toEqual(HISTORICAL_PRODUCT_OWNER_1_0_0_HASHES);
-    expect(loadProductOwnerPromptAssets().manifest.version).toBe('1.0.1');
+    expect(historical100Hashes).toEqual(HISTORICAL_PRODUCT_OWNER_1_0_0_HASHES);
+    expect(historical101Manifest.version).toBe('1.0.1');
+    expect(historical101Hashes).toEqual(HISTORICAL_PRODUCT_OWNER_1_0_1_HASHES);
+    expect(loadProductOwnerPromptAssets().manifest.version).toBe('1.0.2');
   });
 
   it('produces deterministic canonical hashes and preserves asset order', () => {
@@ -202,7 +235,7 @@ describe('Product Owner prompt assets', () => {
     ];
 
     expect(first.hashes).toEqual(second.hashes);
-    expect(first.hashes.bundleHash).toBe(PRODUCT_OWNER_BUNDLE_1_0_1_HASH);
+    expect(first.hashes.bundleHash).toBe(PRODUCT_OWNER_BUNDLE_1_0_2_HASH);
     expect(hashes).toHaveLength(9);
     expect(hashes.every((hash) => SHA_256_HEX_PATTERN.test(hash))).toBe(true);
     expect(first.hashes.ruleSetHashes.map(({ ruleSetId }) => ruleSetId)).toEqual([
@@ -272,10 +305,54 @@ describe('Product Owner prompt assets', () => {
     expect(contractInstructions).toContain('THEN dependencyIds MUST ser []');
   });
 
+  it('defines concrete uncertainty eligibility and the final readiness preflight explicitly', () => {
+    const rules = rawProductOwnerRules.rules.map(({ content }) => content).join('\n');
+    const contractInstructions = rawOutputContract.instructions.join('\n');
+    const trustedTemplate = JSON.stringify(rawTemplate);
+
+    expect(productOwnerRuleContent('product-owner:uncertainty-eligibility')).toContain(
+      'decisão concreta não resolvida',
+    );
+    expect(rules).toContain('escopo, regra de negócio, critério de aceite, integração externa');
+    expect(rules).toContain('segurança, privacidade ou obrigação legal');
+    expect(rules).toContain('MUST NOT gerar openQuestions');
+    expect(productOwnerRuleContent('product-owner:validation-eligibility')).toContain(
+      'confirmação humana ou de terceiro',
+    );
+    expect(productOwnerRuleContent('product-owner:greenfield-readiness')).toContain(
+      'deliveryIntent.mode como indicador host-owned projetado no input',
+    );
+    expect(productOwnerRuleContent('product-owner:greenfield-readiness')).toContain(
+      'deliveryIntent.mode === "GREENFIELD"',
+    );
+    expect(productOwnerRuleContent('product-owner:greenfield-readiness')).toContain(
+      'default funcional mínimo',
+    );
+    expect(productOwnerRuleContent('product-owner:greenfield-readiness')).toContain(
+      'não inventa fato, regra, dependência ou integração e não amplia o escopo',
+    );
+    expect(productOwnerRuleContent('product-owner:real-uncertainty')).toContain(
+      'REQUIRES_CLARIFICATION',
+    );
+    expect(productOwnerRuleContent('product-owner:real-uncertainty')).toContain('PARTIALLY_READY');
+    expect(productOwnerRuleContent('product-owner:readiness-preflight')).toContain(
+      'readiness MUST ser READY',
+    );
+    expect(contractInstructions).toContain('Antes do JSON final, execute o preflight');
+    expect(contractInstructions).toContain(
+      'deliveryIntent.mode como indicador host-owned projetado no input',
+    );
+    expect(trustedTemplate).toContain('Antes de emitir o JSON final, execute o preflight');
+    expect(trustedTemplate).toContain('deliveryIntent.mode === \\"GREENFIELD\\"');
+    expect(trustedTemplate).not.toContain('tornando explícitas todas as lacunas relevantes');
+    expect(trustedTemplate).not.toContain('registre ambiguidades como dúvidas abertas');
+    expect(rules).not.toContain('Registre toda ambiguidade relevante');
+  });
+
   it('keeps the transport schema within the initial Structured Outputs subset', () => {
     const serializedSchema = JSON.stringify(rawOutputContract.schema);
 
-    expect(rawOutputContract.schema).toEqual(historicalOutputContract.schema);
+    expect(rawOutputContract.schema).toEqual(historical101OutputContract.schema);
     expect(rawOutputContract.schema.type).toBe('object');
     expect(serializedSchema).not.toMatch(/"\$schema"\s*:/);
     expect(serializedSchema).not.toMatch(/"uniqueItems"\s*:/);
@@ -358,7 +435,7 @@ describe('Product Owner prompt assets', () => {
     ).toThrowError(ProductOwnerPromptAssetsError);
   });
 
-  it('pins the complete Artifact Specification content to release 1.0.1', () => {
+  it('pins the complete Artifact Specification content to release 1.0.2', () => {
     const valid = parseProductOwnerPromptAssets(createSources());
     const identityTampering = structuredClone(rawArtifactSpecification);
     identityTampering.templates[0]!.type = 'PRODUCT_OWNER_UNEXPECTED';
@@ -370,7 +447,7 @@ describe('Product Owner prompt assets', () => {
     }
 
     expect(valid.hashes.artifactSpecificationHash).toBe(
-      '077e40ca61773a9a60dd3bcfe683fc793a7180409dafaaad076725c04bee5a87',
+      'ada2543848efba9b83f89fa44a09166431c830e6c6f59eb32e37dc512739c426',
     );
     expect(() =>
       parseProductOwnerPromptAssets(replaceSource({ artifactSpecification: identityTampering })),

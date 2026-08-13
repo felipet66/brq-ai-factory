@@ -36,9 +36,18 @@ type TerminalExecutionResult = ExecutionResult | FactoryExecutionResult;
 
 function resultFailure(result: TerminalExecutionResult): JobFailure {
   return failure(
-    result.failure?.code ?? EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
+    result.failure?.sourceCode ??
+      result.failure?.code ??
+      EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
     result.status === 'CANCELLED' ? 'A execução foi cancelada.' : 'A execução terminou com falha.',
   );
+}
+
+function infrastructureFailureCode(error: unknown): string {
+  if (error instanceof ExecutionEngineError || error instanceof FactoryPipelineError) {
+    return error.sourceCode ?? error.code;
+  }
+  return EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED;
 }
 
 export function createExecutionWorker(options: CreateExecutionWorkerOptions): ExecutionWorker {
@@ -122,7 +131,13 @@ export function createExecutionWorker(options: CreateExecutionWorkerOptions): Ex
     }
 
     try {
-      const result = await executor.execute(job.request, { signal: controller.signal });
+      const result = await executor.execute(job.request, {
+        signal: controller.signal,
+        cacheMode: job.executionOptions.cacheMode,
+        ...(job.executionOptions.sourceExecutionId === null
+          ? {}
+          : { sourceExecutionId: job.executionOptions.sourceExecutionId }),
+      });
       await settleQueue(job, result);
     } catch (error) {
       if (
@@ -131,15 +146,12 @@ export function createExecutionWorker(options: CreateExecutionWorkerOptions): Ex
       ) {
         await settleQueue(job, error.result);
       } else {
+        const errorCode = infrastructureFailureCode(error);
         const failed = await options.queue.fail(
           job.record.jobId,
-          failure(EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED, 'Falha técnica da execução.'),
+          failure(errorCode, 'Falha técnica da execução.'),
         );
-        await persistInfrastructureFailure(
-          job,
-          EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
-          failed.finishedAt!,
-        );
+        await persistInfrastructureFailure(job, errorCode, failed.finishedAt!);
       }
     } finally {
       cancellationRequests.delete(job.record.jobId);

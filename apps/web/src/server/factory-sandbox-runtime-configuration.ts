@@ -10,7 +10,7 @@ import type { FactoryPipelineConfiguration } from '@brq/factory-pipeline';
 import { z } from 'zod';
 
 export const FACTORY_SANDBOX_POLICY_ID = 'NODE_WEB_PREVIEW_24_V1' as const;
-export const FACTORY_SANDBOX_PROFILE_VERSION = '1.0.0' as const;
+export const FACTORY_SANDBOX_PROFILE_VERSION = '1.1.0' as const;
 export const FACTORY_SANDBOX_NODE_VERSION = '24.19.0' as const;
 export const FACTORY_SANDBOX_TYPESCRIPT_VERSION = '6.0.3' as const;
 export const FACTORY_CODE_GENERATOR_AGENT_VERSION = '1.0.0' as const;
@@ -64,7 +64,7 @@ export const FACTORY_SANDBOX_POLICY: SandboxExecutionPolicy = Object.freeze(
     version: FACTORY_SANDBOX_PROFILE_VERSION,
     packageManager: 'NONE',
     runtime: { name: 'NODE', version: FACTORY_SANDBOX_NODE_VERSION },
-    helperAbiVersion: '1.0.0',
+    helperAbiVersion: '1.1.0',
     dependencySnapshotHash: null,
     steps: {
       PREPARE: command('prepare', 30_000),

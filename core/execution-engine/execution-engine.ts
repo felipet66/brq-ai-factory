@@ -30,9 +30,9 @@ import { deepFreeze } from './immutability';
 import { executionLogContext } from './logging';
 import { executionIdentitySchema, executionRequestSchema } from './schemas';
 import { transitionExecutionState } from './state-machine';
+import { EXECUTION_CONTRACT_VERSION, EXECUTION_ENGINE_VERSION } from './version';
 
-export const EXECUTION_ENGINE_VERSION = '1.0.0';
-export const EXECUTION_CONTRACT_VERSION = '1.0.0';
+export { EXECUTION_CONTRACT_VERSION, EXECUTION_ENGINE_VERSION } from './version';
 
 class ExecutionBoundaryError extends Error {
   readonly code: ExecutionEngineErrorCode;
@@ -96,10 +96,17 @@ function parseExecutionRequest(rawRequest: ExecutionRequest): ExecutionRequest {
 
 function identityFor(request: ExecutionRequest): ExecutionIdentity {
   const executionRequestHash = calculateCanonicalJsonHash(request);
+  const executionId = createDeterministicExecutionId(
+    executionRequestHash,
+    EXECUTION_CONTRACT_VERSION,
+  );
   return deepFreeze(
     executionIdentitySchema.parse({
       executionRequestHash,
-      executionId: createDeterministicExecutionId(executionRequestHash, EXECUTION_CONTRACT_VERSION),
+      executionId,
+      workflowRequestHash: calculateCanonicalJsonHash(
+        workflowRequestSchema.parse({ ...request, executionId }),
+      ),
     }),
   );
 }
@@ -141,14 +148,14 @@ function failureForWorkflow(result: WorkflowResult): ExecutionFailure | null {
     return {
       kind: 'CANCELLED',
       code: EXECUTION_ENGINE_ERROR_CODES.CANCELLED,
-      sourceCode: result.failure.code,
+      sourceCode: result.failure.sourceCode ?? result.failure.code,
       message: 'A execução foi cancelada.',
     };
   }
   return {
     kind: 'WORKFLOW_FAILED',
     code: EXECUTION_ENGINE_ERROR_CODES.ORCHESTRATOR_FAILED,
-    sourceCode: result.failure.code,
+    sourceCode: result.failure.sourceCode ?? result.failure.code,
     message: 'A execução foi encerrada por falha funcional do workflow.',
   };
 }
@@ -169,9 +176,8 @@ export function createExecutionEngine(options: CreateExecutionEngineOptions): Ex
       executionOptions: ExecutionOptions = {},
     ): Promise<ExecutionResult> {
       const request = parseExecutionRequest(rawRequest);
-      const { executionId, executionRequestHash } = identityFor(request);
+      const { executionId, executionRequestHash, workflowRequestHash } = identityFor(request);
       const workflowRequest = workflowRequestSchema.parse({ ...request, executionId });
-      const workflowRequestHash = calculateCanonicalJsonHash(workflowRequest);
       let state: ExecutionState = 'CREATED';
       let lastTimestamp = 0;
       const timestamp = (): number => {
@@ -300,10 +306,15 @@ export function createExecutionEngine(options: CreateExecutionEngineOptions): Ex
 
       try {
         orchestratorInvocations = 1;
-        const rawWorkflowResult = await options.orchestrator.execute(
-          workflowRequest,
-          executionOptions.signal === undefined ? {} : { signal: executionOptions.signal },
-        );
+        const rawWorkflowResult = await options.orchestrator.execute(workflowRequest, {
+          ...(executionOptions.signal === undefined ? {} : { signal: executionOptions.signal }),
+          ...(executionOptions.cacheMode === undefined
+            ? {}
+            : { cacheMode: executionOptions.cacheMode }),
+          ...(executionOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: executionOptions.sourceExecutionId }),
+        });
         const workflowResult = parseWorkflowResult(rawWorkflowResult);
         assertWorkflowCorrelation(workflowResult, workflowRequest, workflowRequestHash);
         const failure = failureForWorkflow(workflowResult);
@@ -355,7 +366,8 @@ export function createExecutionEngine(options: CreateExecutionEngineOptions): Ex
           ? EXECUTION_ENGINE_ERROR_CODES.CANCELLED
           : (boundaryError?.code ?? EXECUTION_ENGINE_ERROR_CODES.ORCHESTRATOR_FAILED);
         const sourceCode =
-          boundaryError?.sourceCode ?? (error instanceof OrchestratorError ? error.code : null);
+          boundaryError?.sourceCode ??
+          (error instanceof OrchestratorError ? (error.sourceCode ?? error.code) : null);
         const failure: ExecutionFailure = {
           kind: cancelled
             ? 'CANCELLED'

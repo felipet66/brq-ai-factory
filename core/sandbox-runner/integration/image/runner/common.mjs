@@ -15,6 +15,9 @@ const MAX_BUNDLE_BYTES = 384 * 1024;
 const MAX_PATH_BYTES = 512;
 const MAX_PATH_SEGMENTS = 20;
 const MAX_PATH_SEGMENT_BYTES = 255;
+const MAX_TYPESCRIPT_DIAGNOSTIC_COUNT = 10_000;
+const MAX_TYPESCRIPT_DIAGNOSTIC_CODES = 32;
+const MAX_TYPESCRIPT_DIAGNOSTIC_CODE = 99_999;
 const HASH = /^[a-f0-9]{64}$/u;
 const WORKSPACE_ID = /^workspace-[a-f0-9]{32}$/u;
 const SAFE_PATH_CHARACTERS = /^[A-Za-z0-9._/-]+$/u;
@@ -281,7 +284,24 @@ export function compilerOptions(typescript, additional = {}) {
 
 export function assertNoDiagnostics(typescript, program) {
   const diagnostics = typescript.getPreEmitDiagnostics(program);
-  assertCondition(diagnostics.length === 0, 'TYPESCRIPT_DIAGNOSTICS');
+  if (diagnostics.length === 0) return;
+  const observedCodes = diagnostics.map((diagnostic) => diagnostic.code);
+  const validCodes = observedCodes.filter(
+    (code) => Number.isInteger(code) && code > 0 && code <= MAX_TYPESCRIPT_DIAGNOSTIC_CODE,
+  );
+  const uniqueCodes = [...new Set(validCodes)].sort((left, right) => left - right);
+  const error = new Error('TYPESCRIPT_DIAGNOSTICS');
+  Object.defineProperty(error, 'diagnosticSummary', {
+    value: Object.freeze({
+      diagnosticCount: Math.min(diagnostics.length, MAX_TYPESCRIPT_DIAGNOSTIC_COUNT),
+      diagnosticCodes: Object.freeze(uniqueCodes.slice(0, MAX_TYPESCRIPT_DIAGNOSTIC_CODES)),
+      truncated:
+        diagnostics.length > MAX_TYPESCRIPT_DIAGNOSTIC_COUNT ||
+        uniqueCodes.length > MAX_TYPESCRIPT_DIAGNOSTIC_CODES ||
+        validCodes.length !== observedCodes.length,
+    }),
+  });
+  throw error;
 }
 
 export async function writeVerifiedFile(root, relativePath, content) {
@@ -329,6 +349,37 @@ export async function runHelper(name, operation) {
       error instanceof Error && /^[A-Z0-9_]{2,64}$/u.test(error.message)
         ? error.message
         : 'UNEXPECTED';
+    const diagnosticSummary =
+      name === 'TYPECHECK' &&
+      code === 'TYPESCRIPT_DIAGNOSTICS' &&
+      error !== null &&
+      typeof error === 'object' &&
+      'diagnosticSummary' in error
+        ? error.diagnosticSummary
+        : null;
+    if (
+      diagnosticSummary !== null &&
+      typeof diagnosticSummary === 'object' &&
+      Number.isInteger(diagnosticSummary.diagnosticCount) &&
+      diagnosticSummary.diagnosticCount > 0 &&
+      diagnosticSummary.diagnosticCount <= MAX_TYPESCRIPT_DIAGNOSTIC_COUNT &&
+      Array.isArray(diagnosticSummary.diagnosticCodes) &&
+      diagnosticSummary.diagnosticCodes.length > 0 &&
+      diagnosticSummary.diagnosticCodes.length <= MAX_TYPESCRIPT_DIAGNOSTIC_CODES &&
+      diagnosticSummary.diagnosticCodes.length <= diagnosticSummary.diagnosticCount &&
+      diagnosticSummary.diagnosticCodes.every(
+        (diagnosticCode, index) =>
+          Number.isInteger(diagnosticCode) &&
+          diagnosticCode > 0 &&
+          diagnosticCode <= MAX_TYPESCRIPT_DIAGNOSTIC_CODE &&
+          (index === 0 || diagnosticCode > diagnosticSummary.diagnosticCodes[index - 1]),
+      ) &&
+      typeof diagnosticSummary.truncated === 'boolean'
+    ) {
+      process.stderr.write(
+        `BRQ_${name}_DIAGNOSTICS count=${diagnosticSummary.diagnosticCount} codes=${diagnosticSummary.diagnosticCodes.join(',')} truncated=${diagnosticSummary.truncated}\n`,
+      );
+    }
     process.stderr.write(`BRQ_${name}_FAILED code=${code}\n`);
     process.exitCode = 1;
   }

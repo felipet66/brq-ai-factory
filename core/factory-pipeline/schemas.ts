@@ -1,11 +1,21 @@
 import { codeGeneratorAgentLimitsSchema } from '@brq/code-generator-agent';
-import { factoryExecutionProfileSchema } from '@brq/factory-execution-profile';
-import { sandboxLimitReductionsSchema } from '@brq/sandbox-runner';
+import {
+  FACTORY_EXECUTION_PROFILE_RULE_IDS,
+  factoryExecutionProfileSchema,
+} from '@brq/factory-execution-profile';
+import { sandboxDiagnosticSummarySchema, sandboxLimitReductionsSchema } from '@brq/sandbox-runner';
 import {
   identifierSchema,
   isoDateTimeSchema,
   semanticVersionSchema,
 } from '@brq/shared/schemas/common.schema';
+import {
+  readinessDecisionFactorMatchesStage,
+  readinessDecisionMatchesStageState,
+  readinessDecisionSchema,
+  readinessDecisionSourceMatchesStages,
+  readinessEvidenceStagesAreCanonical,
+} from '@brq/shared/schemas/readiness-decision.schema';
 import { z } from 'zod';
 
 import {
@@ -25,6 +35,10 @@ const PREFIXED_HASH = /^sha256:[a-f0-9]{64}$/u;
 
 export const factoryPipelineHashSchema = z.string().regex(HASH);
 export const factoryPipelinePrefixedHashSchema = z.string().regex(PREFIXED_HASH);
+export const factoryPipelineProfileRuleIdSchema = z.enum(FACTORY_EXECUTION_PROFILE_RULE_IDS);
+// Factory intentionally reuses the authoritative Sandbox contract instead of
+// maintaining a parallel set of limits or normalization rules.
+export const factoryTypeScriptDiagnosticSummarySchema = sandboxDiagnosticSummarySchema;
 
 export const factoryPipelineStatusSchema = z.enum(['SUCCESS', 'FAILED', 'CANCELLED']);
 export const factoryPipelineStageIdSchema = z.enum(FACTORY_PIPELINE_STAGE_IDS);
@@ -83,9 +97,30 @@ export const factoryPipelineFailureSchema = z
       .string()
       .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
       .nullable(),
+    profileRuleId: factoryPipelineProfileRuleIdSchema.nullable(),
+    diagnosticSummary: factoryTypeScriptDiagnosticSummarySchema.nullable(),
     message: z.string().trim().min(1).max(300),
   })
-  .strict();
+  .strict()
+  .superRefine((failure, context) => {
+    if (failure.profileRuleId !== null && failure.stage !== 'CODE_PROFILE_VALIDATION') {
+      context.addIssue({
+        code: 'custom',
+        path: ['profileRuleId'],
+        message: 'Somente CODE_PROFILE_VALIDATION pode identificar uma regra do profile.',
+      });
+    }
+    if (
+      failure.diagnosticSummary !== null &&
+      (failure.stage !== 'SANDBOX_TYPECHECK' || failure.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticSummary'],
+        message: 'Diagnósticos TypeScript pertencem somente ao typecheck correspondente.',
+      });
+    }
+  });
 
 export const factoryPipelineStageResultSchema = z
   .object({
@@ -95,6 +130,8 @@ export const factoryPipelineStageResultSchema = z
     finishedAt: isoDateTimeSchema.nullable(),
     durationMs: z.number().int().nonnegative().nullable(),
     outputHash: factoryPipelineHashSchema.nullable(),
+    profileRuleId: factoryPipelineProfileRuleIdSchema.nullable(),
+    diagnosticSummary: factoryTypeScriptDiagnosticSummarySchema.nullable(),
     failure: factoryPipelineFailureSchema.nullable(),
   })
   .strict()
@@ -105,6 +142,8 @@ export const factoryPipelineStageResultSchema = z
         stage.finishedAt !== null ||
         stage.durationMs !== null ||
         stage.outputHash !== null ||
+        stage.profileRuleId !== null ||
+        stage.diagnosticSummary !== null ||
         stage.failure !== null
       ) {
         context.addIssue({ code: 'custom', message: 'Uma etapa SKIPPED não possui observações.' });
@@ -136,6 +175,42 @@ export const factoryPipelineStageResultSchema = z
         code: 'custom',
         path: ['failure', 'stage'],
         message: 'A falha deve identificar a própria etapa.',
+      });
+    }
+    if (stage.profileRuleId !== (stage.failure?.profileRuleId ?? null)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['profileRuleId'],
+        message: 'A etapa deve preservar exatamente a regra estrutural da falha.',
+      });
+    }
+    if (
+      JSON.stringify(stage.diagnosticSummary) !==
+      JSON.stringify(stage.failure?.diagnosticSummary ?? null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticSummary'],
+        message: 'A etapa deve preservar exatamente o diagnóstico seguro da falha.',
+      });
+    }
+    if (
+      stage.diagnosticSummary !== null &&
+      (stage.stageId !== 'SANDBOX_TYPECHECK' ||
+        stage.status !== 'FAILED' ||
+        stage.failure?.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticSummary'],
+        message: 'Diagnósticos TypeScript pertencem somente a uma falha de typecheck.',
+      });
+    }
+    if (stage.profileRuleId !== null && stage.stageId !== 'CODE_PROFILE_VALIDATION') {
+      context.addIssue({
+        code: 'custom',
+        path: ['profileRuleId'],
+        message: 'Somente CODE_PROFILE_VALIDATION pode identificar uma regra do profile.',
       });
     }
   });
@@ -208,6 +283,7 @@ export const factorySourceExecutionSummarySchema = z
               agentVersion: semanticVersionSchema,
               outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
               readiness: z.string().trim().min(1).max(64).nullable(),
+              readinessDecision: readinessDecisionSchema.nullable().default(null),
               assetBundleHash: factoryPipelineHashSchema,
               knowledgeContextHash: factoryPipelinePrefixedHashSchema,
               promptHash: factoryPipelineHashSchema,
@@ -216,10 +292,48 @@ export const factorySourceExecutionSummarySchema = z
               generationHash: factoryPipelineHashSchema.nullable(),
               artifactHashes: z.array(factoryPipelineHashSchema),
             })
-            .strict(),
+            .strict()
+            .superRefine((stage, context) => {
+              if (!readinessDecisionMatchesStageState(stage)) {
+                context.addIssue({
+                  code: 'custom',
+                  path: ['readinessDecision'],
+                  message: 'Readiness evidence must match the source stage outcome and readiness.',
+                });
+              }
+              stage.readinessDecision?.decisiveFactors.forEach((factor, index) => {
+                if (!readinessDecisionFactorMatchesStage(stage.stage, factor)) {
+                  context.addIssue({
+                    code: 'custom',
+                    path: ['readinessDecision', 'decisiveFactors', index],
+                    message: 'Readiness evidence must identify a real source stage.',
+                  });
+                }
+              });
+            }),
         ),
       })
       .strict()
+      .superRefine((provenance, context) => {
+        if (!readinessEvidenceStagesAreCanonical(provenance.stages)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['stages'],
+            message: 'Source provenance stages must be a unique canonical workflow prefix.',
+          });
+        }
+        provenance.stages.forEach((stage, stageIndex) => {
+          stage.readinessDecision?.decisiveFactors.forEach((factor, factorIndex) => {
+            if (!readinessDecisionSourceMatchesStages(factor, provenance.stages)) {
+              context.addIssue({
+                code: 'custom',
+                path: ['stages', stageIndex, 'readinessDecision', 'decisiveFactors', factorIndex],
+                message: 'SOURCE evidence must match the recorded upstream stage.',
+              });
+            }
+          });
+        });
+      })
       .nullable(),
   })
   .strict();
@@ -330,12 +444,28 @@ export const factorySandboxStepSummarySchema = z
           .string()
           .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
           .nullable(),
+        diagnosticSummary: factoryTypeScriptDiagnosticSummarySchema.nullable(),
         message: z.string().trim().min(1).max(300),
       })
       .strict()
       .nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((step, context) => {
+    if (
+      step.failure?.diagnosticSummary !== null &&
+      step.failure?.diagnosticSummary !== undefined &&
+      (step.stepId !== 'TYPECHECK' ||
+        step.status !== 'FAILED' ||
+        step.failure.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'diagnosticSummary'],
+        message: 'Diagnósticos TypeScript pertencem somente a uma falha de typecheck.',
+      });
+    }
+  });
 
 export const factorySandboxSummarySchema = z
   .object({
@@ -579,6 +709,28 @@ export const factoryExecutionResultSchema = z
         code: 'custom',
         path: ['terminalStage'],
         message: 'Etapa terminal divergente.',
+      });
+    }
+    const terminalStage = result.stages.find((stage) => stage.stageId === result.terminalStage);
+    if (
+      result.failure !== null &&
+      result.failure.profileRuleId !== (terminalStage?.profileRuleId ?? null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'profileRuleId'],
+        message: 'A falha terminal deve preservar a mesma regra estrutural da etapa.',
+      });
+    }
+    if (
+      result.failure !== null &&
+      JSON.stringify(result.failure.diagnosticSummary) !==
+        JSON.stringify(terminalStage?.diagnosticSummary ?? null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'diagnosticSummary'],
+        message: 'A falha terminal deve preservar o diagnóstico seguro da etapa.',
       });
     }
     const expectedLineageHash = calculateFactoryPipelineLineageHash(result.lineage);

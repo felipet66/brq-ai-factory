@@ -11,7 +11,17 @@ import {
 } from '@brq/product-owner-agent';
 import { qaAgentContextSchema, qaAgentLimitsSchema, qaAgentResultSchema } from '@brq/qa-agent';
 import { identifierSchema } from '@brq/shared/schemas/common.schema';
+import { deliveryIntentSchema } from '@brq/shared/schemas/delivery-intent.schema';
+import {
+  readinessDecisionFactorMatchesStage,
+  readinessDecisionMatchesStageState,
+  readinessDecisionSchema,
+  readinessDecisionSourceMatchesStages,
+  readinessEvidenceStagesAreCanonical,
+} from '@brq/shared/schemas/readiness-decision.schema';
 import { z } from 'zod';
+
+import { ORCHESTRATOR_CONTRACT_VERSION } from './version';
 
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const knowledgeHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -64,6 +74,7 @@ export const workflowRequestSchema = z
     executionId: identifierSchema,
     requestId: identifierSchema.optional(),
     traceId: identifierSchema.optional(),
+    deliveryIntent: deliveryIntentSchema,
     demand: productOwnerDemandSchema,
     additionalContext: z
       .string()
@@ -155,6 +166,7 @@ export const workflowStageProvenanceSchema = z
     agentVersion: z.string().min(1).max(128),
     outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
     readiness: z.string().min(1).max(64).nullable(),
+    readinessDecision: readinessDecisionSchema.nullable(),
     assetBundleHash: hashSchema,
     knowledgeContextHash: knowledgeHashSchema,
     promptHash: hashSchema,
@@ -163,11 +175,56 @@ export const workflowStageProvenanceSchema = z
     generationHash: hashSchema.nullable(),
     artifactHashes: z.array(hashSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((stage, context) => {
+    if (!readinessDecisionMatchesStageState(stage)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['readinessDecision'],
+        message: 'Readiness evidence must match the stage outcome and readiness.',
+      });
+    }
+    if (stage.outcome === 'GENERATED' && stage.readinessDecision === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['readinessDecision'],
+        message: 'Generated stages require host-derived readiness evidence.',
+      });
+    }
+    stage.readinessDecision?.decisiveFactors.forEach((factor, index) => {
+      if (!readinessDecisionFactorMatchesStage(stage.stage, factor)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['readinessDecision', 'decisiveFactors', index],
+          message: 'Readiness evidence must identify a real local or upstream source stage.',
+        });
+      }
+    });
+  });
 
 export const workflowProvenanceSchema = z
   .object({ stages: z.array(workflowStageProvenanceSchema).max(3) })
-  .strict();
+  .strict()
+  .superRefine((provenance, context) => {
+    if (!readinessEvidenceStagesAreCanonical(provenance.stages)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stages'],
+        message: 'Provenance stages must be a unique canonical workflow prefix.',
+      });
+    }
+    provenance.stages.forEach((stage, stageIndex) => {
+      stage.readinessDecision?.decisiveFactors.forEach((factor, factorIndex) => {
+        if (!readinessDecisionSourceMatchesStages(factor, provenance.stages)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['stages', stageIndex, 'readinessDecision', 'decisiveFactors', factorIndex],
+            message: 'SOURCE readiness evidence must match the recorded upstream stage.',
+          });
+        }
+      });
+    });
+  });
 
 const nullableStageDurationsSchema = z
   .object({
@@ -244,6 +301,7 @@ export const workflowFailureSchema = z
   .strict();
 
 const workflowResultBase = {
+  contractVersion: z.literal(ORCHESTRATOR_CONTRACT_VERSION),
   workflowId: identifierSchema,
   executionId: identifierSchema,
   terminalStage: workflowStageSchema,

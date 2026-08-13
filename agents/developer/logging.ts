@@ -31,6 +31,8 @@ export function requestLogContext(
     sourceSpecificationHash: sourceSpecificationHash(request),
     sourceReadiness: request.productOwnerSpecification.readiness,
     sourceAcceptanceCriteriaCount: request.productOwnerSpecification.acceptanceCriteria.length,
+    deliveryIntentVersion: request.deliveryIntent.version,
+    deliveryMode: request.deliveryIntent.mode,
     assetBundleId: assets.manifest.id,
     assetBundleVersion: assets.manifest.version,
     assetBundleHash: assets.hashes.bundleHash,

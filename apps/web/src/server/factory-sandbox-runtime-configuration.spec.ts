@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE } from '@brq/factory-execution-profile';
@@ -10,8 +11,15 @@ import {
   FACTORY_SANDBOX_POLICY,
   FACTORY_SANDBOX_POLICY_ID,
   FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT,
+  FACTORY_SANDBOX_TYPESCRIPT_VERSION,
   resolveFactorySandboxRuntimeConfiguration,
 } from './factory-sandbox-runtime-configuration';
+
+const FACTORY_WEB_PREVIEW_ROOT = path.resolve(process.cwd(), 'docker/factory-web-preview');
+
+function factoryWebPreviewFile(relativePath: string): Promise<string> {
+  return readFile(path.join(FACTORY_WEB_PREVIEW_ROOT, relativePath), 'utf8');
+}
 
 function environment(): Record<string, string> {
   return {
@@ -54,6 +62,43 @@ describe('Factory Sandbox host configuration', () => {
       'org.brq.sandbox.execution-profile-snapshot-hash':
         FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT.snapshotHash,
     });
+  });
+
+  it('keeps the checked-in execution-profile snapshot identical to the host projection', async () => {
+    const checkedInSnapshot = JSON.parse(
+      await factoryWebPreviewFile('runner/execution-profile.snapshot.json'),
+    ) as unknown;
+
+    expect(checkedInSnapshot).toEqual(FACTORY_SANDBOX_EXECUTION_PROFILE_SNAPSHOT);
+  });
+
+  it('keeps every verified Docker image label aligned with the host configuration', async () => {
+    const configuration = resolveFactorySandboxRuntimeConfiguration(environment());
+    const dockerfile = await factoryWebPreviewFile('Dockerfile');
+    const requiredLabels = {
+      'org.brq.sandbox.helper-abi': configuration.policy.helperAbiVersion,
+      'org.brq.sandbox.dependency-snapshot': configuration.policy.dependencySnapshotHash ?? 'none',
+      'org.brq.sandbox.runtime-node': configuration.policy.runtime.version,
+      'org.brq.sandbox.toolchain.node': FACTORY_SANDBOX_NODE_VERSION,
+      'org.brq.sandbox.toolchain.typescript': FACTORY_SANDBOX_TYPESCRIPT_VERSION,
+      ...configuration.image.requiredLabels,
+    };
+
+    for (const [label, value] of Object.entries(requiredLabels)) {
+      expect(dockerfile).toContain(`${label}="${value}"`);
+    }
+  });
+
+  it('includes the immutable execution-profile snapshot in the Docker build context', async () => {
+    const [dockerfile, dockerignore] = await Promise.all([
+      factoryWebPreviewFile('Dockerfile'),
+      factoryWebPreviewFile('.dockerignore'),
+    ]);
+
+    expect(dockerignore.split(/\r?\n/u)).toContain('!runner/execution-profile.snapshot.json');
+    expect(dockerfile).toContain(
+      'COPY --chown=0:0 --chmod=0444 runner/execution-profile.snapshot.json /opt/brq/runner/execution-profile.snapshot.json',
+    );
   });
 
   it('fails closed instead of selecting a fake runner or an implicit image', () => {

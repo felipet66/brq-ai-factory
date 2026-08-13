@@ -79,6 +79,41 @@ export const sandboxRunRequestSchema = z
   })
   .strict();
 
+export const SANDBOX_TYPESCRIPT_DIAGNOSTIC_COUNT_LIMIT = 10_000;
+export const SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_LIMIT = 32;
+export const SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_MAX = 99_999;
+
+export const sandboxDiagnosticSummarySchema = z
+  .object({
+    diagnosticCount: z.number().int().positive().max(SANDBOX_TYPESCRIPT_DIAGNOSTIC_COUNT_LIMIT),
+    diagnosticCodes: z
+      .array(z.number().int().positive().max(SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_MAX))
+      .min(1)
+      .max(SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_LIMIT),
+    truncated: z.boolean(),
+  })
+  .strict()
+  .superRefine((summary, context) => {
+    if (summary.diagnosticCodes.length > summary.diagnosticCount) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticCodes'],
+        message: 'A quantidade de códigos não pode exceder a contagem de diagnósticos.',
+      });
+    }
+    if (
+      summary.diagnosticCodes.some(
+        (code, index) => index > 0 && code <= summary.diagnosticCodes[index - 1]!,
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticCodes'],
+        message: 'Os códigos de diagnóstico devem ser únicos e ordenados.',
+      });
+    }
+  });
+
 export const sandboxEffectiveLimitsSchema = z
   .object({
     cpus: z.number().positive().max(SANDBOX_ABSOLUTE_LIMITS.cpus),
@@ -131,8 +166,22 @@ export const sandboxFailureSchema = z
       .string()
       .regex(/^[A-Z][A-Z0-9_]{1,63}$/u)
       .nullable(),
+    diagnosticSummary: sandboxDiagnosticSummarySchema.nullable().default(null),
   })
-  .strict();
+  .strict()
+  .superRefine((failure, context) => {
+    if (
+      failure.diagnosticSummary !== null &&
+      (failure.stage !== 'TYPECHECK' || failure.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticSummary'],
+        message:
+          'Metadata de diagnóstico é permitida somente para TYPESCRIPT_DIAGNOSTICS em TYPECHECK.',
+      });
+    }
+  });
 
 export const sandboxOutputSummarySchema = z
   .object({
@@ -216,6 +265,21 @@ export const sandboxStepResultSchema = z
         message: 'Uma etapa malsucedida exige falha sanitizada.',
       });
       return;
+    }
+    if (
+      step.failure.diagnosticSummary !== null &&
+      !(
+        step.stepId === 'TYPECHECK' &&
+        step.status === 'FAILED' &&
+        step.failure.stage === 'TYPECHECK' &&
+        step.failure.reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'diagnosticSummary'],
+        message: 'Metadata TypeScript é permitida somente em uma falha de TYPECHECK.',
+      });
     }
     const isProjectedPrepareLifecycleFailure =
       step.stepId === 'PREPARE' && PREPARE_PROJECTED_LIFECYCLE_STAGES.has(step.failure.stage);
@@ -446,7 +510,10 @@ export const sandboxRunResultSchema = z
       if (
         result.failure?.code !== interruptedStep.failure?.code ||
         result.failure?.stage !== interruptedStep.failure?.stage ||
-        result.failure?.sourceCode !== interruptedStep.failure?.sourceCode
+        result.failure?.sourceCode !== interruptedStep.failure?.sourceCode ||
+        result.failure?.reasonCode !== interruptedStep.failure?.reasonCode ||
+        JSON.stringify(result.failure?.diagnosticSummary) !==
+          JSON.stringify(interruptedStep.failure?.diagnosticSummary)
       ) {
         context.addIssue({
           code: 'custom',
@@ -511,6 +578,7 @@ export const sandboxRunResultSchema = z
               stage: result.failure.stage,
               sourceCode: result.failure.sourceCode,
               reasonCode: result.failure.reasonCode,
+              diagnosticSummary: result.failure.diagnosticSummary,
             },
       policyHash: result.hashes.policyHash,
       commandPolicyHash: result.hashes.commandPolicyHash,

@@ -10,6 +10,7 @@ import type {
   ProductOwnerSpecification,
 } from './contracts';
 import { deepFreeze } from './immutability';
+import { calculateProductOwnerSourcePromptContextHash } from './knowledge-projection';
 import type { ProductOwnerPromptAssets } from './prompt-assets';
 import { productOwnerAgentResultSchema } from './schemas';
 
@@ -96,6 +97,7 @@ function commonMetadata(context: ProductOwnerResultContext) {
     assets: projectAssets(context.assets),
     knowledge: projectKnowledge(context.knowledge),
     run: projectRun(context.run),
+    sourcePromptContextHash: calculateProductOwnerSourcePromptContextHash(context.request),
   };
 }
 

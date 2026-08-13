@@ -5,6 +5,7 @@ import type {
   claimedJobSchema,
   enqueueJobInputSchema,
   jobFailureSchema,
+  jobExecutionOptionsSchema,
   jobRecordSchema,
   jobStatusSchema,
   queueEventSchema,
@@ -23,6 +24,7 @@ type DeepReadonly<T> = T extends (...arguments_: never[]) => unknown
 export type JobStatus = z.infer<typeof jobStatusSchema>;
 export type QueueEventType = z.infer<typeof queueEventTypeSchema>;
 export type JobFailure = DeepReadonly<z.infer<typeof jobFailureSchema>>;
+export type JobExecutionOptions = DeepReadonly<z.infer<typeof jobExecutionOptionsSchema>>;
 export type QueueEvent = DeepReadonly<z.infer<typeof queueEventSchema>>;
 export type QueueEvents = readonly QueueEvent[];
 export type JobRecord = DeepReadonly<z.infer<typeof jobRecordSchema>>;

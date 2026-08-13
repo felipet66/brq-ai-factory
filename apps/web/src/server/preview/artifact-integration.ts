@@ -214,6 +214,11 @@ export function createFactoryPreviewArtifactIntegration(
     artifactSink: Object.freeze({ captured, unavailable }),
     decorate(pipeline) {
       const decorated: FactoryPipelineCoordinator = {
+        ...(pipeline.preflight === undefined
+          ? {}
+          : {
+              preflight: pipeline.preflight.bind(pipeline),
+            }),
         async execute(request, runOptions) {
           return executionScope.run(new Set<string>(), async () => {
             const scopedExecutionIds = executionScope.getStore()!;

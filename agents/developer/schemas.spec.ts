@@ -1,4 +1,5 @@
 import { productOwnerSpecificationSchema } from '@brq/product-owner-agent';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -272,6 +273,7 @@ function request(overrides: Record<string, unknown> = {}) {
       traceId: 'trace-1',
     },
     productOwnerSpecification: productOwnerSpecification(),
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     model: 'configured-model',
     limits: {
       knowledgeMaxDocuments: 24,

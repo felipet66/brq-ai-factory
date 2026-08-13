@@ -22,6 +22,7 @@ export function createExecutionRequestFixture(
     workflowId: workflow.workflowId,
     requestId: workflow.requestId,
     traceId: workflow.traceId,
+    deliveryIntent: workflow.deliveryIntent,
     demand: workflow.demand,
     additionalContext: workflow.additionalContext,
     agents: workflow.agents,

@@ -35,6 +35,7 @@ import {
 } from '../agent-request-factory';
 import type { WorkflowRequest } from '../contracts';
 import { workflowRequestSchema } from '../schemas';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 
 type GeneratedProductOwnerResult = Extract<ProductOwnerAgentResult, { outcome: 'GENERATED' }>;
 type RejectedProductOwnerResult = Extract<
@@ -77,6 +78,7 @@ export function createWorkflowRequestFixture(
     executionId: 'execution-001',
     requestId: 'request-001',
     traceId: 'trace-001',
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     demand: productOwnerRequest.demand,
     additionalContext: productOwnerRequest.additionalContext,
     agents: {

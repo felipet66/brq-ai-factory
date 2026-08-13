@@ -21,7 +21,7 @@ The module composes public ports only. It does not know agent internals, prompt 
 
 `FactoryPipelineCoordinator.execute()` accepts the existing `ExecutionRequest`. The coordinator invokes `ExecutionEngine.execute()` itself and derives the Code Generator approval from the resulting public `ExecutionResult`; callers cannot author an approval or supply an execution hash.
 
-`FactoryExecutionResult` is an additive, metadata-only result. It contains terminal statuses, bounded failures, observations, safe hashes, lineage, provenance, workspace metadata, Sandbox step metadata, and sanitized output hashes/counts. It never carries specifications, generated source, prompts, knowledge content, artifacts, output text, paths on the host, container identifiers, or secrets. The existing `ExecutionResult` and `WorkflowResult` contracts and hashes remain unchanged.
+`FactoryExecutionResult` is an additive, metadata-only result. It contains terminal statuses, bounded failures, observations, safe hashes, lineage, provenance, workspace metadata, Sandbox step metadata, and sanitized output hashes/counts. It never carries specifications, generated source, prompts, knowledge content, artifacts, output text, paths on the host, container identifiers, or secrets. Changes to `ExecutionRequest`, `WorkflowResult` provenance, and their deterministic hash domains are explicitly versioned by the Execution Engine and Orchestrator contract versions.
 
 Factory `SUCCESS` requires every one of the twelve canonical stages to succeed, including
 `CODE_PROFILE_VALIDATION`. A build or test failure is a resolved functional `FAILED` result, not a
@@ -47,7 +47,10 @@ The aggregate `SANDBOX` value is allowed only as `terminalStage`/`failure.stage`
 
 - `GeneratedCodeBundle` is reparsed and correlated before projection.
 - Profile rejection uses a domain-separated validation hash without exposing generated content;
-  successful generation preserves the existing Code Generator generation hash.
+  successful generation preserves the existing Code Generator generation hash. Rejections expose
+  only the matching allowlisted `profileRuleId` (for example,
+  `content.javascript.relative-references`) alongside the existing public `reasonCode`; generated
+  content, file paths, and offending literals never cross this boundary.
 - `WorkspacePlan`, materialization, release, and `SandboxRunResult` are reparsed at every boundary.
 - Generated bundle, plan, workspace, Sandbox request, and Sandbox result hashes form an explicit chain.
 - Sandbox operational source codes are removed at the Factory boundary; only nullable, allowlisted

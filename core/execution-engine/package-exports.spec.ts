@@ -24,7 +24,7 @@ describe('@brq/execution-engine package exports', () => {
     expect(executionRequestSchema.safeParse(request).success).toBe(true);
     expect(executionResultSchema).toBeDefined();
     expect(EXECUTION_ENGINE_VERSION).toBe('1.0.0');
-    expect(EXECUTION_CONTRACT_VERSION).toBe('1.0.0');
+    expect(EXECUTION_CONTRACT_VERSION).toBe('1.1.0');
     expect(EXECUTION_ENGINE_ERROR_CODES.CANCELLED).toBe('EXECUTION_ENGINE_CANCELLED');
     expect(resultTypeCheck).toBeUndefined();
   });

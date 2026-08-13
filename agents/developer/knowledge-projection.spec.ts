@@ -69,7 +69,10 @@ describe('Developer knowledge projection', () => {
       id: 'context:product-owner-specification',
       kind: 'ARTIFACT',
       serialization: 'JSON',
-      content: request.productOwnerSpecification,
+      content: {
+        productOwnerSpecification: request.productOwnerSpecification,
+        deliveryIntent: request.deliveryIntent,
+      },
       references: [],
     });
     const sourceSpecification = contexts[1]!.content as JsonValue;
@@ -91,5 +94,20 @@ describe('Developer knowledge projection', () => {
         loadDeveloperPromptAssets().manifest,
       ),
     ).toThrow('não pertence ao Developer');
+  });
+
+  it('projects the immutable delivery intent alongside the functional source', () => {
+    const request = createDeveloperRequest();
+    const contexts = projectDeveloperPromptContexts(
+      knowledgeContext(),
+      request,
+      loadDeveloperPromptAssets().manifest,
+    );
+
+    expect(contexts[1]?.content).toEqual({
+      productOwnerSpecification: request.productOwnerSpecification,
+      deliveryIntent: request.deliveryIntent,
+    });
+    expect(loadDeveloperPromptAssets().manifest.version).toBe('1.0.4');
   });
 });

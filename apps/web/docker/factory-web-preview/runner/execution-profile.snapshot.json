@@ -1,8 +1,8 @@
 {
-  "snapshotVersion": "1.0.0",
+  "snapshotVersion": "1.1.0",
   "profileId": "NODE_WEB_PREVIEW_24_V1",
-  "profileVersion": "1.0.0",
-  "profileHash": "cffc60459d28119fa0e83488ff87ff017d49668ac542002194a40e9342c1c31f",
+  "profileVersion": "1.1.0",
+  "profileHash": "ba54cba53e383deab68a1382422e4dcadb8dc3ed14e903a026e023468dbc8b61",
   "rules": {
     "files": {
       "pathPolicy": "ASCII_PORTABLE",
@@ -117,7 +117,23 @@
       "strict": true,
       "allowJavaScript": true,
       "checkJavaScript": true,
-      "packageManager": "NONE"
+      "packageManager": "NONE",
+      "typeCheck": {
+        "requiredDiagnosticCount": 0,
+        "moduleResolution": "BUNDLER",
+        "esModuleInterop": true,
+        "noEmitOnError": true,
+        "skipLibCheck": false,
+        "ambientTypePackages": [],
+        "javaScriptParameterTyping": "INFERENCE_OR_JSDOC_REQUIRED",
+        "nullableDomAccess": "EXPLICIT_NARROWING_REQUIRED",
+        "testModuleDeclarations": {
+          "node:test": "type TestBody = () => void | Promise<void>; export function test(name: string, body: TestBody): void; export default test;",
+          "node:assert": "interface Assert { ok(value: unknown, message?: string): asserts value; equal(actual: unknown, expected: unknown, message?: string): void; deepEqual(actual: unknown, expected: unknown, message?: string): void; strictEqual(actual: unknown, expected: unknown, message?: string): void; throws(body: () => unknown): void; } const assert: Assert; export = assert;",
+          "node:assert/strict": "import assert = require('node:assert'); export = assert;"
+        },
+        "unlistedTestApis": "FORBIDDEN"
+      }
     },
     "previewProjection": {
       "requiredEntrypoint": "index.html",
@@ -239,5 +255,5 @@
       "WORKSPACE_SYMLINK"
     ]
   },
-  "snapshotHash": "75d736b1fc3b102df86c715e62f59c87fff1ca069db604400d98b5a2f13be591"
+  "snapshotHash": "b671aed30fd78b4bda4219c00fafd1b056e2a46afe7ea81462a9c74d5c098587"
 }

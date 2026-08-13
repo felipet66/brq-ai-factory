@@ -7,6 +7,10 @@ import type {
 } from '@brq/execution-repository';
 import type { ExecutionDispatcher } from '@brq/execution-worker';
 import { jobRecordSchema, type JobRecord } from '@brq/job-queue';
+import {
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -15,14 +19,28 @@ import {
   FIXED_REQUEST_ID,
   authenticateRequestFixture,
   capturedLogger,
-  executionBody,
-  jsonRequest,
+  executionBody as baseExecutionBody,
+  jsonRequest as baseJsonRequest,
 } from '@/test/api-fixtures';
 
 import { createExecutionsHandler } from './executions-handler';
 
 const JOB_ID = `job-${'a'.repeat(32)}`;
 const QUEUED_AT = '2026-08-07T10:00:00.000Z';
+
+function executionBody(
+  deliveryMode: 'GREENFIELD' | 'CHANGE' = 'GREENFIELD',
+): Record<string, unknown> {
+  return { ...baseExecutionBody(), deliveryMode };
+}
+
+function jsonRequest(
+  url: string,
+  body: unknown = executionBody(),
+  init: Omit<RequestInit, 'body'> = {},
+): Request {
+  return baseJsonRequest(url, body, init);
+}
 
 function queuedJob(overrides: Partial<JobRecord> = {}): JobRecord {
   return jobRecordSchema.parse({
@@ -130,15 +148,16 @@ describe('executions HTTP adapter', () => {
       data: { executionId: EXECUTION_ID, jobId: JOB_ID, status: 'QUEUED' },
       metadata: {
         requestId: FIXED_REQUEST_ID,
-        apiVersion: '3.2.0',
+        apiVersion: '4.1.0',
         executionId: EXECUTION_ID,
       },
       errors: [],
     });
     expect(dispatcher.dispatch).toHaveBeenCalledOnce();
     expect(dispatcher.dispatch).toHaveBeenCalledWith({
-      ...executionBody(),
+      ...baseExecutionBody(),
       requestId: FIXED_REQUEST_ID,
+      deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     });
     expect(records.at(-1)).toMatchObject({
       event: 'http.request.completed',
@@ -152,6 +171,21 @@ describe('executions HTTP adapter', () => {
     expect(logs).not.toContain('Reduzir contatos');
     expect(JSON.stringify(body)).not.toContain('events');
     expect(JSON.stringify(body)).not.toContain('workflowId');
+  });
+
+  it('maps the explicit CHANGE delivery mode to the host-owned change intent', async () => {
+    const dispatcher = fakeDispatcher();
+    const response = await createHandler(dispatcher)(
+      jsonRequest('http://localhost/api/executions', executionBody('CHANGE')),
+      undefined,
+    );
+
+    expect(response.status).toBe(202);
+    expect(dispatcher.dispatch).toHaveBeenCalledWith({
+      ...baseExecutionBody(),
+      requestId: FIXED_REQUEST_ID,
+      deliveryIntent: CHANGE_DELIVERY_INTENT,
+    });
   });
 
   it('passes the authenticated principal to ownership factories and rejects cross-origin dispatch', async () => {
@@ -229,6 +263,22 @@ describe('executions HTTP adapter', () => {
         jsonRequest('http://localhost/api/executions', {
           ...executionBody(),
           userId: 'user-attacker-controlled',
+        }),
+      status: 400,
+      code: 'INVALID_REQUEST',
+    },
+    {
+      label: 'missing delivery mode',
+      request: () => jsonRequest('http://localhost/api/executions', baseExecutionBody()),
+      status: 400,
+      code: 'INVALID_REQUEST',
+    },
+    {
+      label: 'unknown delivery mode',
+      request: () =>
+        jsonRequest('http://localhost/api/executions', {
+          ...baseExecutionBody(),
+          deliveryMode: 'AUTOMATIC',
         }),
       status: 400,
       code: 'INVALID_REQUEST',

@@ -4,8 +4,33 @@ import type {
   ExecutionHistoryTimeline,
   ExecutionHistoryTimelineEvent,
 } from '@/api/execution-history-contracts';
+import {
+  safePublicFactoryProfileRuleId,
+  type PublicFactoryProfileRuleId,
+} from '@/api/factory-profile-rule-contracts';
+import {
+  safePublicTypeScriptDiagnosticSummary,
+  type PublicTypeScriptDiagnosticSummary,
+} from '@/api/typescript-diagnostic-contracts';
 
-export const FACTORY_VIEW_MODEL_VERSION = '2.1.0' as const;
+export const FACTORY_VIEW_MODEL_VERSION = '2.5.0' as const;
+
+const SAFE_CODE_GENERATOR_SOURCE_REASON_CODES = new Set([
+  'SOURCE_EXECUTION_MISMATCH',
+  'SOURCE_READINESS_NOT_READY',
+  'SOURCE_HASH_MISMATCH',
+  'SOURCE_CHANGE_TYPE_NOT_CREATE',
+  'SOURCE_MODULE_PATH_UNSUPPORTED',
+  'SOURCE_MODULE_PATH_COLLISION',
+  'SOURCE_HANDOFF_NOT_VERIFIED',
+  'SOURCE_QA_READINESS_NOT_READY',
+]);
+
+function safeCodeGeneratorSourceReasonCode(code: string | null | undefined): string | null {
+  return code !== null && code !== undefined && SAFE_CODE_GENERATOR_SOURCE_REASON_CODES.has(code)
+    ? code
+    : null;
+}
 
 export type FactoryAgentId = 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
 export type FactoryTechnicalStageId =
@@ -88,6 +113,7 @@ export interface FactoryAgent {
   readonly finishedAt: string | null;
   readonly durationMs: number | null;
   readonly readiness: string | null;
+  readonly readinessDecision: ProvenanceStage['readinessDecision'];
   readonly agentVersion: string | null;
   readonly outcome: 'GENERATED' | 'VALIDATION_REJECTED' | null;
   readonly metrics: FactoryAgentMetrics;
@@ -123,10 +149,47 @@ export interface FactoryTechnicalStage {
   readonly outputHash: string | null;
   readonly failureCode: string | null;
   readonly reasonCode: string | null;
+  readonly profileRuleId: PublicFactoryProfileRuleId | null;
+  readonly diagnosticSummary: PublicTypeScriptDiagnosticSummary | null;
   readonly resourceOutcome:
     'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
   readonly evidenceSource: 'OBSERVABILITY_V2' | 'FACTORY_RESULT';
   readonly facts: readonly FactoryTechnicalFact[];
+}
+
+export interface FactoryReadinessTraceStep {
+  readonly agentId: FactoryAgentId;
+  readonly agentName: string;
+  readonly readiness: string;
+  readonly evidence: 'RECORDED' | 'LEGACY_UNKNOWN';
+  readonly factors: readonly {
+    readonly sourceStage: FactoryAgentId;
+    readonly code:
+      | 'SOURCE_READY'
+      | 'SOURCE_PARTIALLY_READY'
+      | 'SOURCE_REQUIRES_CLARIFICATION'
+      | 'NO_LOCAL_READINESS_CONCERNS'
+      | 'NON_BLOCKING_QUESTION_PRESENT'
+      | 'BLOCKING_QUESTION_PRESENT'
+      | 'VALIDATION_REQUIRED_ASSUMPTION_PRESENT'
+      | 'BLOCKING_ITEM_PRESENT';
+  }[];
+}
+
+export interface FactoryReadinessTrace {
+  readonly steps: readonly FactoryReadinessTraceStep[];
+  readonly outcome:
+    | {
+        readonly kind: 'FACTORY_BLOCKED_BEFORE_CODE_GENERATION';
+        readonly code: string;
+        readonly reasonCode: string | null;
+      }
+    | {
+        readonly kind: 'CODE_GENERATOR_SOURCE_REJECTED';
+        readonly code: string;
+        readonly reasonCode: string;
+      }
+    | null;
 }
 
 export interface FactoryHandoff {
@@ -223,6 +286,7 @@ export interface FactoryViewModel {
   readonly knowledge: FactorySystemStage;
   readonly agents: readonly [FactoryAgent, FactoryAgent, FactoryAgent];
   readonly technicalStages: readonly FactoryTechnicalStage[];
+  readonly readinessTrace: FactoryReadinessTrace;
   readonly handoffs: readonly [FactoryHandoff, FactoryHandoff, FactoryHandoff];
   readonly activity: readonly FactoryActivity[];
   readonly progress: FactoryProgress;
@@ -431,6 +495,20 @@ function createArtifacts(
   );
 }
 
+function createReadinessDecision(
+  provenance: ProvenanceStage | null,
+): ProvenanceStage['readinessDecision'] {
+  const decision = provenance?.readinessDecision ?? null;
+  return decision === null
+    ? null
+    : Object.freeze({
+        ...decision,
+        decisiveFactors: freezeArray(
+          decision.decisiveFactors.map((factor) => Object.freeze({ ...factor })),
+        ),
+      });
+}
+
 function createAgent(
   execution: FactoryExecutionSource,
   timeline: FactoryTimelineSource | null,
@@ -456,6 +534,7 @@ function createAgent(
     finishedAt: stage?.finishedAt ?? null,
     durationMs: stage?.durationMs ?? null,
     readiness: provenance?.readiness ?? null,
+    readinessDecision: createReadinessDecision(provenance),
     agentVersion: provenance?.agentVersion ?? null,
     outcome: provenance?.outcome ?? null,
     metrics: createMetrics(timeline, definition.id),
@@ -605,6 +684,22 @@ function createTechnicalStages(
           outputHash: persisted?.outputHash ?? null,
           failureCode: persisted?.failureCode ?? null,
           reasonCode: persisted?.reasonCode ?? null,
+          profileRuleId:
+            definition.id !== 'CODE_PROFILE_VALIDATION'
+              ? null
+              : ((persisted?.status === 'FAILED'
+                  ? safePublicFactoryProfileRuleId(persisted.profileRuleId)
+                  : null) ??
+                (execution.factoryResult?.terminalStage === 'CODE_PROFILE_VALIDATION' &&
+                execution.factoryResult.failure?.stageId === 'CODE_PROFILE_VALIDATION'
+                  ? safePublicFactoryProfileRuleId(execution.factoryResult.failure.profileRuleId)
+                  : null)),
+          diagnosticSummary:
+            definition.id === 'SANDBOX_TYPECHECK' &&
+            persisted?.status === 'FAILED' &&
+            persisted.reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+              ? safePublicTypeScriptDiagnosticSummary(persisted.diagnosticSummary)
+              : null,
           resourceOutcome: persisted?.resourceOutcome ?? null,
           evidenceSource:
             observed === undefined ? ('FACTORY_RESULT' as const) : ('OBSERVABILITY_V2' as const),
@@ -891,6 +986,53 @@ function createPreviewCandidate(execution: FactoryExecutionSource): FactoryPrevi
   });
 }
 
+function createReadinessTrace(
+  execution: FactoryExecutionSource,
+  agents: readonly FactoryAgent[],
+  technicalStages: readonly FactoryTechnicalStage[],
+): FactoryReadinessTrace {
+  const steps = freezeArray(
+    agents.flatMap((agent): FactoryReadinessTraceStep[] => {
+      if (agent.readiness === null) return [];
+      return [
+        Object.freeze({
+          agentId: agent.id,
+          agentName: agent.name,
+          readiness: agent.readiness,
+          evidence: agent.readinessDecision === null ? 'LEGACY_UNKNOWN' : 'RECORDED',
+          factors:
+            agent.readinessDecision === null
+              ? Object.freeze([])
+              : freezeArray(
+                  agent.readinessDecision.decisiveFactors.map((factor) =>
+                    Object.freeze({ ...factor }),
+                  ),
+                ),
+        }),
+      ];
+    }),
+  );
+  const codeGenerator = technicalStages.find((stage) => stage.id === 'CODE_GENERATOR');
+  const failure = execution.factoryResult?.failure ?? null;
+  const codeGeneratorReasonCode = safeCodeGeneratorSourceReasonCode(codeGenerator?.reasonCode);
+  const outcome =
+    failure?.code === 'FACTORY_PIPELINE_QA_NOT_READY'
+      ? Object.freeze({
+          kind: 'FACTORY_BLOCKED_BEFORE_CODE_GENERATION' as const,
+          code: failure.code,
+          reasonCode:
+            failure.reasonCode === 'SOURCE_QA_READINESS_NOT_READY' ? failure.reasonCode : null,
+        })
+      : codeGeneratorReasonCode === null
+        ? null
+        : Object.freeze({
+            kind: 'CODE_GENERATOR_SOURCE_REJECTED' as const,
+            code: codeGenerator?.failureCode ?? failure?.code ?? 'CODE_GENERATOR_SOURCE_REJECTED',
+            reasonCode: codeGeneratorReasonCode,
+          });
+  return Object.freeze({ steps, outcome });
+}
+
 export function createFactoryViewModel({
   execution,
   timeline,
@@ -924,6 +1066,7 @@ export function createFactoryViewModel({
     knowledge,
     agents,
     technicalStages,
+    readinessTrace: createReadinessTrace(execution, agents, technicalStages),
     handoffs,
     activity: createActivity(execution, timeline),
     progress: createProgress(execution, timeline, knowledge, agents, technicalStages),

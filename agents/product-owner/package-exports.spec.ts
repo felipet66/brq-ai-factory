@@ -2,6 +2,7 @@ import {
   PRODUCT_OWNER_AGENT_ERROR_CODES,
   PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES,
   PRODUCT_OWNER_READINESS_VALUES,
+  calculateProductOwnerSourcePromptContextHash,
   createProductOwnerAgent,
   deriveProductOwnerReadiness,
   loadProductOwnerPromptAssets,
@@ -34,6 +35,7 @@ describe('@brq/product-owner-agent package exports', () => {
     expect(resultTypeCheck).toBeUndefined();
     expect(loadProductOwnerPromptAssets().manifest.agent).toBe('PRODUCT_OWNER');
     expect(projectProductOwnerPromptContexts).toBeTypeOf('function');
+    expect(calculateProductOwnerSourcePromptContextHash(request)).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(PRODUCT_OWNER_READINESS_VALUES).toEqual([
       'READY',
       'PARTIALLY_READY',
@@ -55,6 +57,7 @@ describe('@brq/product-owner-agent package exports', () => {
 
     expect(publicApi).not.toHaveProperty('deepFreeze');
     expect(publicApi).toHaveProperty('projectProductOwnerPromptContexts');
+    expect(publicApi).toHaveProperty('calculateProductOwnerSourcePromptContextHash');
     expect(publicApi).not.toHaveProperty('createProductOwnerAgentRunRequest');
     expect(publicApi).not.toHaveProperty('createGeneratedResult');
     expect(publicApi).not.toHaveProperty('requestLogContext');

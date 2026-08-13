@@ -139,21 +139,33 @@ export function verifyDockerRuntimeAndImage(input: {
       version,
     ]),
   );
+  if (input.image.toolchainVersions.NODE !== input.policy.runtime.version) {
+    imageError('DOCKER_IMAGE_NODE_POLICY_MISMATCH');
+  }
+  if (image.Id !== input.image.expectedImageId) imageError('DOCKER_IMAGE_ID_MISMATCH');
+  if (!repoDigests.includes(input.image.reference)) {
+    imageError('DOCKER_IMAGE_REPOSITORY_DIGEST_MISMATCH');
+  }
+  if (platform !== input.image.platform) imageError('DOCKER_IMAGE_PLATFORM_MISMATCH');
+  if (hasUnsafeVolumes) imageError('DOCKER_IMAGE_VOLUMES_MISMATCH');
+  if (image.Config?.Cmd !== null && image.Config?.Cmd !== undefined) {
+    imageError('DOCKER_IMAGE_COMMAND_MISMATCH');
+  }
+  if (image.Config?.Entrypoint !== null && image.Config?.Entrypoint !== undefined) {
+    imageError('DOCKER_IMAGE_ENTRYPOINT_MISMATCH');
+  }
+  if (Object.entries(expectedLabels).some(([key, value]) => labels[key] !== value)) {
+    imageError('DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH');
+  }
+  if (Object.entries(expectedToolchainLabels).some(([key, value]) => labels[key] !== value)) {
+    imageError('DOCKER_IMAGE_TOOLCHAIN_LABEL_MISMATCH');
+  }
   if (
-    image.Id !== input.image.expectedImageId ||
-    !repoDigests.includes(input.image.reference) ||
-    platform !== input.image.platform ||
-    hasUnsafeVolumes ||
-    (image.Config?.Cmd !== null && image.Config?.Cmd !== undefined) ||
-    (image.Config?.Entrypoint !== null && image.Config?.Entrypoint !== undefined) ||
-    Object.entries(expectedLabels).some(([key, value]) => labels[key] !== value) ||
-    Object.entries(expectedToolchainLabels).some(([key, value]) => labels[key] !== value) ||
     environment === null ||
     environment.length !== 1 ||
-    environment[0] !== `PATH=${DOCKER_SANDBOX_PATH}` ||
-    input.image.toolchainVersions.NODE !== input.policy.runtime.version
+    environment[0] !== `PATH=${DOCKER_SANDBOX_PATH}`
   ) {
-    imageError('DOCKER_IMAGE_MISMATCH');
+    imageError('DOCKER_IMAGE_ENVIRONMENT_MISMATCH');
   }
   return Object.freeze({
     adapter: 'DOCKER',

@@ -4,6 +4,7 @@ import type {
   SandboxFailure,
   SandboxOutputSummary,
   SandboxResourceOutcome,
+  SandboxPreflightOptions,
   SandboxRunRequest,
   SandboxRunResult,
   SandboxRunner,
@@ -33,7 +34,10 @@ import {
   type SandboxExecutionPolicy,
 } from '../policies';
 import { finalizeSandboxRunResult } from '../result-projector';
-import { extractSandboxHelperReasonCode } from '../reason-codes';
+import {
+  extractSandboxHelperDiagnosticSummary,
+  extractSandboxHelperReasonCode,
+} from '../reason-codes';
 import { sandboxRunRequestSchema } from '../schemas';
 import {
   buildArtifactExportArguments,
@@ -166,6 +170,7 @@ function stableFailure(input: {
   readonly message: string;
   readonly sourceCode?: string | null;
   readonly reasonCode?: string | null;
+  readonly diagnosticSummary?: SandboxFailure['diagnosticSummary'];
 }): SandboxFailure {
   return Object.freeze({
     code: input.code,
@@ -173,6 +178,7 @@ function stableFailure(input: {
     message: input.message,
     sourceCode: input.sourceCode ?? null,
     reasonCode: input.reasonCode ?? null,
+    diagnosticSummary: input.diagnosticSummary ?? null,
   });
 }
 
@@ -301,6 +307,37 @@ function remainingTimeout(started: number, limits: SandboxLimits, now: () => num
     });
   }
   return Math.min(limits.administrativeTimeoutMs, remaining);
+}
+
+async function verifyDockerPreflight(input: {
+  readonly executor: DockerCommandExecutor;
+  readonly limits: SandboxLimits;
+  readonly image: ResolvedDockerSandboxRunnerOptions['image'];
+  readonly policy: SandboxExecutionPolicy;
+  readonly started: number;
+  readonly now: () => number;
+  readonly signal?: AbortSignal;
+}): Promise<ReturnType<typeof verifyDockerRuntimeAndImage>> {
+  const versionResult = await administrativeCommand(
+    input.executor,
+    input.limits,
+    ['version', '--format', '{{json .}}'],
+    input.signal,
+    remainingTimeout(input.started, input.limits, input.now),
+  );
+  const imageResult = await administrativeCommand(
+    input.executor,
+    input.limits,
+    ['image', 'inspect', '--format', '{{json .}}', input.image.reference],
+    input.signal,
+    remainingTimeout(input.started, input.limits, input.now),
+  );
+  return verifyDockerRuntimeAndImage({
+    versionJson: versionResult.stdout.value,
+    imageJson: imageResult.stdout.value,
+    image: input.image,
+    policy: input.policy,
+  });
 }
 
 type ContainerDiscovery =
@@ -548,6 +585,11 @@ function terminalStep(input: {
     });
   } else if (input.result.exitCode !== 0 || input.result.sourceCode !== null) {
     status = 'FAILED';
+    const reasonCode = extractSandboxHelperReasonCode({
+      policyId: input.policy.policyId,
+      stepId: input.stepId,
+      stderr: input.result.stderr.value,
+    });
     failure = stableFailure({
       code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
       stage: stageFor(input.stepId),
@@ -555,11 +597,15 @@ function terminalStep(input: {
       sourceCode:
         input.result.sourceCode ??
         (input.result.exitCode === null ? 'NO_EXIT_CODE' : `EXIT_${input.result.exitCode}`),
-      reasonCode: extractSandboxHelperReasonCode({
-        policyId: input.policy.policyId,
-        stepId: input.stepId,
-        stderr: input.result.stderr.value,
-      }),
+      reasonCode,
+      diagnosticSummary:
+        reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+          ? extractSandboxHelperDiagnosticSummary({
+              policyId: input.policy.policyId,
+              stepId: input.stepId,
+              stderr: input.result.stderr.value,
+            })
+          : null,
     });
   }
   return Object.freeze({
@@ -630,6 +676,30 @@ export function createDockerSandboxRunnerWithDependencies(
   let active = false;
 
   return Object.freeze({
+    preflight: async (preflightOptions: SandboxPreflightOptions): Promise<void> => {
+      const policy = resolveSandboxPolicy(options.policies, preflightOptions.policyId);
+      if (Object.values(policy.steps).some((command) => !isStrictSandboxCommand(command))) {
+        throw new SandboxRunnerError('A policy contém um comando não autorizado.', {
+          code: SANDBOX_RUNNER_ERROR_CODES.CONFIGURATION_ERROR,
+          stage: SANDBOX_RUNNER_ERROR_STAGES.CONFIGURATION,
+        });
+      }
+      if (isAborted(preflightOptions.signal)) {
+        throw new SandboxRunnerError('O preflight da sandbox foi cancelado.', {
+          code: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
+          stage: SANDBOX_RUNNER_ERROR_STAGES.REQUEST_VALIDATION,
+        });
+      }
+      await verifyDockerPreflight({
+        executor: dependencies.executor,
+        limits: ceiling,
+        image: options.image,
+        policy,
+        started: now(),
+        now,
+        ...(preflightOptions.signal === undefined ? {} : { signal: preflightOptions.signal }),
+      });
+    },
     run: async (
       rawRequest: SandboxRunRequest,
       runOptions: SandboxRunOptions = {},
@@ -689,25 +759,14 @@ export function createDockerSandboxRunnerWithDependencies(
           options.dockerExecutable,
         ]);
 
-        const versionResult = await administrativeCommand(
-          dependencies.executor,
+        const runtime = await verifyDockerPreflight({
+          executor: dependencies.executor,
           limits,
-          ['version', '--format', '{{json .}}'],
-          runOptions.signal,
-          remainingTimeout(started, limits, now),
-        );
-        const imageResult = await administrativeCommand(
-          dependencies.executor,
-          limits,
-          ['image', 'inspect', '--format', '{{json .}}', options.image.reference],
-          runOptions.signal,
-          remainingTimeout(started, limits, now),
-        );
-        const runtime = verifyDockerRuntimeAndImage({
-          versionJson: versionResult.stdout.value,
-          imageJson: imageResult.stdout.value,
           image: options.image,
           policy,
+          started,
+          now,
+          ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
         });
         const policyHash = calculateSandboxPolicyHash(policy, runtime);
         const sandboxRequestHash = calculateSandboxRequestHash({
@@ -1067,6 +1126,7 @@ export function createDockerSandboxRunnerWithDependencies(
             stage: cleanupFailure.stage,
             message: cleanupFailure.message,
             sourceCode: failure?.code ?? cleanupFailure.sourceCode,
+            diagnosticSummary: null,
           });
         }
 

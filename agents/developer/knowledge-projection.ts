@@ -14,6 +14,21 @@ function parsePromptContext(candidate: unknown): PromptContextInput {
   return deepFreeze(promptContextInputSchema.parse(candidate) as PromptContextInput);
 }
 
+export function projectDeveloperSourcePromptContextContent(
+  request: DeveloperAgentRequest,
+): JsonValue {
+  return {
+    productOwnerSpecification: request.productOwnerSpecification,
+    deliveryIntent: request.deliveryIntent,
+  } as unknown as JsonValue;
+}
+
+export function calculateDeveloperSourcePromptContextHash(request: DeveloperAgentRequest): string {
+  return `sha256:${calculateCanonicalJsonHash(
+    projectDeveloperSourcePromptContextContent(request),
+  )}`;
+}
+
 export function projectDeveloperPromptContexts(
   rawKnowledgeContext: KnowledgeContext,
   request: DeveloperAgentRequest,
@@ -25,7 +40,7 @@ export function projectDeveloperPromptContexts(
     throw new Error('O contexto carregado não pertence ao Developer Agent.');
   }
 
-  const productOwnerSpecification = request.productOwnerSpecification as unknown as JsonValue;
+  const productOwnerSpecification = projectDeveloperSourcePromptContextContent(request);
   const knowledgePromptContext = parsePromptContext({
     id: manifest.contexts.knowledge,
     kind: 'KNOWLEDGE',
@@ -43,7 +58,7 @@ export function projectDeveloperPromptContexts(
     kind: 'ARTIFACT',
     serialization: 'JSON',
     content: productOwnerSpecification,
-    contentHash: `sha256:${calculateCanonicalJsonHash(productOwnerSpecification)}`,
+    contentHash: calculateDeveloperSourcePromptContextHash(request),
     references: [],
   });
 

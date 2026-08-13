@@ -9,6 +9,7 @@
     "./repositories/*": "./repositories/*.ts"
   },
   "dependencies": {
+    "@brq/ai-provider": "0.1.0",
     "@brq/shared": "0.1.0",
     "@prisma/adapter-better-sqlite3": "^7.9.1",
     "@prisma/client": "^7.9.1"

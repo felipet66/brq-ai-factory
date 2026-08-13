@@ -29,6 +29,12 @@ function failureIdentity(
     readonly stage: string;
     readonly sourceCode: string | null;
     readonly reasonCode: string | null;
+    readonly profileRuleId?: string | null;
+    readonly diagnosticSummary?: {
+      readonly diagnosticCount: number;
+      readonly diagnosticCodes: readonly number[];
+      readonly truncated: boolean;
+    } | null;
   } | null,
 ) {
   return failure === null
@@ -38,6 +44,8 @@ function failureIdentity(
         stage: failure.stage,
         sourceCode: failure.sourceCode,
         reasonCode: failure.reasonCode,
+        profileRuleId: failure.profileRuleId ?? null,
+        diagnosticSummary: failure.diagnosticSummary ?? null,
       };
 }
 
@@ -46,7 +54,7 @@ export type FactoryResultHashInput = Omit<FactoryExecutionResult, 'hashes'> & {
 };
 
 export function calculateFactoryPipelineResultHash(result: FactoryResultHashInput): string {
-  return domainHash('brq-factory-pipeline:result:v1', {
+  return domainHash('brq-factory-pipeline:result:v2', {
     executionId: result.executionId,
     workflowId: result.workflowId,
     status: result.status,
@@ -56,6 +64,8 @@ export function calculateFactoryPipelineResultHash(result: FactoryResultHashInpu
       stageId: stage.stageId,
       status: stage.status,
       outputHash: stage.outputHash,
+      profileRuleId: stage.profileRuleId,
+      diagnosticSummary: stage.diagnosticSummary,
       failure: failureIdentity(stage.failure),
     })),
     execution: result.execution,

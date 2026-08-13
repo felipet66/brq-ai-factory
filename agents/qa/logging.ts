@@ -31,6 +31,8 @@ export function requestLogContext(request: QAAgentRequest, assets: QAPromptAsset
     requestId: request.context.requestId,
     traceId: request.context.traceId,
     model: request.model,
+    deliveryIntentVersion: request.deliveryIntent.version,
+    deliveryMode: request.deliveryIntent.mode,
     productOwnerSpecificationHash: productOwnerSpecificationHash(request),
     technicalSpecificationHash: technicalSpecificationHash(request),
     productOwnerReadiness: request.productOwnerSpecification.readiness,

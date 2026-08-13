@@ -1,4 +1,8 @@
-import { type CodeGeneratorAgentResult } from '@brq/code-generator-agent';
+import {
+  CodeGeneratorAgentError,
+  sanitizeCodeGeneratorSourceReasonCode,
+  type CodeGeneratorAgentResult,
+} from '@brq/code-generator-agent';
 import type { WorkspaceMaterializationResult, WorkspacePlan } from '@brq/controlled-workspace';
 import {
   assertFactoryExecutionProfilePreflight,
@@ -20,6 +24,7 @@ import type {
   FactoryExecutionResult,
   FactoryPipelineCoordinator,
   FactoryPipelineFailure,
+  FactoryPipelinePreflightOptions,
   FactoryPipelineRunOptions,
   FactoryPipelineStatus,
   FactoryPipelineStageResult,
@@ -45,7 +50,7 @@ import {
   projectWorkspaceToSandboxRunRequest,
 } from './projections';
 import { createFactoryExecutionResult } from './result';
-import { sanitizeTechnicalCode } from './sanitization';
+import { sanitizeFactoryProfileRuleId, sanitizeTechnicalCode } from './sanitization';
 import { factoryPipelineConfigurationSchema } from './schemas';
 import { createFactoryStageLedger } from './stage-ledger';
 import type { FactoryPipelineStageId } from './state-machine';
@@ -100,7 +105,16 @@ function parseRequest(value: ExecutionRequest): ExecutionRequest {
 
 function sourceCode(error: unknown): string | null {
   if (error === null || typeof error !== 'object') return null;
-  return sanitizeTechnicalCode((error as { code?: unknown }).code);
+  const candidate = error as { code?: unknown; sourceCode?: unknown };
+  return sanitizeTechnicalCode(candidate.sourceCode) ?? sanitizeTechnicalCode(candidate.code);
+}
+
+function sourceReasonCode(error: unknown): string | null {
+  if (error instanceof CodeGeneratorAgentError) return error.reasonCode ?? null;
+  if (error instanceof FactoryPipelineError) {
+    return sanitizeCodeGeneratorSourceReasonCode(error.reasonCode) ?? null;
+  }
+  return null;
 }
 
 function cancellationRequested(error: unknown, signal: AbortSignal | undefined): boolean {
@@ -128,12 +142,15 @@ function failureFor(
   message: string,
   error?: unknown,
   reasonCode: string | null = null,
+  profileRuleId: string | null = null,
 ): FactoryPipelineFailure {
   return {
     code,
     stage,
     sourceCode: sourceCode(error),
     reasonCode,
+    profileRuleId: sanitizeFactoryProfileRuleId(profileRuleId),
+    diagnosticSummary: null,
     message,
   };
 }
@@ -146,6 +163,8 @@ function skippedStage(stageId: FactoryPipelineStageId): FactoryPipelineStageResu
     finishedAt: null,
     durationMs: null,
     outputHash: null,
+    profileRuleId: null,
+    diagnosticSummary: null,
     failure: null,
   };
 }
@@ -162,13 +181,24 @@ function projectSandboxStage(step: SandboxRunResult['steps'][number]): FactoryPi
   if (step.status === 'SKIPPED') return skippedStage(stageId);
   const status =
     step.status === 'SUCCESS' ? 'SUCCESS' : step.status === 'CANCELLED' ? 'CANCELLED' : 'FAILED';
+  const outputHash =
+    status === 'SUCCESS'
+      ? (step.stdout?.summaryHash ?? null)
+      : step.stderr !== null && step.stderr.observedBytes > 0
+        ? step.stderr.summaryHash
+        : step.stdout !== null && step.stdout.observedBytes > 0
+          ? step.stdout.summaryHash
+          : (step.stderr?.summaryHash ?? step.stdout?.summaryHash ?? null);
+  const diagnosticSummary = step.failure?.diagnosticSummary ?? null;
   return {
     stageId,
     status,
     startedAt: step.startedAt,
     finishedAt: step.finishedAt,
     durationMs: step.durationMs,
-    outputHash: step.stdout?.summaryHash ?? step.stderr?.summaryHash ?? null,
+    outputHash,
+    profileRuleId: null,
+    diagnosticSummary,
     failure:
       status === 'SUCCESS'
         ? null
@@ -177,6 +207,8 @@ function projectSandboxStage(step: SandboxRunResult['steps'][number]): FactoryPi
             stage: stageId,
             sourceCode: null,
             reasonCode: step.failure?.reasonCode ?? null,
+            profileRuleId: null,
+            diagnosticSummary,
             message:
               status === 'CANCELLED'
                 ? 'A execução isolada foi cancelada.'
@@ -203,6 +235,8 @@ function primaryFromExecution(result: ExecutionResult): PrimaryOutcome | null {
       stage: terminalStage,
       sourceCode: sanitizeTechnicalCode(result.failure?.sourceCode),
       reasonCode: null,
+      profileRuleId: null,
+      diagnosticSummary: null,
       message: cancelled
         ? 'A execução funcional foi cancelada.'
         : 'A execução funcional não foi concluída.',
@@ -216,8 +250,16 @@ function primaryFromSandbox(result: SandboxRunResult): PrimaryOutcome | null {
     ['FAILED', 'TIMEOUT', 'CANCELLED'].includes(step.status),
   );
   const terminalStage =
-    interrupted === undefined ? ('SANDBOX' as const) : SANDBOX_STAGE_BY_STEP[interrupted.stepId];
+    result.failure?.stage === 'CLEANUP' || interrupted === undefined
+      ? ('SANDBOX' as const)
+      : SANDBOX_STAGE_BY_STEP[interrupted.stepId];
   const cancelled = result.status === 'CANCELLED';
+  const diagnosticSummary =
+    terminalStage === 'SANDBOX_TYPECHECK' &&
+    interrupted?.stepId === 'TYPECHECK' &&
+    interrupted.failure?.reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+      ? interrupted.failure.diagnosticSummary
+      : null;
   return {
     status: cancelled ? 'CANCELLED' : 'FAILED',
     terminalStage,
@@ -225,7 +267,12 @@ function primaryFromSandbox(result: SandboxRunResult): PrimaryOutcome | null {
       code: result.failure?.code ?? FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
       stage: terminalStage,
       sourceCode: null,
-      reasonCode: result.failure?.reasonCode ?? interrupted?.failure?.reasonCode ?? null,
+      reasonCode:
+        result.failure === null
+          ? (interrupted?.failure?.reasonCode ?? null)
+          : result.failure.reasonCode,
+      profileRuleId: null,
+      diagnosticSummary,
       message: cancelled
         ? 'A execução isolada foi cancelada.'
         : 'A execução isolada não concluiu todas as verificações.',
@@ -266,7 +313,30 @@ export function createFactoryPipelineCoordinator(
   const logger = options.logger ?? createLogger();
   const observe = options.now ?? (() => performance.timeOrigin + performance.now());
 
+  const runPreflight = async (
+    preflightOptions: FactoryPipelinePreflightOptions = {},
+  ): Promise<void> => {
+    if (options.sandboxRunner.preflight === undefined) return;
+    try {
+      await options.sandboxRunner.preflight({
+        policyId: configuration.sandbox.policyId,
+        ...(preflightOptions.signal === undefined ? {} : { signal: preflightOptions.signal }),
+      });
+    } catch (error) {
+      const observedSourceCode = sourceCode(error);
+      throw new FactoryPipelineError('O runtime da sandbox não passou no preflight.', {
+        code: cancellationRequested(error, preflightOptions.signal)
+          ? FACTORY_PIPELINE_ERROR_CODES.CANCELLED
+          : FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
+        stage: 'SANDBOX_PREPARE',
+        ...(observedSourceCode === null ? {} : { sourceCode: observedSourceCode }),
+        cause: error,
+      });
+    }
+  };
+
   return {
+    preflight: runPreflight,
     async execute(
       rawRequest: ExecutionRequest,
       runOptions: FactoryPipelineRunOptions = {},
@@ -300,10 +370,13 @@ export function createFactoryPipelineCoordinator(
 
       let execution: ExecutionResult;
       try {
-        const rawExecution = await options.executionEngine.execute(
-          request,
-          runOptions.signal === undefined ? undefined : { signal: runOptions.signal },
-        );
+        const rawExecution = await options.executionEngine.execute(request, {
+          ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+          ...(runOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: runOptions.sourceExecutionId }),
+        });
         const parsedExecution = executionResultSchema.safeParse(rawExecution);
         if (!parsedExecution.success) {
           throw new FactoryPipelineError('O Execution Engine retornou um contrato inválido.', {
@@ -347,6 +420,22 @@ export function createFactoryPipelineCoordinator(
             cause: error,
           });
         }
+      }
+
+      if (
+        execution.executionId !== identity.executionId ||
+        execution.workflowId !== request.workflowId ||
+        execution.hashes.executionRequestHash !== identity.executionRequestHash ||
+        execution.hashes.workflowRequestHash !== identity.workflowRequestHash
+      ) {
+        throw new FactoryPipelineError(
+          'O resultado do Execution Engine não corresponde ao request despachado.',
+          {
+            code: FACTORY_PIPELINE_ERROR_CODES.CONTRACT_VIOLATION,
+            stage: 'EXECUTION',
+            executionId: identity.executionId,
+          },
+        );
       }
 
       const ledger = createFactoryStageLedger(projectAgentStages(execution, startedAtMs));
@@ -412,10 +501,13 @@ export function createFactoryPipelineCoordinator(
             configuration.codeGenerator,
             configuration.executionProfile,
           );
-          const rawGenerationResult = await options.codeGeneratorAgent.execute(
-            generationRequest,
-            runOptions.signal === undefined ? undefined : { signal: runOptions.signal },
-          );
+          const rawGenerationResult = await options.codeGeneratorAgent.execute(generationRequest, {
+            ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+            ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+            ...(runOptions.sourceExecutionId === undefined
+              ? {}
+              : { sourceExecutionId: runOptions.sourceExecutionId }),
+          });
           const candidate = parseCodeGeneratorBoundary(rawGenerationResult, generationRequest);
           if (candidate.outcome === 'VALIDATION_REJECTED') {
             const failure = failureFor(
@@ -441,6 +533,7 @@ export function createFactoryPipelineCoordinator(
                 : FACTORY_PIPELINE_ERROR_CODES.CODE_GENERATION_FAILED,
             cancelled ? 'A geração de código foi cancelada.' : 'A geração de código falhou.',
             error,
+            sourceReasonCode(error),
           );
           finishStage('CODE_GENERATOR', cancelled ? 'CANCELLED' : 'FAILED', null, failure);
           primary = {
@@ -471,6 +564,7 @@ export function createFactoryPipelineCoordinator(
               'O bundle gerado não é compatível com o Factory Execution Profile.',
               undefined,
               profileValidation.issues[0]?.reasonCode ?? null,
+              profileValidation.issues[0]?.ruleId ?? null,
             );
             finishStage(
               'CODE_PROFILE_VALIDATION',

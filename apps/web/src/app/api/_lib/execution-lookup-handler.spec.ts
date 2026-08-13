@@ -75,6 +75,13 @@ function executionRecord(overrides: Partial<ExecutionRecord> = {}): ExecutionRec
           agentVersion: '1.0.1',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           assetBundleHash: HASH,
           knowledgeContextHash: KNOWLEDGE_HASH,
           promptHash: HASH,
@@ -178,6 +185,13 @@ describe('execution lookup HTTP adapter', () => {
             agentVersion: '1.0.1',
             outcome: 'GENERATED',
             readiness: 'READY',
+            readinessDecision: {
+              version: '1.0.0',
+              readiness: 'READY',
+              decisiveFactors: [
+                { sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+              ],
+            },
             hashes: { artifactHashes: [HASH] },
           },
         ],
@@ -226,6 +240,138 @@ describe('execution lookup HTTP adapter', () => {
       },
     });
     expect(serialized).not.toMatch(/stdout|stderr|containerId|workspacePath|generatedFiles/);
+  });
+
+  it('sanitizes Factory Profile rule identifiers before exposing execution history', async () => {
+    const successful = historyFactoryResult();
+    const recorded = historyFactoryResult({
+      status: 'FAILED',
+      terminalStage: 'CODE_PROFILE_VALIDATION',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+        sourceCode: null,
+        reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+        profileRuleId: 'content.javascript.relative-references',
+        diagnosticSummary: null,
+        stageId: 'CODE_PROFILE_VALIDATION',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'CODE_PROFILE_VALIDATION'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+              reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+              profileRuleId: 'content.javascript.relative-references',
+            }
+          : stage,
+      ),
+    });
+
+    async function lookup(factoryResult: ExecutionRecord['factoryResult']) {
+      const repository = fakeRepository(executionRecord({ factoryResult }));
+      const handler = createExecutionLookupHandler({
+        authenticate: authenticateRequestFixture,
+        getExecutionRepository: async () => repository,
+        requestIdFactory: () => FIXED_REQUEST_ID,
+        logger: capturedLogger().logger,
+      });
+      return handler(new Request(`http://localhost/api/executions/${EXECUTION_ID}`), context());
+    }
+
+    const recordedResponse = await lookup(recorded);
+    const recordedBody = await recordedResponse.json();
+    expect(recordedBody.data.factoryResult.failure.profileRuleId).toBe(
+      'content.javascript.relative-references',
+    );
+    expect(
+      recordedBody.data.factoryResult.stages.find(
+        (stage: { readonly stageId: string }) => stage.stageId === 'CODE_PROFILE_VALIDATION',
+      ).profileRuleId,
+    ).toBe('content.javascript.relative-references');
+
+    const unknown = {
+      ...recorded,
+      failure: { ...recorded.failure!, profileRuleId: 'internal.customer.rule' },
+      stages: recorded.stages.map((stage) =>
+        stage.stageId === 'CODE_PROFILE_VALIDATION'
+          ? { ...stage, profileRuleId: 'internal.customer.rule' }
+          : stage,
+      ),
+    } as unknown as NonNullable<ExecutionRecord['factoryResult']>;
+    const sanitizedResponse = await lookup(unknown);
+    const sanitizedBody = await sanitizedResponse.json();
+    const serialized = JSON.stringify(sanitizedBody);
+
+    expect(sanitizedBody.data.factoryResult.failure.profileRuleId).toBeNull();
+    expect(
+      sanitizedBody.data.factoryResult.stages.find(
+        (stage: { readonly stageId: string }) => stage.stageId === 'CODE_PROFILE_VALIDATION',
+      ).profileRuleId,
+    ).toBeNull();
+    expect(serialized).not.toContain('internal.customer.rule');
+  });
+
+  it('exposes only safe TypeScript diagnostic count and codes from the recorded typecheck', async () => {
+    const successful = historyFactoryResult();
+    const diagnosticSummary = {
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      truncated: false,
+    } as const;
+    const recorded = historyFactoryResult({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_TYPECHECK',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+        profileRuleId: null,
+        diagnosticSummary,
+        stageId: 'SANDBOX_TYPECHECK',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_TYPECHECK'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+              diagnosticSummary,
+            }
+          : stage,
+      ),
+    });
+    const repository = fakeRepository(executionRecord({ factoryResult: recorded }));
+    const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}`),
+      context(),
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(body.data.factoryResult.failure.diagnosticSummary).toEqual(diagnosticSummary);
+    expect(
+      body.data.factoryResult.stages.find(
+        (stage: { readonly stageId: string }) => stage.stageId === 'SANDBOX_TYPECHECK',
+      ).diagnosticSummary,
+    ).toEqual(diagnosticSummary);
+    expect(Object.keys(body.data.factoryResult.failure.diagnosticSummary).sort()).toEqual([
+      'diagnosticCodes',
+      'diagnosticCount',
+      'truncated',
+    ]);
+    expect(serialized).not.toMatch(/private workspace|private source|index\.ts/iu);
   });
 
   it('returns 404 for an unknown execution', async () => {
@@ -301,6 +447,108 @@ describe('execution lookup HTTP adapter', () => {
   it('rejects a corrupted repository record at the HTTP projection boundary', async () => {
     const malformed = { ...executionRecord(), executionId: null } as ExecutionRecord;
     const repository = fakeRepository(malformed);
+    const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}`),
+      context(),
+    );
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).errors[0].code).toBe('INTERNAL_ERROR');
+  });
+
+  it('preserves generated legacy provenance with a null readiness decision', async () => {
+    const source = executionRecord();
+    const stage = source.provenance!.stages[0]!;
+    const repository = fakeRepository(
+      executionRecord({
+        provenance: {
+          stages: [{ ...stage, readinessDecision: null }],
+        },
+      }),
+    );
+    const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}`),
+      context(),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.provenance.stages[0].readinessDecision).toBeNull();
+  });
+
+  it('rejects a readiness decision that disagrees with its own stage', async () => {
+    const source = executionRecord();
+    const stage = source.provenance!.stages[0]!;
+    const repository = fakeRepository(
+      executionRecord({
+        provenance: {
+          stages: [
+            {
+              ...stage,
+              readinessDecision: {
+                version: '1.0.0',
+                readiness: 'PARTIALLY_READY',
+                decisiveFactors: [
+                  { sourceStage: 'PRODUCT_OWNER', code: 'NON_BLOCKING_QUESTION_PRESENT' },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    );
+    const handler = createExecutionLookupHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+      logger: capturedLogger().logger,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}`),
+      context(),
+    );
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).errors[0].code).toBe('INTERNAL_ERROR');
+  });
+
+  it('rejects SOURCE evidence that disagrees with the real upstream HTTP stage', async () => {
+    const source = executionRecord();
+    const productOwner = source.provenance!.stages[0]!;
+    const developer = {
+      ...productOwner,
+      stage: 'DEVELOPER' as const,
+      agent: 'DEVELOPER' as const,
+      agentExecutionId: 'developer-private',
+      readiness: 'PARTIALLY_READY',
+      readinessDecision: {
+        version: '1.0.0' as const,
+        readiness: 'PARTIALLY_READY' as const,
+        decisiveFactors: [
+          {
+            sourceStage: 'PRODUCT_OWNER' as const,
+            code: 'SOURCE_PARTIALLY_READY' as const,
+          },
+        ],
+      },
+    };
+    const repository = fakeRepository(
+      executionRecord({ provenance: { stages: [productOwner, developer] } }),
+    );
     const handler = createExecutionLookupHandler({
       authenticate: authenticateRequestFixture,
       getExecutionRepository: async () => repository,

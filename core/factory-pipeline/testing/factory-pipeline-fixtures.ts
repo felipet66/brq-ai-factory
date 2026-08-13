@@ -41,8 +41,8 @@ export function createFactoryPipelineConfigurationFixture(
       ...overrides.codeGenerator,
     },
     sandbox: {
-      policyId: 'NODE_WEB_PREVIEW_24_V1',
-      policyVersion: '1.0.0',
+      policyId: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.sandbox.policyId,
+      policyVersion: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.sandbox.policyVersion,
       profileSnapshotHash: snapshot.snapshotHash,
       ...overrides.sandbox,
     },
@@ -113,6 +113,34 @@ export function createFactoryExecutionResultFixture(
       agentVersion: '1.0.0',
       outcome: 'GENERATED' as const,
       readiness: 'READY',
+      readinessDecision: {
+        version: '1.0.0' as const,
+        readiness: 'READY' as const,
+        decisiveFactors:
+          agent === 'PRODUCT_OWNER'
+            ? ([
+                {
+                  sourceStage: 'PRODUCT_OWNER' as const,
+                  code: 'NO_LOCAL_READINESS_CONCERNS' as const,
+                },
+              ] as const)
+            : agent === 'DEVELOPER'
+              ? ([
+                  { sourceStage: 'PRODUCT_OWNER' as const, code: 'SOURCE_READY' as const },
+                  {
+                    sourceStage: 'DEVELOPER' as const,
+                    code: 'NO_LOCAL_READINESS_CONCERNS' as const,
+                  },
+                ] as const)
+              : ([
+                  { sourceStage: 'PRODUCT_OWNER' as const, code: 'SOURCE_READY' as const },
+                  { sourceStage: 'DEVELOPER' as const, code: 'SOURCE_READY' as const },
+                  {
+                    sourceStage: 'QA' as const,
+                    code: 'NO_LOCAL_READINESS_CONCERNS' as const,
+                  },
+                ] as const),
+      },
       assetBundleHash: hash(String(index + 4)),
       knowledgeContextHash: prefixedHash(String(index + 4)),
       promptHash: hash(String(index + 7)),
@@ -129,6 +157,8 @@ export function createFactoryExecutionResultFixture(
     finishedAt: new Date(startedAtMs + index * 10 + 5).toISOString(),
     durationMs: 5,
     outputHash: hash(((index % 6) + 1).toString()),
+    profileRuleId: null,
+    diagnosticSummary: null,
     failure: null,
   }));
   const generation = {
@@ -174,10 +204,10 @@ export function createFactoryExecutionResultFixture(
     runnerVersion: SANDBOX_RUNNER_VERSION,
     contractVersion: SANDBOX_RUNNER_CONTRACT_VERSION,
     sanitizerVersion: '1.0.0',
-    policyId: 'NODE_WEB_PREVIEW_24_V1',
-    policyVersion: '1.0.0',
+    policyId: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.sandbox.policyId,
+    policyVersion: NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE.sandbox.policyVersion,
     packageManager: 'NONE' as const,
-    helperAbiVersion: '1.0.0',
+    helperAbiVersion: '1.1.0',
     dependencySnapshotHash: null,
     policyHash: sandboxHashes.policyHash,
     commandPolicyHash: sandboxHashes.commandPolicyHash,

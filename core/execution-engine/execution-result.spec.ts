@@ -91,6 +91,18 @@ describe('ExecutionResult invariants', () => {
         hashes: { ...result.hashes, workflowHash: '0'.repeat(64) },
       }).success,
     ).toBe(false);
+    expect(
+      executionResultSchema.safeParse({
+        ...structuredClone(result),
+        hashes: { ...result.hashes, workflowRequestHash: '0'.repeat(64) },
+      }).success,
+    ).toBe(false);
+    expect(
+      executionResultSchema.safeParse({
+        ...structuredClone(result),
+        metadata: { ...result.metadata, contractVersion: '1.0.0' },
+      }).success,
+    ).toBe(false);
   });
 
   it('proíbe dados derivados quando WorkflowResult é nulo', () => {

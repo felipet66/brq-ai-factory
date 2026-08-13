@@ -245,6 +245,8 @@ export function projectPersistedFactoryResult(
               code: result.failure.code,
               sourceCode: result.failure.sourceCode,
               reasonCode: result.failure.reasonCode,
+              profileRuleId: result.failure.profileRuleId,
+              diagnosticSummary: result.failure.diagnosticSummary,
               stageId: result.failure.stage,
             },
       stages: result.stages.map((stage) => ({
@@ -256,6 +258,8 @@ export function projectPersistedFactoryResult(
         outputHash: stage.outputHash,
         failureCode: stage.failure?.code ?? null,
         reasonCode: stage.failure?.reasonCode ?? null,
+        profileRuleId: stage.profileRuleId,
+        diagnosticSummary: stage.diagnosticSummary,
         resourceOutcome: factoryStageResourceOutcome(result, stage.stageId),
       })),
       lineage: {

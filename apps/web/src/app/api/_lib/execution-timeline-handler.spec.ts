@@ -185,7 +185,7 @@ describe('execution timeline HTTP adapter', () => {
       data: SNAPSHOT,
       metadata: {
         requestId: FIXED_REQUEST_ID,
-        apiVersion: '3.2.0',
+        apiVersion: '4.1.0',
         executionId: EXECUTION_ID,
       },
       errors: [],
@@ -285,7 +285,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toEqual({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '4.1.0' },
       errors: [
         {
           code: 'EXECUTION_TIMELINE_NOT_FOUND',
@@ -352,7 +352,7 @@ describe('execution timeline HTTP adapter', () => {
     expect(body).toMatchObject({
       success: false,
       data: null,
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '4.1.0' },
       errors: [{ code: 'METHOD_NOT_ALLOWED' }],
     });
     expect(repository.findByExecutionId).not.toHaveBeenCalled();

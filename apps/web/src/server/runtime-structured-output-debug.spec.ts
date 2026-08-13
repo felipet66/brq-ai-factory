@@ -14,6 +14,7 @@ import {
 import { executionRequestSchema } from '@brq/execution-engine';
 import { createInMemoryExecutionRecordRepository } from '@brq/execution-repository';
 import { createInMemoryExecutionHistory } from '@brq/observability';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import type { JsonObject } from '@brq/shared/types/json-value';
 import { describe, expect, it } from 'vitest';
 
@@ -75,6 +76,7 @@ describe('application structured output diagnostics', () => {
       const request = executionRequestSchema.parse({
         ...executionBody(),
         requestId: FIXED_REQUEST_ID,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
       });
 
       const result = await engine.execute(request);
@@ -91,7 +93,7 @@ describe('application structured output diagnostics', () => {
         issueCount: 2,
         contract: {
           id: 'contract:developer-technical-specification',
-          version: '1.0.3',
+          version: '1.0.4',
           contractHash: expect.stringMatching(/^[a-f0-9]{64}$/),
           schemaHash: expect.stringMatching(/^[a-f0-9]{64}$/),
         },

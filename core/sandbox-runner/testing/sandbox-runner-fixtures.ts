@@ -23,7 +23,7 @@ export function createSandboxExecutionPolicyFixture(
     version: '1.0.0',
     packageManager: 'NONE',
     runtime: { name: 'NODE', version: '24.19.0' },
-    helperAbiVersion: '1.0.0',
+    helperAbiVersion: '1.1.0',
     dependencySnapshotHash: null,
     steps: {
       PREPARE: command('PREPARE', 30_000),

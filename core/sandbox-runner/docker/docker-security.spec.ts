@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { SANDBOX_RUNNER_ERROR_CODES, SANDBOX_RUNNER_ERROR_STAGES } from '../errors';
 import { SANDBOX_ABSOLUTE_LIMITS } from '../limits';
 import { sanitizeSandboxOutput } from '../output-sanitizer';
 import { createSandboxExecutionPolicyFixture } from '../testing/sandbox-runner-fixtures';
@@ -14,6 +15,8 @@ import { BoundedDockerOutputCollector } from './output-collector';
 
 const imageReference = `registry.example/sandbox@sha256:${'a'.repeat(64)}`;
 const imageId = `sha256:${'b'.repeat(64)}`;
+const requiredImageLabel = 'org.brq.sandbox.execution-profile';
+const requiredImageLabelValue = 'node-web-preview-24-v1';
 
 function validImageInspection() {
   return {
@@ -23,7 +26,7 @@ function validImageInspection() {
     Os: 'linux',
     Config: {
       Labels: {
-        'org.brq.sandbox.helper-abi': '1.0.0',
+        'org.brq.sandbox.helper-abi': '1.1.0',
         'org.brq.sandbox.dependency-snapshot': 'none',
         'org.brq.sandbox.runtime-node': '24.19.0',
         'org.brq.sandbox.toolchain.node': '24.19.0',
@@ -34,6 +37,59 @@ function validImageInspection() {
       Entrypoint: null,
     },
   };
+}
+
+type DockerImageVerificationInput = Parameters<typeof verifyDockerRuntimeAndImage>[0];
+
+function validLabeledImageInspection() {
+  const inspection = validImageInspection();
+  return {
+    ...inspection,
+    Config: {
+      ...inspection.Config,
+      Labels: {
+        ...inspection.Config.Labels,
+        [requiredImageLabel]: requiredImageLabelValue,
+      },
+    },
+  };
+}
+
+function validDockerImageVerificationInput(options?: {
+  readonly inspection?: unknown;
+  readonly image?: Partial<DockerImageVerificationInput['image']>;
+}): DockerImageVerificationInput {
+  return {
+    versionJson: JSON.stringify({
+      Client: { Version: '28.0.0' },
+      Server: { Version: '28.0.0' },
+    }),
+    imageJson: JSON.stringify(options?.inspection ?? validLabeledImageInspection()),
+    image: {
+      reference: imageReference,
+      expectedImageId: imageId,
+      platform: 'linux/arm64',
+      requiredLabels: { [requiredImageLabel]: requiredImageLabelValue },
+      toolchainVersions: { NODE: '24.19.0' },
+      ...options?.image,
+    },
+    policy: createSandboxExecutionPolicyFixture(),
+  };
+}
+
+function expectDockerImageMismatch(input: DockerImageVerificationInput, sourceCode: string): void {
+  let thrown: unknown;
+  try {
+    verifyDockerRuntimeAndImage(input);
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toMatchObject({
+    code: SANDBOX_RUNNER_ERROR_CODES.IMAGE_ERROR,
+    stage: SANDBOX_RUNNER_ERROR_STAGES.IMAGE,
+    sourceCode,
+  });
 }
 
 function validContainerInspection() {
@@ -295,6 +351,170 @@ describe('Docker inspect verification', () => {
       }),
     ).toThrow(/imagem local/u);
   });
+
+  it.each([
+    [
+      'image ID',
+      'DOCKER_IMAGE_ID_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: { ...inspection, Id: `sha256:${'c'.repeat(64)}` },
+        });
+      },
+    ],
+    [
+      'repository digest',
+      'DOCKER_IMAGE_REPOSITORY_DIGEST_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: { ...inspection, RepoDigests: [] },
+        });
+      },
+    ],
+    [
+      'platform',
+      'DOCKER_IMAGE_PLATFORM_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: { ...inspection, Architecture: 'amd64' },
+        });
+      },
+    ],
+    [
+      'declared volumes',
+      'DOCKER_IMAGE_VOLUMES_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: { ...inspection.Config, Volumes: { '/data': {} } },
+          },
+        });
+      },
+    ],
+    [
+      'default command',
+      'DOCKER_IMAGE_COMMAND_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: { ...inspection.Config, Cmd: ['node', 'server.js'] },
+          },
+        });
+      },
+    ],
+    [
+      'default entrypoint',
+      'DOCKER_IMAGE_ENTRYPOINT_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: { ...inspection.Config, Entrypoint: ['/bin/sh'] },
+          },
+        });
+      },
+    ],
+    [
+      'required label',
+      'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: {
+              ...inspection.Config,
+              Labels: { ...inspection.Config.Labels, [requiredImageLabel]: 'other-profile' },
+            },
+          },
+        });
+      },
+    ],
+    [
+      'helper label',
+      'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: {
+              ...inspection.Config,
+              Labels: {
+                ...inspection.Config.Labels,
+                'org.brq.sandbox.helper-abi': '1.0.0',
+              },
+            },
+          },
+        });
+      },
+    ],
+    [
+      'toolchain label',
+      'DOCKER_IMAGE_TOOLCHAIN_LABEL_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: {
+              ...inspection.Config,
+              Labels: {
+                ...inspection.Config.Labels,
+                'org.brq.sandbox.toolchain.node': '23.0.0',
+              },
+            },
+          },
+        });
+      },
+    ],
+    [
+      'environment',
+      'DOCKER_IMAGE_ENVIRONMENT_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: { ...inspection.Config, Env: ['PATH=/workspace/bin'] },
+          },
+        });
+      },
+    ],
+    [
+      'Node policy',
+      'DOCKER_IMAGE_NODE_POLICY_MISMATCH',
+      () => {
+        const inspection = validLabeledImageInspection();
+        return validDockerImageVerificationInput({
+          inspection: {
+            ...inspection,
+            Config: {
+              ...inspection.Config,
+              Labels: {
+                ...inspection.Config.Labels,
+                'org.brq.sandbox.toolchain.node': '23.0.0',
+              },
+            },
+          },
+          image: { toolchainVersions: { NODE: '23.0.0' } },
+        });
+      },
+    ],
+  ] satisfies readonly [string, string, () => DockerImageVerificationInput][])(
+    'reports the specific source code for an image %s mismatch',
+    (_name, sourceCode, createInput) => {
+      expectDockerImageMismatch(createInput(), sourceCode);
+    },
+  );
 
   it.each([
     [

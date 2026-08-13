@@ -98,9 +98,8 @@ describe('Product Owner Agent dependency boundaries', () => {
 
     expect(tsconfig.compilerOptions?.paths?.['@brq/product-owner-agent/*']).toBeUndefined();
     expect(publicIndex).not.toContain('deepFreeze');
-    expect(publicIndex).toContain(
-      "export { projectProductOwnerPromptContexts } from './knowledge-projection';",
-    );
+    expect(publicIndex).toContain('calculateProductOwnerSourcePromptContextHash');
+    expect(publicIndex).toContain('projectProductOwnerPromptContexts');
     expect(publicIndex).not.toContain('createProductOwnerAgentRunRequest');
     expect(publicIndex).not.toContain('createGeneratedResult');
     expect(publicIndex).not.toContain('requestLogContext');

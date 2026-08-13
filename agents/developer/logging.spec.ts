@@ -166,6 +166,10 @@ describe('Developer Agent logging', () => {
       'message',
     ];
 
+    expect(contexts[0]).toMatchObject({
+      deliveryIntentVersion: '1.0.0',
+      deliveryMode: 'GREENFIELD',
+    });
     expect(JSON.stringify(contexts)).not.toContain(SECRET);
     expect(contexts.some(containsError)).toBe(false);
     expect(allKeys(contexts)).not.toEqual(expect.arrayContaining(forbiddenKeys));

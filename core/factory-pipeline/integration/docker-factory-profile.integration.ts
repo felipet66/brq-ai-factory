@@ -33,21 +33,21 @@ function workspaceRequest(): WorkspacePlanRequest {
     {
       path: 'index.html',
       content:
-        '<!doctype html><html><head><meta charset="utf-8"><title>Factory profile</title></head><body><script type="module" src="./src/math.js"></script></body></html>\n',
+        '<!doctype html><html><head><meta charset="utf-8"><title>Factory profile</title></head><body><script type="module" src="./math.js"></script></body></html>\n',
       mediaType: 'text/html' as const,
       purpose: 'SOURCE' as const,
     },
     {
-      path: 'src/math.ts',
+      path: 'math.ts',
       content:
         'export function add(left: number, right: number): number { return left + right; }\n',
       mediaType: 'text/typescript' as const,
       purpose: 'SOURCE' as const,
     },
     {
-      path: 'test/math.test.ts',
+      path: 'math.test.ts',
       content:
-        "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { add } from '../src/math.js';\ntest('adds values', () => assert.equal(add(2, 3), 5));\n",
+        "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { add } from './math.js';\ntest('adds values', () => assert.equal(add(2, 3), 5));\n",
       mediaType: 'text/typescript' as const,
       purpose: 'TEST' as const,
     },

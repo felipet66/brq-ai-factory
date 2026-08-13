@@ -1,6 +1,11 @@
-import type { DeveloperAgentResult } from '@brq/developer-agent';
-import type { ProductOwnerAgentResult } from '@brq/product-owner-agent';
-import type { QAAgentResult } from '@brq/qa-agent';
+import { explainDeveloperReadiness, type DeveloperAgentResult } from '@brq/developer-agent';
+import {
+  explainProductOwnerReadiness,
+  type ProductOwnerAgentResult,
+} from '@brq/product-owner-agent';
+import { explainQAReadiness, type QAAgentResult } from '@brq/qa-agent';
+import { readinessDecisionSchema } from '@brq/shared/schemas/readiness-decision.schema';
+import type { ReadinessDecision } from '@brq/shared/types/readiness-decision';
 
 import type { WorkflowProvenance } from './contracts';
 
@@ -13,6 +18,44 @@ const AGENT_BY_STAGE = {
   QA: 'QA',
 } as const;
 
+function createReadinessDecision(
+  stage: AgentStage,
+  result: SupportedResult,
+): ReadinessDecision | null {
+  if (result.outcome !== 'GENERATED') return null;
+
+  if (stage === 'PRODUCT_OWNER') {
+    const generated = result as Extract<ProductOwnerAgentResult, { outcome: 'GENERATED' }>;
+    return readinessDecisionSchema.parse(
+      explainProductOwnerReadiness(
+        generated.specification.openQuestions,
+        generated.specification.assumptions,
+      ),
+    );
+  }
+  if (stage === 'DEVELOPER') {
+    const generated = result as Extract<DeveloperAgentResult, { outcome: 'GENERATED' }>;
+    return readinessDecisionSchema.parse(
+      explainDeveloperReadiness(
+        generated.metadata.sourceReadiness,
+        generated.specification.openQuestions,
+        generated.specification.assumptions,
+      ),
+    );
+  }
+
+  const generated = result as Extract<QAAgentResult, { outcome: 'GENERATED' }>;
+  return readinessDecisionSchema.parse(
+    explainQAReadiness(
+      generated.metadata.productOwnerReadiness,
+      generated.metadata.technicalReadiness,
+      generated.specification.openQuestions,
+      generated.specification.assumptions,
+      generated.specification.blockingItems,
+    ),
+  );
+}
+
 export function createStageProvenance(stage: AgentStage, result: SupportedResult) {
   return {
     stage,
@@ -22,6 +65,7 @@ export function createStageProvenance(stage: AgentStage, result: SupportedResult
     agentVersion: result.context.agentVersion,
     outcome: result.outcome,
     readiness: result.readiness,
+    readinessDecision: createReadinessDecision(stage, result),
     assetBundleHash: result.metadata.assets.bundleHash,
     knowledgeContextHash: result.metadata.knowledge.contextHash,
     promptHash: result.metadata.run.prompt.metadata.promptHash,

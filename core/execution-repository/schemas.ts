@@ -1,6 +1,17 @@
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
+import {
+  factoryPipelineProfileRuleIdSchema,
+  factoryTypeScriptDiagnosticSummarySchema,
+} from '@brq/factory-pipeline';
 import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
 import { isoDateTimeSchema, semanticVersionSchema } from '@brq/shared/schemas/common.schema';
+import {
+  readinessDecisionFactorMatchesStage,
+  readinessDecisionMatchesStageState,
+  readinessDecisionSchema,
+  readinessDecisionSourceMatchesStages,
+  readinessEvidenceStagesAreCanonical,
+} from '@brq/shared/schemas/readiness-decision.schema';
 import { z } from 'zod';
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
@@ -120,6 +131,7 @@ export const persistedProvenanceStageSchema = z
     agentVersion: z.string().min(1).max(128),
     outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
     readiness: z.string().min(1).max(64).nullable(),
+    readinessDecision: readinessDecisionSchema.nullable().default(null),
     assetBundleHash: z.string().regex(HASH_PATTERN),
     knowledgeContextHash: z.string().regex(KNOWLEDGE_HASH_PATTERN),
     promptHash: z.string().regex(HASH_PATTERN),
@@ -128,11 +140,49 @@ export const persistedProvenanceStageSchema = z
     generationHash: nullableHashSchema,
     artifactHashes: z.array(z.string().regex(HASH_PATTERN)).max(100),
   })
-  .strict();
+  .strict()
+  .superRefine((stage, context) => {
+    if (!readinessDecisionMatchesStageState(stage)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['readinessDecision'],
+        message: 'Persisted readiness evidence must match the stage outcome and readiness.',
+      });
+    }
+    stage.readinessDecision?.decisiveFactors.forEach((factor, index) => {
+      if (!readinessDecisionFactorMatchesStage(stage.stage, factor)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['readinessDecision', 'decisiveFactors', index],
+          message: 'Persisted readiness evidence must identify a real source stage.',
+        });
+      }
+    });
+  });
 
 export const persistedProvenanceSchema = z
   .object({ stages: z.array(persistedProvenanceStageSchema).max(3) })
-  .strict();
+  .strict()
+  .superRefine((provenance, context) => {
+    if (!readinessEvidenceStagesAreCanonical(provenance.stages)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stages'],
+        message: 'Persisted provenance stages must be a unique canonical workflow prefix.',
+      });
+    }
+    provenance.stages.forEach((stage, stageIndex) => {
+      stage.readinessDecision?.decisiveFactors.forEach((factor, factorIndex) => {
+        if (!readinessDecisionSourceMatchesStages(factor, provenance.stages)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['stages', stageIndex, 'readinessDecision', 'decisiveFactors', factorIndex],
+            message: 'Persisted SOURCE evidence must match the recorded upstream stage.',
+          });
+        }
+      });
+    });
+  });
 
 export const persistedFactoryStageIdSchema = z.enum([
   'PRODUCT_OWNER',
@@ -162,11 +212,41 @@ export const persistedFactoryStageSchema = z
       .string()
       .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
       .nullable(),
+    profileRuleId: factoryPipelineProfileRuleIdSchema.nullable().default(null),
+    diagnosticSummary: factoryTypeScriptDiagnosticSummarySchema.nullable().default(null),
     resourceOutcome: z
       .enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN'])
       .nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((stage, context) => {
+    if (stage.profileRuleId !== null && stage.stageId !== 'CODE_PROFILE_VALIDATION') {
+      context.addIssue({
+        code: 'custom',
+        path: ['profileRuleId'],
+        message: 'Somente CODE_PROFILE_VALIDATION pode persistir uma regra do profile.',
+      });
+    }
+    if (stage.profileRuleId !== null && stage.status !== 'FAILED') {
+      context.addIssue({
+        code: 'custom',
+        path: ['profileRuleId'],
+        message: 'Uma regra do profile só pode acompanhar uma rejeição do profile.',
+      });
+    }
+    if (
+      stage.diagnosticSummary !== null &&
+      (stage.stageId !== 'SANDBOX_TYPECHECK' ||
+        stage.status !== 'FAILED' ||
+        stage.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['diagnosticSummary'],
+        message: 'Diagnósticos TypeScript pertencem somente a uma falha de typecheck.',
+      });
+    }
+  });
 
 export const persistedFactoryLineageSchema = z
   .object({
@@ -277,6 +357,8 @@ export const persistedFactoryResultSchema = z
           .string()
           .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
           .nullable(),
+        profileRuleId: factoryPipelineProfileRuleIdSchema.nullable().default(null),
+        diagnosticSummary: factoryTypeScriptDiagnosticSummarySchema.nullable().default(null),
         stageId: z.union([
           persistedFactoryStageIdSchema,
           z.literal('EXECUTION'),
@@ -284,6 +366,26 @@ export const persistedFactoryResultSchema = z
         ]),
       })
       .strict()
+      .superRefine((failure, context) => {
+        if (failure.profileRuleId !== null && failure.stageId !== 'CODE_PROFILE_VALIDATION') {
+          context.addIssue({
+            code: 'custom',
+            path: ['profileRuleId'],
+            message: 'Somente CODE_PROFILE_VALIDATION pode persistir uma regra do profile.',
+          });
+        }
+        if (
+          failure.diagnosticSummary !== null &&
+          (failure.stageId !== 'SANDBOX_TYPECHECK' ||
+            failure.reasonCode !== 'TYPESCRIPT_DIAGNOSTICS')
+        ) {
+          context.addIssue({
+            code: 'custom',
+            path: ['diagnosticSummary'],
+            message: 'Diagnósticos TypeScript pertencem somente a uma falha de typecheck.',
+          });
+        }
+      })
       .nullable(),
     stages: z.array(persistedFactoryStageSchema).length(12),
     lineage: persistedFactoryLineageSchema,
@@ -315,6 +417,28 @@ export const persistedFactoryResultSchema = z
         code: 'custom',
         path: ['failure'],
         message: 'Somente resultados não bem-sucedidos possuem falha terminal.',
+      });
+    }
+    const terminalStage = result.stages.find((stage) => stage.stageId === result.terminalStage);
+    if (
+      result.failure !== null &&
+      result.failure.profileRuleId !== (terminalStage?.profileRuleId ?? null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'profileRuleId'],
+        message: 'A regra persistida deve coincidir entre a falha terminal e sua etapa.',
+      });
+    }
+    if (
+      result.failure !== null &&
+      JSON.stringify(result.failure.diagnosticSummary) !==
+        JSON.stringify(terminalStage?.diagnosticSummary ?? null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failure', 'diagnosticSummary'],
+        message: 'O diagnóstico persistido deve coincidir entre a falha e sua etapa.',
       });
     }
   });

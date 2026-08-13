@@ -51,6 +51,9 @@ function elapsed(now: () => number, startedAt: number): number {
 
 function safeSourceCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  if (error instanceof AgentRunError && error.sourceCode === 'AI_PROVIDER_CACHE_MISS') {
+    return sanitizeDeveloperSourceCode(error.sourceCode);
+  }
   return sanitizeDeveloperSourceCode(error.code);
 }
 
@@ -305,6 +308,10 @@ export function createDeveloperAgent(options: CreateDeveloperAgentOptions): Deve
         stage = 'RUNNER_EXECUTION';
         const run = await options.agentRunner.run(runRequest, {
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+          ...(runOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: runOptions.sourceExecutionId }),
         });
         logger.info('developer.run.completed', {
           ...requestLogContext(request, assets),
@@ -351,6 +358,7 @@ export function createDeveloperAgent(options: CreateDeveloperAgentOptions): Deve
           businessValidation = validateDeveloperBusinessRules(
             technicalSpecification,
             request.productOwnerSpecification,
+            request.deliveryIntent,
           );
         }
 

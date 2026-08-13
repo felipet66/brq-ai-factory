@@ -15,6 +15,7 @@ import { HTTP_API_VERSION } from './constants';
 import { jsonResponse } from './response-foundation';
 import {
   executionAcceptedResponseSchema,
+  executionRerunAcceptedResponseSchema,
   executionHistoryDetailResponseSchema,
   executionHistoryDetailSchema,
   executionHistoryPageResponseSchema,
@@ -55,6 +56,32 @@ export function executionAcceptedResponse(job: JobRecord, requestId: string): Re
       requestId,
       apiVersion: HTTP_API_VERSION,
       executionId: job.executionId,
+    },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 202, requestId });
+}
+
+export function executionRerunAcceptedResponse(
+  accepted: {
+    readonly sourceExecutionId: string;
+    readonly executionId: string;
+    readonly jobId: string;
+    readonly status: 'QUEUED';
+    readonly usesOpenAI: false;
+  },
+  requestId: string,
+): Response {
+  const body = executionRerunAcceptedResponseSchema.parse({
+    success: true,
+    data: {
+      ...accepted,
+      replayMode: 'REQUIRE_CACHE_HIT',
+    },
+    metadata: {
+      requestId,
+      apiVersion: HTTP_API_VERSION,
+      executionId: accepted.executionId,
     },
     errors: [],
   });

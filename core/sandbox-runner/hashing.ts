@@ -113,6 +113,11 @@ export interface SandboxResultHashInput {
     readonly stage: string;
     readonly sourceCode: string | null;
     readonly reasonCode: string | null;
+    readonly diagnosticSummary: {
+      readonly diagnosticCount: number;
+      readonly diagnosticCodes: readonly number[];
+      readonly truncated: boolean;
+    } | null;
   } | null;
   readonly policyHash: string;
   readonly commandPolicyHash: string;
@@ -133,7 +138,7 @@ export interface SandboxResultHashInput {
 }
 
 export function calculateSandboxResultHash(input: SandboxResultHashInput): string {
-  return domainHash('brq-sandbox-runner:result:v1', {
+  return domainHash('brq-sandbox-runner:result:v2', {
     runnerVersion: SANDBOX_RUNNER_VERSION,
     contractVersion: SANDBOX_RUNNER_CONTRACT_VERSION,
     sandboxRunId: input.sandboxRunId,
@@ -162,6 +167,7 @@ export function calculateSandboxResultHash(input: SandboxResultHashInput): strin
               stage: step.failure.stage,
               sourceCode: step.failure.sourceCode,
               reasonCode: step.failure.reasonCode,
+              diagnosticSummary: step.failure.diagnosticSummary,
             },
     })),
     resourceOutcome: input.resourceOutcome,

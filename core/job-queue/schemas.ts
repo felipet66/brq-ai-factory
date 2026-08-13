@@ -5,6 +5,30 @@ import { z } from 'zod';
 export const jobIdSchema = z.string().regex(/^job-[a-f0-9]{32}$/);
 export const jobExecutionIdSchema = z.string().regex(/^execution-[a-f0-9]{32}$/);
 
+export const jobExecutionOptionsSchema = z
+  .object({
+    cacheMode: z.enum(['READ_WRITE', 'REQUIRE_HIT']),
+    sourceExecutionId: jobExecutionIdSchema.nullable(),
+  })
+  .strict()
+  .superRefine((options, context) => {
+    if (
+      (options.cacheMode === 'REQUIRE_HIT' && options.sourceExecutionId === null) ||
+      (options.cacheMode === 'READ_WRITE' && options.sourceExecutionId !== null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sourceExecutionId'],
+        message: 'A execução de origem deve existir somente no modo REQUIRE_HIT.',
+      });
+    }
+  });
+
+const defaultJobExecutionOptions = Object.freeze({
+  cacheMode: 'READ_WRITE' as const,
+  sourceExecutionId: null,
+});
+
 export const jobStatusSchema = z.enum(['QUEUED', 'RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']);
 
 export const queueEventTypeSchema = z.enum([
@@ -202,6 +226,7 @@ export const enqueueJobInputSchema = z
     jobId: jobIdSchema,
     executionId: jobExecutionIdSchema,
     request: executionRequestSchema,
+    executionOptions: jobExecutionOptionsSchema.default(defaultJobExecutionOptions),
   })
   .strict();
 
@@ -209,6 +234,7 @@ export const claimedJobSchema = z
   .object({
     record: jobRecordSchema,
     request: executionRequestSchema,
+    executionOptions: jobExecutionOptionsSchema.default(defaultJobExecutionOptions),
   })
   .strict()
   .superRefine((claimed, context) => {

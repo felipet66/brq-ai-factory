@@ -6,6 +6,7 @@ import {
   QA_BUSINESS_VALIDATION_ISSUE_CODES,
   createQABusinessStructureRejection,
   deriveQAReadiness,
+  explainQAReadiness,
   validateQABusinessRules,
 } from './business-validation';
 import { createQASpecification } from './testing/qa-fixtures';
@@ -807,6 +808,27 @@ describe('QA Business Validation', () => {
         [],
       ),
     ).toBe('REQUIRES_CLARIFICATION');
+  });
+
+  it('explica causas upstream e locais em ordem canônica sem conteúdo de origem', () => {
+    expect(
+      explainQAReadiness(
+        'PARTIALLY_READY',
+        'PARTIALLY_READY',
+        [{ id: 'QQ-private', impact: 'NON_BLOCKING' }],
+        [{ id: 'QASM-private', requiresValidation: true }],
+        [],
+      ),
+    ).toEqual({
+      version: '1.0.0',
+      readiness: 'PARTIALLY_READY',
+      decisiveFactors: [
+        { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_PARTIALLY_READY' },
+        { sourceStage: 'DEVELOPER', code: 'SOURCE_PARTIALLY_READY' },
+        { sourceStage: 'QA', code: 'NON_BLOCKING_QUESTION_PRESENT' },
+        { sourceStage: 'QA', code: 'VALIDATION_REQUIRED_ASSUMPTION_PRESENT' },
+      ],
+    });
   });
 
   it('rejeita readiness declarada diferente da derivada', () => {

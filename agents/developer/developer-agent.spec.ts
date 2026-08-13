@@ -3,6 +3,10 @@ import { createArtifactGenerator, type ArtifactGenerator } from '@brq/artifact-g
 import { createKnowledgeLoader, type KnowledgeLoader } from '@brq/knowledge-loader';
 import { calculateCanonicalJsonHash, createPromptBuilder } from '@brq/prompt-builder';
 import { createResponseValidator, type ResponseValidator } from '@brq/response-validator';
+import {
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
 import { createLogger } from '@brq/shared/logger/logger';
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { describe, expect, it } from 'vitest';
@@ -80,9 +84,12 @@ async function createHarness(options: HarnessOptions = {}) {
       },
     ],
   );
+  const exactCacheProvider = Object.assign(provider, {
+    capabilities: Object.freeze({ exactResponseCache: true as const }),
+  });
   const agentRunner = createAgentRunner({
     promptBuilder: createPromptBuilder({ logger }),
-    aiProvider: provider,
+    aiProvider: exactCacheProvider,
     logger,
   });
   const agent = createDeveloperAgent({
@@ -98,12 +105,76 @@ async function createHarness(options: HarnessOptions = {}) {
 }
 
 describe('DeveloperAgent', () => {
+  it('accepts greenfield components and modules declared with CREATE', async () => {
+    const base = createTechnicalSpecification();
+    const specification = createTechnicalSpecification({
+      components: base.components.map((component) => ({
+        ...component,
+        changeType: 'CREATE',
+      })),
+      modules: base.modules.map((module) => ({ ...module, changeType: 'CREATE' })),
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createDeveloperAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(createDeveloperRequest());
+
+    expect(result).toMatchObject({ outcome: 'GENERATED', readiness: 'READY' });
+    expect(
+      result.specification?.components.every(({ changeType }) => changeType === 'CREATE'),
+    ).toBe(true);
+    expect(result.specification?.modules.every(({ changeType }) => changeType === 'CREATE')).toBe(
+      true,
+    );
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it('rejects non-CREATE output in GREENFIELD and preserves it in CHANGE', async () => {
+    const base = createTechnicalSpecification();
+    const specification = createTechnicalSpecification({
+      components: base.components.map((component) => ({
+        ...component,
+        changeType: 'MODIFY' as const,
+      })),
+      modules: base.modules.map((module) => ({
+        ...module,
+        changeType: 'DELETE' as const,
+      })),
+    });
+    const response = createDeveloperAIResponse(specification);
+    const greenfield = await createHarness({ outcomes: [{ type: 'success', response }] });
+
+    const rejected = await greenfield.agent.execute(
+      createDeveloperRequest({ deliveryIntent: GREENFIELD_DELIVERY_INTENT }),
+    );
+    expect(rejected).toMatchObject({
+      outcome: 'VALIDATION_REJECTED',
+      rejectedAt: 'BUSINESS_VALIDATION',
+    });
+    expect(rejected.validation.business?.issues.map(({ code }) => code)).toContain(
+      'DEVELOPER_CHANGE_TYPE_NOT_ALLOWED',
+    );
+
+    const change = await createHarness({
+      outcomes: [{ type: 'success', response: structuredClone(response) }],
+    });
+    const generated = await change.agent.execute(
+      createDeveloperRequest({ deliveryIntent: CHANGE_DELIVERY_INTENT }),
+    );
+    expect(generated).toMatchObject({ outcome: 'GENERATED', specification });
+  });
+
   it('executa o pipeline real uma vez e produz os três drafts técnicos canônicos', async () => {
     const { agent, provider } = await createHarness();
     const controller = new AbortController();
     const request = createDeveloperRequest();
     const requestSnapshot = structuredClone(request);
-    const result = await agent.execute(request, { signal: controller.signal });
+    const result = await agent.execute(request, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: request.context.executionId,
+    });
 
     expect(result.outcome).toBe('GENERATED');
     expect(result.readiness).toBe('READY');
@@ -131,6 +202,8 @@ describe('DeveloperAgent', () => {
     );
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]?.options.signal).toBe(controller.signal);
+    expect(provider.calls[0]?.options.cacheMode).toBe('REQUIRE_HIT');
+    expect(provider.calls[0]?.options.sourceExecutionId).toBe(request.context.executionId);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.artifacts)).toBe(true);
     expect(Object.isFrozen(result.specification)).toBe(true);

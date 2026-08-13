@@ -14,12 +14,40 @@ export function parseAgentRunOptions(input: unknown): AgentRunOptions {
   }
 
   const entries = Object.entries(input);
-  if (entries.some(([key]) => key !== 'signal')) {
+  if (
+    entries.some(([key]) => key !== 'signal' && key !== 'cacheMode' && key !== 'sourceExecutionId')
+  ) {
     throw new TypeError('Opções do Agent Runner inválidas.');
   }
 
+  const cacheMode = 'cacheMode' in input ? input.cacheMode : undefined;
+  if (cacheMode !== undefined && cacheMode !== 'READ_WRITE' && cacheMode !== 'REQUIRE_HIT') {
+    throw new TypeError('Modo de cache do Agent Runner inválido.');
+  }
+  const sourceExecutionId = 'sourceExecutionId' in input ? input.sourceExecutionId : undefined;
+  if (
+    sourceExecutionId !== undefined &&
+    (typeof sourceExecutionId !== 'string' ||
+      sourceExecutionId.trim() !== sourceExecutionId ||
+      sourceExecutionId.length === 0 ||
+      sourceExecutionId.length > 128)
+  ) {
+    throw new TypeError('Execução de origem do Agent Runner inválida.');
+  }
+  if (
+    (cacheMode === 'REQUIRE_HIT' && sourceExecutionId === undefined) ||
+    (cacheMode !== 'REQUIRE_HIT' && sourceExecutionId !== undefined)
+  ) {
+    throw new TypeError('A execução de origem é obrigatória somente em REQUIRE_HIT.');
+  }
+
+  const parsed: Omit<AgentRunOptions, 'signal'> = {
+    ...(cacheMode === undefined ? {} : { cacheMode }),
+    ...(sourceExecutionId === undefined ? {} : { sourceExecutionId }),
+  };
+
   if (!('signal' in input) || input.signal === undefined) {
-    return Object.freeze({});
+    return Object.freeze(parsed);
   }
 
   const signal = input.signal;
@@ -36,7 +64,10 @@ export function parseAgentRunOptions(input: unknown): AgentRunOptions {
     throw new TypeError('AbortSignal inválido.');
   }
 
-  return Object.freeze({ signal: signal as AbortSignal });
+  return Object.freeze({
+    signal: signal as AbortSignal,
+    ...parsed,
+  });
 }
 
 export function parseSafeContext(input: unknown): AgentRunRequest['context'] | undefined {

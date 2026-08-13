@@ -10,9 +10,22 @@ import type { ProductOwnerAgentRequest } from './contracts';
 import { deepFreeze } from './immutability';
 import type { ProductOwnerPromptAssetManifest } from './prompt-assets';
 
-interface ProductOwnerRequestContext {
-  readonly demand: ProductOwnerAgentRequest['demand'];
-  readonly additionalContext: string | null;
+export function projectProductOwnerSourcePromptContextContent(
+  request: ProductOwnerAgentRequest,
+): JsonValue {
+  return {
+    demand: request.demand,
+    additionalContext: request.additionalContext ?? null,
+    deliveryIntent: request.deliveryIntent,
+  } as unknown as JsonValue;
+}
+
+export function calculateProductOwnerSourcePromptContextHash(
+  request: ProductOwnerAgentRequest,
+): string {
+  return `sha256:${calculateCanonicalJsonHash(
+    projectProductOwnerSourcePromptContextContent(request),
+  )}`;
 }
 
 function parsePromptContext(candidate: unknown): PromptContextInput {
@@ -30,11 +43,7 @@ export function projectProductOwnerPromptContexts(
     throw new Error('O contexto carregado não pertence ao Product Owner Agent.');
   }
 
-  const requestContent: ProductOwnerRequestContext = {
-    demand: request.demand,
-    additionalContext: request.additionalContext ?? null,
-  };
-  const requestJson = requestContent as unknown as JsonValue;
+  const requestJson = projectProductOwnerSourcePromptContextContent(request);
 
   const knowledgePromptContext = parsePromptContext({
     id: manifest.contexts.knowledge,
@@ -53,7 +62,7 @@ export function projectProductOwnerPromptContexts(
     kind: 'USER_INPUT',
     serialization: 'JSON',
     content: requestJson,
-    contentHash: `sha256:${calculateCanonicalJsonHash(requestJson)}`,
+    contentHash: calculateProductOwnerSourcePromptContextHash(request),
     references: [],
   });
 

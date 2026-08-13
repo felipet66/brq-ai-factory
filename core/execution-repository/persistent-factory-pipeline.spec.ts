@@ -38,6 +38,8 @@ function failedDeveloperResult(
     stage: 'DEVELOPER' as const,
     sourceCode: 'ORCHESTRATOR_DEVELOPER_FAILED',
     reasonCode: null,
+    profileRuleId: null,
+    diagnosticSummary: null,
     message: 'A execução funcional não foi concluída.',
   };
   const stages = successful.stages.map((stage, index) =>
@@ -123,6 +125,29 @@ describe('Persistent Factory Pipeline', () => {
     ]);
     expect(persistentHistory.flush).toHaveBeenCalledWith(request.workflowId);
     expect(pipeline.execute).toHaveBeenCalledOnce();
+  });
+
+  it('executa o preflight antes de qualquer persistência ou agente da Factory', async () => {
+    const request = createExecutionRequestFixture();
+    const failure = new FactoryPipelineError('sandbox unavailable', {
+      code: FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
+      stage: 'SANDBOX_PREPARE',
+      sourceCode: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH',
+    });
+    const preflight = vi.fn(async () => Promise.reject(failure));
+    const execute = vi.fn(async () => Promise.reject(new Error('must not execute')));
+    const repository = createInMemoryExecutionRecordRepository();
+    const persistent = createPersistentFactoryPipeline({
+      pipeline: { preflight, execute },
+      repository,
+      history: history(),
+    });
+
+    await expect(persistent.execute(request)).rejects.toBe(failure);
+
+    expect(preflight).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+    await expect(repository.findByWorkflowId(request.workflowId)).resolves.toBeNull();
   });
 
   it('persiste resultado terminal anexado e relança o mesmo erro técnico', async () => {

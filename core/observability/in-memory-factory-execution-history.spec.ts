@@ -36,6 +36,8 @@ function createTerminalFactoryResult(
     stage: stageId,
     sourceCode: null,
     reasonCode: null,
+    profileRuleId: null,
+    diagnosticSummary: null,
     message: status === 'CANCELLED' ? 'Execução cancelada.' : 'Etapa rejeitada.',
   };
 
@@ -332,6 +334,8 @@ describe('In-memory Factory execution history', () => {
       stage: 'SANDBOX_TEST' as const,
       sourceCode: 'SANDBOX_STEP_FAILED',
       reasonCode: null,
+      profileRuleId: null,
+      diagnosticSummary: null,
       message: 'Falha funcional sanitizada.',
     };
     Object.assign(sandboxTest, { status: 'FAILED', outputHash: null, failure });

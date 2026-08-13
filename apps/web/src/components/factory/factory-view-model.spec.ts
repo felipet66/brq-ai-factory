@@ -52,6 +52,7 @@ describe('FactoryViewModel', () => {
       timeline: factoryTimelineFixture(),
     });
 
+    expect(FACTORY_VIEW_MODEL_VERSION).toBe('2.5.0');
     expect(model.version).toBe(FACTORY_VIEW_MODEL_VERSION);
     expect(model.execution).toMatchObject({
       executionId: FACTORY_EXECUTION_ID,
@@ -207,6 +208,8 @@ describe('FactoryViewModel', () => {
         code: 'SANDBOX_STEP_FAILED',
         sourceCode: null,
         reasonCode: 'INLINE_ACTIVE_CONTENT',
+        profileRuleId: null,
+        diagnosticSummary: null,
         stageId: 'SANDBOX_PREPARE',
       },
       stages: successful.stages.map((stage) =>
@@ -230,6 +233,175 @@ describe('FactoryViewModel', () => {
       reasonCode: 'INLINE_ACTIVE_CONTENT',
     });
     expect(JSON.stringify(model)).not.toMatch(/EXIT_1|stdout|stderr/u);
+  });
+
+  it('projects bounded TypeScript diagnostic count and codes only for failed typecheck', () => {
+    const successful = factoryResultFixture();
+    const diagnosticSummary = {
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      truncated: false,
+    } as const;
+    const factoryResult = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_TYPECHECK',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+        profileRuleId: null,
+        diagnosticSummary,
+        stageId: 'SANDBOX_TYPECHECK',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_TYPECHECK'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+              diagnosticSummary,
+            }
+          : stage,
+      ),
+    });
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ status: 'FAILED', factoryResult }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(
+      model.technicalStages.find((stage) => stage.id === 'SANDBOX_TYPECHECK')?.diagnosticSummary,
+    ).toEqual(diagnosticSummary);
+
+    const expanded = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          ...factoryResult,
+          stages: factoryResult.stages.map((stage) =>
+            stage.stageId === 'SANDBOX_TYPECHECK'
+              ? {
+                  ...stage,
+                  diagnosticSummary: {
+                    ...diagnosticSummary,
+                    path: '/private/workspace/src/index.ts',
+                  } as never,
+                }
+              : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    expect(
+      expanded.technicalStages.find((stage) => stage.id === 'SANDBOX_TYPECHECK')?.diagnosticSummary,
+    ).toBeNull();
+    expect(JSON.stringify(expanded)).not.toMatch(/private workspace|index\.ts/iu);
+  });
+
+  it('projects only an allowlisted rule actually recorded for failed Profile Validation', () => {
+    const successful = factoryResultFixture();
+    const profileFailure = {
+      kind: 'FACTORY_PIPELINE' as const,
+      code: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+      sourceCode: null,
+      reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+      profileRuleId: 'content.javascript.relative-references' as const,
+      diagnosticSummary: null,
+      stageId: 'CODE_PROFILE_VALIDATION' as const,
+    };
+    const stages = successful.stages.map((stage) =>
+      stage.stageId === 'CODE_PROFILE_VALIDATION'
+        ? {
+            ...stage,
+            status: 'FAILED' as const,
+            failureCode: profileFailure.code,
+            reasonCode: profileFailure.reasonCode,
+            profileRuleId: profileFailure.profileRuleId,
+          }
+        : stage,
+    );
+    const recorded = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_PROFILE_VALIDATION',
+          failure: profileFailure,
+          stages,
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(
+      recorded.technicalStages.find((stage) => stage.id === 'CODE_PROFILE_VALIDATION'),
+    ).toMatchObject({
+      status: 'FAILED',
+      reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+      profileRuleId: 'content.javascript.relative-references',
+    });
+
+    const fallback = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_PROFILE_VALIDATION',
+          failure: profileFailure,
+          stages: stages.map((stage) =>
+            stage.stageId === 'CODE_PROFILE_VALIDATION' ? { ...stage, profileRuleId: null } : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    expect(
+      fallback.technicalStages.find((stage) => stage.id === 'CODE_PROFILE_VALIDATION')
+        ?.profileRuleId,
+    ).toBe('content.javascript.relative-references');
+
+    const unknownRule = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_PROFILE_VALIDATION',
+          failure: { ...profileFailure, profileRuleId: 'internal.customer.rule' as never },
+          stages: stages.map((stage) =>
+            stage.stageId === 'CODE_PROFILE_VALIDATION'
+              ? { ...stage, profileRuleId: 'internal.customer.rule' as never }
+              : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    expect(
+      unknownRule.technicalStages.find((stage) => stage.id === 'CODE_PROFILE_VALIDATION')
+        ?.profileRuleId,
+    ).toBeNull();
+    expect(JSON.stringify(unknownRule)).not.toContain('internal.customer.rule');
+
+    const unrelatedTerminal = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_GENERATOR',
+          failure: { ...profileFailure, stageId: 'CODE_GENERATOR' },
+          stages: stages.map((stage) => ({ ...stage, profileRuleId: null })),
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    expect(
+      unrelatedTerminal.technicalStages.find((stage) => stage.id === 'CODE_PROFILE_VALIDATION')
+        ?.profileRuleId,
+    ).toBeNull();
   });
 
   it.each<[FactoryTimelineSource['stages'][number]['status'], FactoryVisualStatus]>([
@@ -407,6 +579,7 @@ describe('FactoryViewModel', () => {
                   ...developer,
                   outcome: 'VALIDATION_REJECTED',
                   readiness: null,
+                  readinessDecision: null,
                   hashes: { ...developer.hashes, generationHash: null, artifactHashes: [] },
                 }
               : stage,
@@ -727,6 +900,237 @@ describe('FactoryViewModel', () => {
     expect(serialized).not.toMatch(
       /promptContent|knowledgeContent|specificationContent|artifactContent|rawResponse|stackTrace/,
     );
+  });
+
+  it('derives the propagated readiness path and Code Generator reason from persisted metadata', () => {
+    const execution = factoryExecutionFixture();
+    const successfulFactory = factoryResultFixture();
+    const qaBlockedFactory = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'CODE_GENERATOR',
+      readiness: 'PARTIALLY_READY',
+      generationStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_QA_NOT_READY',
+        sourceCode: null,
+        reasonCode: 'SOURCE_QA_READINESS_NOT_READY',
+        profileRuleId: null,
+        diagnosticSummary: null,
+        stageId: 'CODE_GENERATOR',
+      },
+      stages: successfulFactory.stages.map((stage) =>
+        stage.stageId === 'CODE_GENERATOR'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_QA_NOT_READY',
+              reasonCode: 'SOURCE_QA_READINESS_NOT_READY',
+            }
+          : stage,
+      ),
+    });
+    const qaBlocked = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        readiness: 'PARTIALLY_READY',
+        provenance: {
+          stages: execution.provenance!.stages.map((stage) => ({
+            ...stage,
+            readiness: 'PARTIALLY_READY',
+            readinessDecision: {
+              version: '1.0.0',
+              readiness: 'PARTIALLY_READY',
+              decisiveFactors:
+                stage.stage === 'PRODUCT_OWNER'
+                  ? [
+                      {
+                        sourceStage: 'PRODUCT_OWNER' as const,
+                        code: 'NON_BLOCKING_QUESTION_PRESENT' as const,
+                      },
+                    ]
+                  : stage.stage === 'DEVELOPER'
+                    ? [
+                        {
+                          sourceStage: 'PRODUCT_OWNER' as const,
+                          code: 'SOURCE_PARTIALLY_READY' as const,
+                        },
+                      ]
+                    : [
+                        {
+                          sourceStage: 'PRODUCT_OWNER' as const,
+                          code: 'SOURCE_PARTIALLY_READY' as const,
+                        },
+                        {
+                          sourceStage: 'DEVELOPER' as const,
+                          code: 'SOURCE_PARTIALLY_READY' as const,
+                        },
+                      ],
+            },
+          })),
+        },
+        factoryResult: qaBlockedFactory,
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(qaBlocked.readinessTrace).toEqual({
+      steps: [
+        {
+          agentId: 'PRODUCT_OWNER',
+          agentName: 'Product Owner',
+          readiness: 'PARTIALLY_READY',
+          evidence: 'RECORDED',
+          factors: [{ sourceStage: 'PRODUCT_OWNER', code: 'NON_BLOCKING_QUESTION_PRESENT' }],
+        },
+        {
+          agentId: 'DEVELOPER',
+          agentName: 'Developer',
+          readiness: 'PARTIALLY_READY',
+          evidence: 'RECORDED',
+          factors: [{ sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_PARTIALLY_READY' }],
+        },
+        {
+          agentId: 'QA',
+          agentName: 'QA',
+          readiness: 'PARTIALLY_READY',
+          evidence: 'RECORDED',
+          factors: [
+            { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_PARTIALLY_READY' },
+            { sourceStage: 'DEVELOPER', code: 'SOURCE_PARTIALLY_READY' },
+          ],
+        },
+      ],
+      outcome: {
+        kind: 'FACTORY_BLOCKED_BEFORE_CODE_GENERATION',
+        code: 'FACTORY_PIPELINE_QA_NOT_READY',
+        reasonCode: 'SOURCE_QA_READINESS_NOT_READY',
+      },
+    });
+
+    const sourceRejectedFactory = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'CODE_GENERATOR',
+      generationStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+        sourceCode: null,
+        reasonCode: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+        profileRuleId: null,
+        diagnosticSummary: null,
+        stageId: 'CODE_GENERATOR',
+      },
+      stages: successfulFactory.stages.map((stage) =>
+        stage.stageId === 'CODE_GENERATOR'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+              reasonCode: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+            }
+          : stage,
+      ),
+    });
+    const sourceRejected = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: sourceRejectedFactory,
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(sourceRejected.readinessTrace.outcome).toEqual({
+      kind: 'CODE_GENERATOR_SOURCE_REJECTED',
+      code: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+      reasonCode: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+    });
+
+    const unknownReasonFactory = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'CODE_GENERATOR',
+      generationStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+        sourceCode: null,
+        reasonCode: 'INTERNAL_CUSTOMER_TOKEN',
+        profileRuleId: null,
+        diagnosticSummary: null,
+        stageId: 'CODE_GENERATOR',
+      },
+      stages: successfulFactory.stages.map((stage) =>
+        stage.stageId === 'CODE_GENERATOR'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+              reasonCode: 'INTERNAL_CUSTOMER_TOKEN',
+            }
+          : stage,
+      ),
+    });
+    const unknownReason = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: unknownReasonFactory,
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+
+    expect(unknownReason.readinessTrace.outcome).toBeNull();
+    expect(JSON.stringify(unknownReason.readinessTrace)).not.toContain('INTERNAL_CUSTOMER_TOKEN');
+    expect(JSON.stringify(sourceRejected.readinessTrace)).not.toMatch(
+      /specification|prompt|response|content/iu,
+    );
+  });
+
+  it('does not infer propagation from adjacent equal readiness values', () => {
+    const execution = factoryExecutionFixture();
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        provenance: {
+          stages: execution.provenance!.stages.map((stage) =>
+            stage.stage === 'DEVELOPER'
+              ? {
+                  ...stage,
+                  readiness: 'PARTIALLY_READY',
+                  readinessDecision: {
+                    version: '1.0.0',
+                    readiness: 'PARTIALLY_READY',
+                    decisiveFactors: [
+                      {
+                        sourceStage: 'DEVELOPER',
+                        code: 'NON_BLOCKING_QUESTION_PRESENT',
+                      },
+                    ],
+                  },
+                }
+              : stage.stage === 'QA'
+                ? {
+                    ...stage,
+                    readiness: 'PARTIALLY_READY',
+                    readinessDecision: null,
+                  }
+                : stage,
+          ),
+        },
+      }),
+      timeline: factoryTimelineFixture(),
+    });
+
+    expect(model.readinessTrace.steps[1]).toMatchObject({
+      agentId: 'DEVELOPER',
+      readiness: 'PARTIALLY_READY',
+      evidence: 'RECORDED',
+      factors: [{ sourceStage: 'DEVELOPER', code: 'NON_BLOCKING_QUESTION_PRESENT' }],
+    });
+    expect(model.readinessTrace.steps[2]).toMatchObject({
+      agentId: 'QA',
+      readiness: 'PARTIALLY_READY',
+      evidence: 'LEGACY_UNKNOWN',
+      factors: [],
+    });
   });
 
   it('keeps unavailable public evidence nullable instead of manufacturing defaults', () => {

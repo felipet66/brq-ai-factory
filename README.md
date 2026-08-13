@@ -53,7 +53,9 @@ brq-ai-factory/
 │   │   ├── ADR-033-SANDBOX-BUILD-TEST-RUNNER-BOUNDARY.md
 │   │   ├── ADR-034-FACTORY-PIPELINE-INTEGRATION-BOUNDARY.md
 │   │   ├── ADR-035-PREVIEW-RUNNER-BOUNDARY.md
-│   │   └── ADR-036-FACTORY-EXECUTION-PROFILE-BOUNDARY.md
+│   │   ├── ADR-036-FACTORY-EXECUTION-PROFILE-BOUNDARY.md
+│   │   ├── ADR-037-AGENT-CONTRACT-INVARIANT-ALIGNMENT.md
+│   │   └── ADR-038-EXECUTION-REPLAY-AND-DETERMINISTIC-QUALITY-COMPILER.md
 │   │
 │   ├── 00-VISION.md
 │   ├── 01-PROJECT_CONTEXT.md
@@ -132,12 +134,14 @@ brq-ai-factory/
 ├── prompts/
 │   ├── product-owner/
 │   │   ├── 1.0.0/
-│   │   └── 1.0.1/ (ativo)
+│   │   ├── 1.0.1/
+│   │   └── 1.0.2/ (ativo)
 │   ├── developer/
 │   │   ├── 1.0.0/
 │   │   ├── 1.0.1/
 │   │   ├── 1.0.2/
-│   │   └── 1.0.3/ (ativo)
+│   │   ├── 1.0.3/
+│   │   └── 1.0.4/ (ativo)
 │   ├── qa/
 │   │   ├── 1.0.0/
 │   │   ├── 1.0.1/
@@ -169,8 +173,9 @@ Pré-requisitos:
 nvm use
 npm ci
 cp .env.example .env
-npm run prisma:migrate:deploy
 npm run prisma:validate
+npm run prisma:migrate:deploy
+npm run prisma:generate
 npm run auth:seed
 npm run dev
 ```
@@ -180,6 +185,23 @@ resolve `knowledge/` a partir do workspace por padrão.
 
 O MVP utiliza SQLite local. Os comandos de migration inicializam o arquivo configurado em
 `DATABASE_URL` quando necessário. Nenhuma configuração de deploy faz parte do MVP atual.
+
+As migrations `20260812180000_ai_response_cache` e
+`20260812190000_execution_request_snapshot` habilitam rerun estrito sem nova chamada de IA. A
+primeira execução continua chamando IA para Product Owner, Developer e Code Generator; ela grava
+checkpoints exatos por `(executionId, agent)`, enquanto o QA da Factory é compilado
+deterministicamente. Depois de atualizar o código, aplique as migrations antes de iniciar o host:
+
+```bash
+nvm use
+npm run prisma:validate
+npm run prisma:migrate:deploy
+npm run prisma:generate
+```
+
+Elas são aditivas e não fazem backfill. Toda submissão HTTP aceita depois das migrations persiste o
+snapshot privado owner-scoped; somente uma execução da Factory que também conclua Product Owner,
+Developer e Code Generator possui os três checkpoints e pode passar no preflight de replay.
 
 O host autenticado exige `BETTER_AUTH_SECRET` com ao menos 32 caracteres e uma origem HTTP(S)
 exata em `BRQ_APP_ORIGIN`. O seed local é explícito e exige `BRQ_SEED_ADMIN_PASSWORD` e
@@ -256,7 +278,9 @@ Os repositories históricos de domínio permanecem disponíveis sem alteração.
 o agregado normalizado `ExecutionRecord`, dedicado ao histórico minimizado de execuções, sem
 persistir prompts, specifications, respostas, knowledge ou conteúdo de artifacts. A Sprint 18
 adiciona a relação normalizada `ExecutionJob`, que persiste somente `jobId`, status e timestamps da
-fila; o `ExecutionRequest` permanece exclusivamente em memória enquanto o job estiver ativo.
+fila. Para novas execuções, a raiz privada de replay persiste separadamente o `ExecutionRequest`
+validado, correlacionado por `executionId`, `ownerId` e hash canônico; ele não é projetado no
+histórico público e todo lookup exige o owner autenticado.
 
 A Sprint 19 adiciona `User`, `Session`, `Account` e `Verification` para o adapter de autenticação e
 torna `ExecutionRecord.userId` obrigatório. `ExecutionJob` herda o owner pela relação com o
@@ -270,7 +294,22 @@ portas, container IDs, stdout/stderr, cookies e tickets em claro permanecem fora
 
 ## AI Provider
 
-O workspace `@brq/ai-provider` contém a interface abstrata, o adapter OpenAI e o FakeAIProvider. A configuração real utiliza `OPENAI_API_KEY` somente no servidor, com timeout padrão de 60 segundos. A suíte padrão não chama serviços externos.
+O workspace `@brq/ai-provider` contém a interface abstrata, o adapter OpenAI, o FakeAIProvider e o
+decorator de checkpoints exatos. A configuração real utiliza `OPENAI_API_KEY` somente no servidor,
+com timeout padrão de 60 segundos. Cada resposta `COMPLETED` de uma etapa generativa é persistida
+sob a chave `(executionId, agent)`, acompanhada de `provider`, `requestHash` e `responseHash`; o
+request e o prompt não são armazenados nessa tabela. Esses registros são checkpoints de uma
+execução, não um cache global entre execuções semanticamente parecidas.
+
+A execução normal continua chamando o provider em seu primeiro processamento de Product Owner,
+Developer e Code Generator. O QA crítico da Factory é determinístico e não possui checkpoint de
+IA. Antes de aceitar um rerun, o backend verifica os checkpoints íntegros de `PRODUCT_OWNER`,
+`DEVELOPER` e `CODE_GENERATOR` na execução de origem. `REQUIRE_HIT` reutiliza somente a resposta
+exata dessa origem, confirma provider, `requestHash`, `responseHash`, schema e conclusão e copia o
+checkpoint para a nova execução, permitindo cadeias de rerun. O modelo resolvido pode diferir do
+alias solicitado e permanece registrado na resposta; o alias solicitado já integra o
+`requestHash`. Miss, corrupção ou incompatibilidade falham antes ou durante o job sem fallback pago
+e sem chamada à OpenAI. A suíte padrão não chama serviços externos.
 
 O teste real opcional exige ativação e modelo explícitos:
 
@@ -348,10 +387,12 @@ O workspace `agents/product-owner` implementa a primeira fachada concreta de age
 
 O contrato funcional produz uma `ProductOwnerSpecification` com readiness `READY`, `PARTIALLY_READY` ou `REQUIRES_CLARIFICATION`. A Business Validation recalcula essa decisão, verifica completude, IDs e referências cruzadas sem alterar a resposta e sinaliza truncamento quando excede o limite de issues. Somente uma saída aceita gera exatamente os drafts canônicos `story.md`, `acceptance.md` e `backlog.json`. O JSON Schema inicial evita `$schema` e `uniqueItems` para a compatibilidade alvo com Structured Outputs de modelos-base; modelos fine-tuned exigem verificação explícita. Persistência, retry e avanço de workflow continuam fora do agente.
 
-O release `prompts/product-owner/1.0.0` permanece preservado. O bundle ativo `1.0.1` explicita nas
-instruções que `backlogItems[].dependencyIds` deve referenciar somente IDs existentes em
-`dependencies[].id`, sem alterar o JSON Schema ou a Business Validation que já aplica essa
-invariante.
+Os releases `prompts/product-owner/1.0.0` e `1.0.1` permanecem preservados. O bundle ativo `1.0.2`
+mantém a regra de referências de dependência e torna elegível para `openQuestions` somente uma
+decisão concreta pendente com impacto funcional material. Em demandas GREENFIELD completas,
+escolhas convencionais, locais e reversíveis usam defaults funcionais mínimos e não criam dúvidas
+ou premissas pendentes de validação. Incerteza concreta continua produzindo `PARTIALLY_READY` ou
+`REQUIRES_CLARIFICATION`. O JSON Schema e a Business Validation permanecem inalterados.
 
 [Fluxo visual do Product Owner Agent](knowledge/32-PRODUCT_OWNER_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-019](knowledge/ADR/ADR-019-PRODUCT-OWNER-AGENT-BOUNDARY.md)
 
@@ -363,11 +404,14 @@ A saída é uma `TechnicalSpecification` declarativa com arquitetura, complexida
 
 O Developer atua como arquiteto: não gera código ou testes, não executa comandos, não persiste drafts, não altera estados, não retenta e não coordena Product Owner, QA ou Orchestrator. O contexto `DEVELOPER` mantém seis documentos obrigatórios dentro do orçamento padrão de 64 KiB; documentos adicionais continuam opcionais e determinísticos.
 
-Os releases `prompts/developer/1.0.0`, `1.0.1` e `1.0.2` permanecem preservados. O bundle ativo
-`1.0.3` mantém o JSON Schema público do `1.0.2` e explicita, em ordem normativa, a derivação de
-readiness a partir da specification funcional, de `openQuestions[].impact` e de
-`assumptions[].requiresValidation`. A instrução final exige conferir o valor declarado sobre as
-coleções finais; a Developer Business Validation permanece autoritativa e inalterada.
+Os releases `prompts/developer/1.0.0`–`1.0.3` permanecem preservados. O bundle ativo `1.0.4` mantém
+o JSON Schema público do `1.0.3`, sua tabela normativa de readiness e torna trusted a semântica de
+`changeType` orientada por `deliveryIntent.mode`: GREENFIELD exige `CREATE` em todos os Components
+e Modules; CHANGE preserva `CREATE`, `MODIFY` ou `DELETE` somente quando sustentado pela mudança
+real. A instrução final repete o preflight e declara inválida uma saída GREENFIELD não-CREATE. A
+Developer Business Validation permanece autoritativa e valida a mesma regra a partir do
+`deliveryIntent` host-owned, sem reescrever a resposta. O bundle está pinado por
+`90cc14824bdb1abf6879692a8a0924171434f30ec956caa25ef03463ba611a9a`.
 
 O diagnóstico local do Structured Output não chama provider. Coloque uma resposta JSON capturada
 em `.ai/debug/structured-output/` — diretório ignorado pelo Git — e execute:
@@ -393,9 +437,15 @@ schema, o runtime ou a validação de negócio.
 
 ## QA Agent
 
-O workspace `agents/qa` implementa a terceira fachada concreta. O request recebe `ProductOwnerSpecification` e `TechnicalSpecification` pelos contratos públicos e valida a compatibilidade do par antes de carregar knowledge ou consumir IA. A fachada não executa nem chama os agentes anteriores.
+O workspace `agents/qa` implementa a terceira fachada concreta. O request recebe
+`ProductOwnerSpecification` e `TechnicalSpecification` pelos contratos públicos e valida a
+compatibilidade do par sem chamar os agentes anteriores.
 
-Cada tentativa projeta exatamente três contextos `INPUT/UNTRUSTED` e segue `Knowledge Loader → Agent Runner → Response Validator → QA Business Validation → Artifact Generator`. A Business Validation exige cobertura verificável de todos os IDs `AC`, `BR`, `DEC` e `DOD`, recalcula totais e readiness e rejeita referências inválidas sem corrigir a saída.
+Na Factory, a especificação de QA é compilada deterministicamente a partir das duas fontes e
+continua passando por `Response Validator → QA Business Validation → Artifact Generator`. O
+compilador deriva readiness, cenários e rastreabilidade sem inventar perguntas ou premissas, usa
+zero tokens e não chama `AIProvider`. A Business Validation permanece intacta e exige cobertura
+verificável de todos os IDs `AC`, `BR`, `DEC` e `DOD`.
 
 Os releases `prompts/qa/1.0.0`–`1.0.3` permanecem preservados. O bundle ativo `1.0.4` mantém o
 mesmo JSON Schema público, a auditoria de cobertura, a tabela de readiness e o preflight par-a-par,
@@ -407,7 +457,12 @@ nem autocorrige uma resposta rejeitada. O bundle está pinado por
 `d72d8c454438a3a523e9aa034211a171db12ac49e0a2736f12d4139fe6fb20bd`; no cenário denso, o prompt
 usa 426.475 B dos 512 KiB configurados.
 
-Uma saída aceita gera, nessa ordem, `test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA Agent não recebe código, não executa testes, não gera Playwright, não persiste drafts, não retenta e não afirma aprovação operacional.
+Os bundles QA anteriores e a fachada generativa permanecem preservados para composição consultiva
+explícita fora da Factory; o Playground apenas inspeciona o bundle/prompt e valida candidates
+manuais. Nenhum deles participa do caminho crítico da Factory. Uma saída aceita gera, nessa ordem,
+`test-plan.md`, `traceability-matrix.json` e `qa-specification.md`. O QA não recebe código, não
+executa testes e não afirma aprovação operacional; essa evidência pertence a profile, typecheck,
+build e test no Sandbox.
 
 [Fluxo visual do QA Agent](knowledge/35-QA_AGENT_FLOW.md) · [Visão geral do pipeline](knowledge/33-PIPELINE_OVERVIEW.md) · [ADR-021](knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md)
 
@@ -606,20 +661,29 @@ O Engine não conhece agentes ou componentes inferiores, não persiste, não ret
 registro global e propaga cancelamento somente pelo mesmo `AbortSignal`.
 
 Para o dispatch assíncrono, o Engine também expõe `deriveExecutionIdentity(request)`: uma operação
-pura que reserva o `executionId` e o `executionRequestHash` usando o mesmo algoritmo versionado de
-`execute()`, sem iniciar o Orchestrator ou alterar estado. API, fila e Frontend nunca calculam a
-identidade da execução.
+pura que reserva o `executionId`, o `executionRequestHash` e o `workflowRequestHash` usando o mesmo
+algoritmo versionado de `execute()`, sem iniciar o Orchestrator ou alterar estado. API, fila e
+Frontend nunca calculam a identidade da execução.
 
 [Fluxo visual do Execution Engine](knowledge/37-EXECUTION_ENGINE_FLOW.md) · [ADR-023](knowledge/ADR/ADR-023-EXECUTION-ENGINE-BOUNDARY.md)
 
 ## HTTP API
 
-A API permanece um adapter em Next.js 16 Route Handlers. A versão aditiva `3.2.0` preserva a
-fronteira autenticada `3.0.0` e os contratos assíncronos introduzidos na versão `2.0.0`:
+A API permanece um adapter em Next.js 16 Route Handlers. A versão `4.1.0` mantém explícita a
+seleção pública `deliveryMode` (`GREENFIELD` ou `CHANGE`), preserva a fronteira autenticada e os
+contratos assíncronos introduzidos na versão `2.0.0`:
 `POST /api/executions` valida a entrada, delega ao `ExecutionDispatcher` e devolve imediatamente
 `202 Accepted` com `executionId`, `jobId` e status `QUEUED`; o workflow não mantém a conexão HTTP
 aberta. `GET /api/jobs/[id]` consulta o repository e devolve `QUEUED`, `RUNNING`, `SUCCESS`,
 `FAILED` ou `CANCELLED` com timestamps minimizados.
+
+`POST /api/executions/[id]/rerun` cria uma nova execução imutável a partir do snapshot privado da
+origem. A rota exige ownership, corpo vazio e same-origin, aceita somente uma origem terminal com
+Code Generator concluído e faz o preflight dos checkpoints de Product Owner, Developer e Code
+Generator antes do enqueue. O job usa `REQUIRE_CACHE_HIT`; o retorno `202` declara
+`usesOpenAI: false`. Cada etapa generativa — Product Owner, Developer e Code Generator — valida e
+copia o checkpoint exato da origem para a execução filha; qualquer ausência, corrupção ou
+divergência encerra o fluxo sem chamar a OpenAI. A origem nunca é reaberta ou alterada.
 
 `GET /api/health` continua sem consultar banco, IA ou workflow. `GET /api/executions`,
 `GET /api/executions/[id]` e `GET /api/executions/[id]/timeline` continuam consultando o
@@ -663,6 +727,14 @@ Factory consulta o job enquanto ele permanece enfileirado, troca para a Timeline
 execução e atualiza o detalhe uma vez ao observar um estado terminal. Falhas e cancelamentos não
 disparam nova execução. O histórico, o detalhe técnico e a Factory continuam consumindo somente
 read models HTTP minimizados.
+
+Quando uma execução falha depois de concluir o Code Generator, a Factory oferece **Rerun
+cache-only**. O controle cria novos IDs e abre a nova Factory View somente depois do preflight dos
+três checkpoints generativos; ele nunca muda para uma chamada paga em caso de miss. A execução
+filha recebe cópias correlacionadas desses checkpoints e pode ser origem de outro rerun estrito.
+Execuções anteriores às migrations podem ainda exibir o controle pela evidência histórica; ao
+clicar, o backend responde `409` seguro quando não encontra snapshot/checkpoints e não chama a
+OpenAI.
 
 Clients HTTP internos continuam sendo os únicos pontos que chamam `fetch`. O Frontend não importa
 Engine, Worker, fila, repository, Orchestrator, agentes, runtime ou internals da API e não renderiza

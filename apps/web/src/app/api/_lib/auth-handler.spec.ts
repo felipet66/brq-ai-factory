@@ -89,7 +89,7 @@ describe('authentication HTTP adapter', () => {
     expect(body).toEqual({
       success: true,
       data: { user: AUTHENTICATED_PRINCIPAL.user },
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '4.1.0' },
       errors: [],
     });
     expect(signInEmail).toHaveBeenCalledWith({
@@ -261,7 +261,7 @@ describe('authentication HTTP adapter', () => {
     expect(body).toEqual({
       success: true,
       data: { loggedOut: true },
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '4.1.0' },
       errors: [],
     });
     expect(revokeSession).toHaveBeenCalledWith({

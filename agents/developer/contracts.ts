@@ -120,6 +120,8 @@ export type DeveloperAgentResult = DeepReadonly<z.infer<typeof developerAgentRes
 
 export interface DeveloperAgentRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateDeveloperAgentOptions {

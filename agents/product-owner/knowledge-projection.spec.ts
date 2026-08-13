@@ -60,6 +60,7 @@ describe('Product Owner knowledge projection', () => {
     expect(requestContent).toEqual({
       demand: request.demand,
       additionalContext: request.additionalContext,
+      deliveryIntent: request.deliveryIntent,
     });
     expect(Object.isFrozen(contexts)).toBe(true);
     expect(Object.isFrozen(contexts[1]!.content)).toBe(true);
@@ -73,5 +74,21 @@ describe('Product Owner knowledge projection', () => {
         loadProductOwnerPromptAssets().manifest,
       ),
     ).toThrow('não pertence ao Product Owner');
+  });
+
+  it('projects the immutable delivery intent as request data', () => {
+    const request = createProductOwnerRequest();
+    const contexts = projectProductOwnerPromptContexts(
+      knowledgeContext(),
+      request,
+      loadProductOwnerPromptAssets().manifest,
+    );
+
+    expect(contexts[1]?.content).toEqual({
+      demand: request.demand,
+      additionalContext: request.additionalContext,
+      deliveryIntent: request.deliveryIntent,
+    });
+    expect(loadProductOwnerPromptAssets().manifest.version).toBe('1.0.2');
   });
 });

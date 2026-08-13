@@ -23,11 +23,11 @@ describe('health HTTP adapter', () => {
       success: true,
       data: {
         status: 'ok',
-        version: '3.2.0',
+        version: '4.1.0',
         engineVersion: '1.0.0',
-        contractVersion: '1.0.0',
+        contractVersion: '1.1.0',
       },
-      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '3.2.0' },
+      metadata: { requestId: FIXED_REQUEST_ID, apiVersion: '4.1.0' },
       errors: [],
     });
     expect(response.headers.get('x-request-id')).toBe(FIXED_REQUEST_ID);

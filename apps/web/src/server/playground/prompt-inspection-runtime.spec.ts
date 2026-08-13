@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { technicalSpecificationStructureSchema } from '@brq/developer-agent';
 import {
   PROMPT_INSPECTOR_ERROR_CODES,
   promptInspectionCatalogSchema,
@@ -35,8 +36,8 @@ describe('inspection-only Playground runtime', () => {
       '1.0.0',
     ]);
     expect(catalog.agents.map(({ versions }) => versions.promptVersion)).toEqual([
-      '1.0.1',
-      '1.0.3',
+      '1.0.2',
+      '1.0.4',
       '1.0.4',
     ]);
     expect(catalog.agents.every(({ examples }) => examples.length > 0)).toBe(true);
@@ -109,6 +110,34 @@ describe('inspection-only Playground runtime', () => {
       expect(result.stages.every(({ issuesTruncated }) => !issuesTruncated)).toBe(true);
     }
   }, 20_000);
+
+  it('treats the Developer example as GREENFIELD and rejects a non-CREATE candidate', async () => {
+    const descriptor = inspector.catalog().agents.find(({ agent }) => agent === 'DEVELOPER')!;
+    const example = descriptor.examples[0]!;
+    const candidate = technicalSpecificationStructureSchema.parse(JSON.parse(example.candidate!));
+
+    expect(candidate.components.every(({ changeType }) => changeType === 'CREATE')).toBe(true);
+    expect(candidate.modules.every(({ changeType }) => changeType === 'CREATE')).toBe(true);
+
+    const incompatible = structuredClone(candidate);
+    incompatible.components[0] = { ...incompatible.components[0]!, changeType: 'MODIFY' };
+    const result = promptInspectionValidationResultSchema.parse(
+      await inspector.validate({
+        agent: descriptor.agent,
+        input: example.input,
+        candidate: { content: JSON.stringify(incompatible) },
+      }),
+    );
+
+    expect(result.status).toBe('FAIL');
+    expect(result.stages.map(({ status }) => status)).toEqual(['PASS', 'PASS', 'PASS', 'FAIL']);
+    expect(result.stages[3]).toMatchObject({
+      stage: 'BUSINESS_VALIDATION',
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: 'DEVELOPER_CHANGE_TYPE_NOT_ALLOWED' }),
+      ]),
+    });
+  });
 
   it('is deterministic and keeps lower-component responseHash logs outside the host logger', async () => {
     const descriptor = inspector.catalog().agents[0]!;

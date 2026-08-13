@@ -7,6 +7,15 @@ import type {
   ExecutionHistoryPage,
   ExecutionHistoryTimeline,
 } from './execution-history-contracts';
+import {
+  executionReadinessDecisionMatchesStageState,
+  executionReadinessDecisionSchema,
+  executionReadinessSourceMatchesStages,
+  executionReadinessStagesAreCanonical,
+  readinessFactorMatchesStage,
+} from './execution-readiness-contracts';
+import { safePublicFactoryProfileRuleId } from './factory-profile-rule-contracts';
+import { safePublicTypeScriptDiagnosticSummary } from './typescript-diagnostic-contracts';
 
 const EXECUTIONS_ENDPOINT = '/api/executions';
 const EXECUTION_ID_PATTERN = /^execution-[a-f0-9]{32}$/;
@@ -162,6 +171,7 @@ const rawProvenanceSchema = z
             agentVersion: z.string().min(1).max(128),
             outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
             readiness: z.string().min(1).max(64).nullable(),
+            readinessDecision: executionReadinessDecisionSchema.nullable().default(null),
             hashes: z
               .object({
                 assetBundleHash: z.string().regex(HASH_PATTERN),
@@ -174,11 +184,49 @@ const rawProvenanceSchema = z
               })
               .strict(),
           })
-          .passthrough(),
+          .passthrough()
+          .superRefine((stage, context) => {
+            if (!executionReadinessDecisionMatchesStageState(stage)) {
+              context.addIssue({
+                code: 'custom',
+                path: ['readinessDecision'],
+                message: 'Readiness evidence must match the stage outcome and readiness.',
+              });
+            }
+            stage.readinessDecision?.decisiveFactors.forEach((factor, index) => {
+              if (!readinessFactorMatchesStage(stage.stage, factor)) {
+                context.addIssue({
+                  code: 'custom',
+                  path: ['readinessDecision', 'decisiveFactors', index],
+                  message: 'Readiness evidence must identify a real source stage.',
+                });
+              }
+            });
+          }),
       )
       .max(3),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((provenance, context) => {
+    if (!executionReadinessStagesAreCanonical(provenance.stages)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stages'],
+        message: 'Readiness stages must be a unique canonical workflow prefix.',
+      });
+    }
+    provenance.stages.forEach((stage, stageIndex) => {
+      stage.readinessDecision?.decisiveFactors.forEach((factor, factorIndex) => {
+        if (!executionReadinessSourceMatchesStages(factor, provenance.stages)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['stages', stageIndex, 'readinessDecision', 'decisiveFactors', factorIndex],
+            message: 'SOURCE evidence must match the recorded upstream stage.',
+          });
+        }
+      });
+    });
+  });
 
 const rawFactoryStageSchema = z
   .object({
@@ -193,11 +241,22 @@ const rawFactoryStageSchema = z
       .string()
       .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
       .nullable(),
+    profileRuleId: z.string().min(1).max(128).nullish().transform(safePublicFactoryProfileRuleId),
+    diagnosticSummary: z.unknown().nullish().transform(safePublicTypeScriptDiagnosticSummary),
     resourceOutcome: z
       .enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN'])
       .nullable(),
   })
-  .strict();
+  .strict()
+  .transform((stage) => ({
+    ...stage,
+    diagnosticSummary:
+      stage.stageId === 'SANDBOX_TYPECHECK' &&
+      stage.status === 'FAILED' &&
+      stage.reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+        ? stage.diagnosticSummary
+        : null,
+  }));
 
 const rawFactoryResultSchema = z
   .object({
@@ -252,6 +311,13 @@ const rawFactoryResultSchema = z
           .string()
           .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
           .nullable(),
+        profileRuleId: z
+          .string()
+          .min(1)
+          .max(128)
+          .nullish()
+          .transform(safePublicFactoryProfileRuleId),
+        diagnosticSummary: z.unknown().nullish().transform(safePublicTypeScriptDiagnosticSummary),
         stageId: z.union([
           factoryPipelineStageIdSchema,
           z.literal('EXECUTION'),
@@ -259,6 +325,13 @@ const rawFactoryResultSchema = z
         ]),
       })
       .strict()
+      .transform((failure) => ({
+        ...failure,
+        diagnosticSummary:
+          failure.stageId === 'SANDBOX_TYPECHECK' && failure.reasonCode === 'TYPESCRIPT_DIAGNOSTICS'
+            ? failure.diagnosticSummary
+            : null,
+      }))
       .nullable(),
     stages: z.array(rawFactoryStageSchema).length(12),
     lineage: z
@@ -692,6 +765,17 @@ function projectDetail(raw: z.output<typeof rawHistoryDetailSchema>): ExecutionH
                 agentVersion: stage.agentVersion,
                 outcome: stage.outcome,
                 readiness: stage.readiness,
+                readinessDecision:
+                  stage.readinessDecision === null
+                    ? null
+                    : Object.freeze({
+                        ...stage.readinessDecision,
+                        decisiveFactors: Object.freeze(
+                          stage.readinessDecision.decisiveFactors.map((factor) =>
+                            Object.freeze({ ...factor }),
+                          ),
+                        ),
+                      }),
                 hashes: Object.freeze({
                   assetBundleHash: stage.hashes.assetBundleHash,
                   knowledgeContextHash: stage.hashes.knowledgeContextHash,

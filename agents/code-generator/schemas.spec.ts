@@ -90,6 +90,12 @@ describe('Code Generator public schemas', () => {
     expect(
       codeGenerationRequestSchema.safeParse({
         ...request,
+        deliveryIntent: { version: '1.0.0', mode: 'GREENFIELD' },
+      }).success,
+    ).toBe(false);
+    expect(
+      codeGenerationRequestSchema.safeParse({
+        ...request,
         approval: { ...request.approval, qaReadiness: 'PARTIALLY_READY' },
       }).success,
     ).toBe(false);

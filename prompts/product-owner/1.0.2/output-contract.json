@@ -1,0 +1,394 @@
+{
+  "id": "contract:product-owner-specification",
+  "version": "1.0.2",
+  "format": "JSON_SCHEMA",
+  "instructions": [
+    "Retorne somente uma ProductOwnerSpecification aderente ao JSON Schema.",
+    "openQuestions MUST conter somente uma decisão concreta não resolvida que altere materialmente escopo, regra de negócio, critério de aceite, integração externa, acesso, dados, segurança, privacidade ou obrigação legal; preferências convencionais, locais e reversíveis MUST NOT gerar openQuestions.",
+    "assumptions[].requiresValidation MUST ser true somente para fato ou decisão externa concreta que exija confirmação humana ou de terceiro.",
+    "Use deliveryIntent.mode como indicador host-owned projetado no input. IF deliveryIntent.mode === \"GREENFIELD\" e a demanda estiver funcionalmente completa, THEN use defaults funcionais mínimos para escolhas convencionais, locais e reversíveis; elas MUST NOT gerar openQuestions nem assumptions com requiresValidation igual a true.",
+    "Use PARTIALLY_READY ou REQUIRES_CLARIFICATION quando existir incerteza concreta elegível, conforme seu impacto. Antes do JSON final, execute o preflight: se nada concreto estiver pendente, openQuestions MUST ser [], nenhuma assumption MUST possuir requiresValidation igual a true e readiness MUST ser READY.",
+    "Cada valor em backlogItems[].dependencyIds MUST corresponder exatamente a um ID declarado em dependencies[].id. Um identificador DEP não declarado MUST NOT ser referenciado. IF um backlog item não possui dependências, THEN dependencyIds MUST ser [].",
+    "Não inclua código, arquitetura técnica, plano de implementação, artifacts ou propriedades adicionais."
+  ],
+  "schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "readiness",
+      "title",
+      "summary",
+      "objective",
+      "context",
+      "userStory",
+      "acceptanceCriteria",
+      "businessRules",
+      "scenarios",
+      "assumptions",
+      "dependencies",
+      "risks",
+      "openQuestions",
+      "outOfScope",
+      "definitionOfReady",
+      "backlogItems"
+    ],
+    "properties": {
+      "readiness": {
+        "type": "string",
+        "enum": ["READY", "PARTIALLY_READY", "REQUIRES_CLARIFICATION"]
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "objective": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "context": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000,
+        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+      },
+      "userStory": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["asA", "iWant", "soThat"],
+            "properties": {
+              "asA": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "iWant": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              },
+              "soThat": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            }
+          },
+          { "type": "null" }
+        ]
+      },
+      "acceptanceCriteria": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "given", "when", "then"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^AC-[0-9]{3}$" },
+            "given": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "when": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "then": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "businessRules": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description", "source", "condition", "impact"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^BR-[0-9]{3}$" },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                { "type": "null" }
+              ]
+            },
+            "condition": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                { "type": "null" }
+              ]
+            },
+            "impact": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] }
+          }
+        }
+      },
+      "scenarios": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "title", "type", "given", "when", "then", "acceptanceCriteriaIds"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^SCN-[0-9]{3}$" },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["MAIN", "ALTERNATIVE", "ERROR"]
+            },
+            "given": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            },
+            "when": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            },
+            "then": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 5,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000,
+                "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+              }
+            },
+            "acceptanceCriteriaIds": {
+              "type": "array",
+              "maxItems": 30,
+              "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+            }
+          }
+        }
+      },
+      "assumptions": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description", "requiresValidation"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^ASM-[0-9]{3}$" },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "requiresValidation": { "type": "boolean" }
+          }
+        }
+      },
+      "dependencies": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^DEP-[0-9]{3}$" },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "risks": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description", "impact", "mitigation"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^RSK-[0-9]{3}$" },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "impact": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+            "mitigation": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000,
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      },
+      "openQuestions": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "question", "impact"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^Q-[0-9]{3}$" },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "impact": {
+              "type": "string",
+              "enum": ["BLOCKING", "NON_BLOCKING"]
+            }
+          }
+        }
+      },
+      "outOfScope": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "description"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^OOS-[0-9]{3}$" },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "definitionOfReady": {
+        "type": "array",
+        "maxItems": 20,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "criterion"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^DOR-[0-9]{3}$" },
+            "criterion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            }
+          }
+        }
+      },
+      "backlogItems": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "title",
+            "description",
+            "priority",
+            "dependencyIds",
+            "acceptanceCriteriaIds"
+          ],
+          "properties": {
+            "id": { "type": "string", "pattern": "^BL-[0-9]{3}$" },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+            },
+            "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+            "dependencyIds": {
+              "type": "array",
+              "maxItems": 20,
+              "items": { "type": "string", "pattern": "^DEP-[0-9]{3}$" }
+            },
+            "acceptanceCriteriaIds": {
+              "type": "array",
+              "maxItems": 30,
+              "items": { "type": "string", "pattern": "^AC-[0-9]{3}$" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

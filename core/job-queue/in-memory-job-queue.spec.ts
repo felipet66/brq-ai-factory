@@ -23,6 +23,27 @@ describe('InMemoryJobQueue', () => {
     expect(firstClaim?.record.status).toBe('RUNNING');
     expect(Object.isFrozen(firstClaim)).toBe(true);
     expect(Object.isFrozen(firstClaim?.request)).toBe(true);
+    expect(firstClaim?.executionOptions).toEqual({
+      cacheMode: 'READ_WRITE',
+      sourceExecutionId: null,
+    });
+  });
+
+  it('carries cache-only execution options only in the private claimed payload', async () => {
+    const queue = createInMemoryJobQueue();
+    const input = createJobInputFixture(1, {
+      executionOptions: {
+        cacheMode: 'REQUIRE_HIT',
+        sourceExecutionId: `execution-${'f'.repeat(32)}`,
+      },
+    });
+
+    const queued = await queue.enqueue(input);
+    const claimed = await queue.claimNext();
+
+    expect(claimed?.executionOptions).toEqual(input.executionOptions);
+    expect(queued).not.toHaveProperty('executionOptions');
+    expect(JSON.stringify(await queue.get(input.jobId))).not.toContain('REQUIRE_HIT');
   });
 
   it('tracks successful, failed and cancelled terminal lifecycles without retry', async () => {

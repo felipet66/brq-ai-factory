@@ -88,6 +88,8 @@ export type ProductOwnerAgentResult = DeepReadonly<z.infer<typeof productOwnerAg
 
 export interface ProductOwnerAgentRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateProductOwnerAgentOptions {

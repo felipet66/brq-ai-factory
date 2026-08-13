@@ -172,4 +172,71 @@ describe('sandbox hashing', () => {
     };
     expect(calculateSandboxResultHash({ ...input, steps: [changedStep] })).not.toBe(baseline);
   });
+
+  it('binds safe TypeScript diagnostic metadata into the result hash', () => {
+    const source = createSandboxStepResultsFixture()[1]!;
+    const summary = {
+      diagnosticCount: 2,
+      diagnosticCodes: [2304, 7006],
+      truncated: false,
+    } as const;
+    const failure = {
+      code: 'SANDBOX_STEP_FAILED',
+      stage: 'TYPECHECK',
+      sourceCode: 'EXIT_1',
+      reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+      diagnosticSummary: summary,
+    } as const;
+    const step = {
+      ...source,
+      status: 'FAILED' as const,
+      exitCode: 1,
+      failure: { ...failure, message: 'A etapa terminou com falha técnica.' },
+    };
+    const input = {
+      sandboxRunId: 'sandbox-' + 'a'.repeat(32),
+      sandboxRequestHash: 'b'.repeat(64),
+      status: 'FAILED',
+      workspaceHash: 'c'.repeat(64),
+      steps: [step],
+      resourceOutcome: 'NONE',
+      failure,
+      policyHash: 'd'.repeat(64),
+      commandPolicyHash: 'e'.repeat(64),
+      limitsHash: 'f'.repeat(64),
+      runtimeIdentity: {
+        adapter: 'DOCKER',
+        engineName: 'DOCKER',
+        clientVersion: '1',
+        serverVersion: '1',
+        imageReference: 'image@sha256:' + '1'.repeat(64),
+        imageDigest: 'sha256:' + '1'.repeat(64),
+        imageId: 'sha256:' + '2'.repeat(64),
+        platform: 'linux/arm64',
+        runtimeName: 'NODE',
+        runtimeVersion: '24',
+        toolchainVersions: {},
+      },
+    } as const;
+    const baseline = calculateSandboxResultHash(input);
+
+    expect(
+      calculateSandboxResultHash({
+        ...input,
+        steps: [
+          {
+            ...step,
+            failure: {
+              ...step.failure,
+              diagnosticSummary: { ...summary, diagnosticCodes: [2322, 7006] },
+            },
+          },
+        ],
+        failure: {
+          ...failure,
+          diagnosticSummary: { ...summary, diagnosticCodes: [2322, 7006] },
+        },
+      }),
+    ).not.toBe(baseline);
+  });
 });

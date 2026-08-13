@@ -3,6 +3,10 @@ import { createArtifactGenerator, type ArtifactGenerator } from '@brq/artifact-g
 import { createKnowledgeLoader, type KnowledgeLoader } from '@brq/knowledge-loader';
 import { calculateCanonicalJsonHash, createPromptBuilder } from '@brq/prompt-builder';
 import { createResponseValidator, type ResponseValidator } from '@brq/response-validator';
+import {
+  CHANGE_DELIVERY_INTENT,
+  GREENFIELD_DELIVERY_INTENT,
+} from '@brq/shared/constants/delivery-intent';
 import { createLogger } from '@brq/shared/logger/logger';
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { describe, expect, it } from 'vitest';
@@ -113,9 +117,12 @@ async function createHarness(options: HarnessOptions = {}) {
       { type: 'success', response: createQAAIResponse(createQASpecification()) },
     ],
   );
+  const exactCacheProvider = Object.assign(provider, {
+    capabilities: Object.freeze({ exactResponseCache: true as const }),
+  });
   const agentRunner = createAgentRunner({
     promptBuilder: createPromptBuilder({ logger }),
-    aiProvider: provider,
+    aiProvider: exactCacheProvider,
     logger,
   });
   const agent = createQAAgent({
@@ -134,7 +141,10 @@ describe('QAAgent', () => {
     const { agent, provider, logLines } = await createHarness();
     const request = createQARequest();
     const snapshot = structuredClone(request);
-    const result = await agent.execute(request);
+    const result = await agent.execute(request, {
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: request.context.executionId,
+    });
 
     expect(result.outcome).toBe('GENERATED');
     expect(result.readiness).toBe('READY');
@@ -155,6 +165,9 @@ describe('QAAgent', () => {
       `sha256:${calculateCanonicalJsonHash(request.technicalSpecification as unknown as JsonValue)}`,
     );
     expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0]?.options.cacheMode).toBe('REQUIRE_HIT');
+    expect(provider.calls[0]?.options.sourceExecutionId).toBe(request.context.executionId);
+    expect(provider.calls[0]?.request.input).not.toContain('deliveryIntent');
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.specification)).toBe(true);
     expect(request).toEqual(snapshot);
@@ -214,6 +227,39 @@ describe('QAAgent', () => {
       stage: 'SOURCE_VALIDATION',
     });
     expect(provider.calls).toHaveLength(0);
+  });
+
+  it('aplica a semântica CREATE na source validation sem projetar o intent no prompt', async () => {
+    const base = createTechnicalSpecification();
+    const technicalSpecification = createTechnicalSpecification({
+      components: base.components.map((component) => ({
+        ...component,
+        changeType: 'MODIFY' as const,
+      })),
+      modules: base.modules.map((module) => ({
+        ...module,
+        changeType: 'DELETE' as const,
+      })),
+    });
+    const greenfield = await createHarness();
+
+    await expect(
+      greenfield.agent.execute(
+        createQARequest({ technicalSpecification, deliveryIntent: GREENFIELD_DELIVERY_INTENT }),
+      ),
+    ).rejects.toMatchObject({
+      code: QA_AGENT_ERROR_CODES.INCOMPATIBLE_SOURCE_SPECIFICATIONS,
+      stage: 'SOURCE_VALIDATION',
+    });
+    expect(greenfield.provider.calls).toHaveLength(0);
+
+    const change = await createHarness();
+    const result = await change.agent.execute(
+      createQARequest({ technicalSpecification, deliveryIntent: CHANGE_DELIVERY_INTENT }),
+    );
+    expect(result.outcome).toBe('GENERATED');
+    expect(change.provider.calls).toHaveLength(1);
+    expect(change.provider.calls[0]?.request.input).not.toContain('deliveryIntent');
   });
 
   it('retorna rejeição do Response Validator sem artifacts', async () => {

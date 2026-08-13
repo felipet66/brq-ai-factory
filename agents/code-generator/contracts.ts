@@ -92,6 +92,8 @@ export type { TechnicalSpecification };
 
 export interface CodeGeneratorAgentRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateCodeGeneratorAgentOptions {

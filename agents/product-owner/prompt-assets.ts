@@ -14,13 +14,13 @@ import { safeFilenameSchema, semanticVersionSchema } from '@brq/shared/schemas/c
 import type { JsonValue } from '@brq/shared/types/json-value';
 import { z } from 'zod';
 
-import rawArtifactSpecification from '../../prompts/product-owner/1.0.1/artifact-specification.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/product-owner/1.0.1/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/product-owner/1.0.1/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/product-owner/1.0.1/output-contract.json' with { type: 'json' };
-import rawProductOwnerRules from '../../prompts/product-owner/1.0.1/product-owner-rules.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/product-owner/1.0.1/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/product-owner/1.0.1/template.json' with { type: 'json' };
+import rawArtifactSpecification from '../../prompts/product-owner/1.0.2/artifact-specification.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/product-owner/1.0.2/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/product-owner/1.0.2/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/product-owner/1.0.2/output-contract.json' with { type: 'json' };
+import rawProductOwnerRules from '../../prompts/product-owner/1.0.2/product-owner-rules.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/product-owner/1.0.2/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/product-owner/1.0.2/template.json' with { type: 'json' };
 import { deepFreeze } from './immutability';
 
 const PRODUCT_OWNER_AGENT = 'PRODUCT_OWNER' as const;
@@ -33,8 +33,8 @@ const PRODUCT_OWNER_ASSET_FILENAMES = {
   artifactSpecification: 'artifact-specification.json',
 } as const;
 const PRODUCT_OWNER_ARTIFACT_FILENAMES = ['story.md', 'acceptance.md', 'backlog.json'] as const;
-const PRODUCT_OWNER_RELEASE_1_0_1_BUNDLE_HASH =
-  '32d7454be1bb61eb6dbe28bd582d943bed76c9fbd501d631e13e0bd69d4a8275';
+const PRODUCT_OWNER_RELEASE_1_0_2_BUNDLE_HASH =
+  '69b9dc4313a586103250636c05a89d4776703d9ad2afd33593c508799576c29a';
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 const assetFilenameSchema = z
@@ -409,7 +409,7 @@ function assertArtifactSpecification(
       assertEqual(
         template[field],
         expected[field],
-        'A identidade de um template de artifact não corresponde ao release 1.0.1.',
+        'A identidade de um template de artifact não corresponde ao release 1.0.2.',
       );
     }
   });
@@ -421,7 +421,7 @@ export function parseProductOwnerPromptAssets(
   try {
     const manifest = parseManifest(sources.manifest);
     assertEqual(manifest.id, 'assets:product-owner', 'O ID do manifesto é inválido.');
-    assertEqual(manifest.version, '1.0.1', 'A versão do bundle é inválida.');
+    assertEqual(manifest.version, '1.0.2', 'A versão do bundle é inválida.');
     assertEqual(manifest.schemaVersion, '1.0.0', 'A versão do schema do manifesto é inválida.');
 
     const template = promptTemplateSchema.parse(sources.template) as PromptTemplate;
@@ -494,8 +494,8 @@ export function parseProductOwnerPromptAssets(
     });
     assertEqual(
       bundleHash,
-      PRODUCT_OWNER_RELEASE_1_0_1_BUNDLE_HASH,
-      'O conteúdo do bundle não corresponde ao release Product Owner 1.0.1.',
+      PRODUCT_OWNER_RELEASE_1_0_2_BUNDLE_HASH,
+      'O conteúdo do bundle não corresponde ao release Product Owner 1.0.2.',
     );
 
     return deepFreeze({

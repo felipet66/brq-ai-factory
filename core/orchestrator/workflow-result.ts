@@ -11,6 +11,7 @@ import { calculateCanonicalJsonHash, calculateKnowledgeHash } from './hashing';
 import { deepFreeze } from './immutability';
 import { createWorkflowMetrics, type StageDurations } from './metrics';
 import { workflowResultSchema } from './schemas';
+import { ORCHESTRATOR_CONTRACT_VERSION } from './version';
 
 export interface CreateWorkflowResultInput {
   readonly workflowId: string;
@@ -91,7 +92,7 @@ export function createWorkflowResult(input: CreateWorkflowResultInput): Workflow
   const lineageHash = calculateCanonicalJsonHash(input.lineage);
   const provenanceHash = calculateCanonicalJsonHash(input.provenance);
   const workflowHash = calculateCanonicalJsonHash({
-    contractVersion: '1.0.0',
+    contractVersion: ORCHESTRATOR_CONTRACT_VERSION,
     requestHash: input.requestHash,
     status: input.status,
     terminalStage: input.terminalStage,
@@ -102,6 +103,7 @@ export function createWorkflowResult(input: CreateWorkflowResultInput): Workflow
   });
   const metrics = createWorkflowMetrics(input.totalDurationMs, input.stageDurations, input.results);
   const result = workflowResultSchema.parse({
+    contractVersion: ORCHESTRATOR_CONTRACT_VERSION,
     workflowId: input.workflowId,
     executionId: input.executionId,
     status: input.status,

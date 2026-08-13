@@ -1,3 +1,8 @@
+import { AGENT_RUN_ERROR_CODES } from '@brq/agent-runner';
+import { ARTIFACT_GENERATOR_ERROR_CODES } from '@brq/artifact-generator';
+import { KNOWLEDGE_ERROR_CODES } from '@brq/knowledge-loader';
+import { RESPONSE_VALIDATOR_ERROR_CODES } from '@brq/response-validator';
+
 export const PRODUCT_OWNER_AGENT_ERROR_CODES = {
   INVALID_CONFIGURATION: 'PRODUCT_OWNER_AGENT_INVALID_CONFIGURATION',
   INVALID_REQUEST: 'PRODUCT_OWNER_AGENT_INVALID_REQUEST',
@@ -34,6 +39,7 @@ const SAFE_SOURCE_CODES = new Set<string>([
   ...Object.values(ARTIFACT_GENERATOR_ERROR_CODES),
   ...Object.values(KNOWLEDGE_ERROR_CODES),
   ...Object.values(RESPONSE_VALIDATOR_ERROR_CODES),
+  'AI_PROVIDER_CACHE_MISS',
   'PRODUCT_OWNER_PROMPT_ASSETS_INVALID',
 ]);
 
@@ -76,7 +82,3 @@ export class ProductOwnerAgentError extends Error {
     this.sourceCode = sanitizeProductOwnerSourceCode(options.sourceCode);
   }
 }
-import { AGENT_RUN_ERROR_CODES } from '@brq/agent-runner';
-import { ARTIFACT_GENERATOR_ERROR_CODES } from '@brq/artifact-generator';
-import { KNOWLEDGE_ERROR_CODES } from '@brq/knowledge-loader';
-import { RESPONSE_VALIDATOR_ERROR_CODES } from '@brq/response-validator';

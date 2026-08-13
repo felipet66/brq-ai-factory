@@ -3,6 +3,7 @@ export {
   PRODUCT_OWNER_READINESS_VALUES,
   createProductOwnerBusinessStructureRejection,
   deriveProductOwnerReadiness,
+  explainProductOwnerReadiness,
   validateProductOwnerBusinessRules,
   type ProductOwnerBusinessValidationInput,
   type ProductOwnerBusinessValidationIssueCode,
@@ -18,6 +19,9 @@ export {
   type ProductOwnerAgentStage,
 } from './errors';
 export { createProductOwnerAgent } from './product-owner-agent';
-export { projectProductOwnerPromptContexts } from './knowledge-projection';
+export {
+  calculateProductOwnerSourcePromptContextHash,
+  projectProductOwnerPromptContexts,
+} from './knowledge-projection';
 export * from './prompt-assets';
 export * from './schemas';

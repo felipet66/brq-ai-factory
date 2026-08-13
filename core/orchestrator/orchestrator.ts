@@ -1,10 +1,12 @@
 import {
+  calculateDeveloperSourcePromptContextHash,
   DEVELOPER_AGENT_ERROR_CODES,
   DeveloperAgentError,
   developerAgentResultSchema,
   type DeveloperAgentResult,
 } from '@brq/developer-agent';
 import {
+  calculateProductOwnerSourcePromptContextHash,
   PRODUCT_OWNER_AGENT_ERROR_CODES,
   ProductOwnerAgentError,
   productOwnerAgentResultSchema,
@@ -103,7 +105,7 @@ function agentSourceCode(error: unknown): string | null {
     error instanceof DeveloperAgentError ||
     error instanceof QAAgentError
   ) {
-    return error.code;
+    return error.sourceCode ?? error.code;
   }
   return null;
 }
@@ -391,13 +393,33 @@ export function createOrchestrator(options: CreateOrchestratorOptions): Orchestr
 
         const productOwnerStartedAt = startStage('PRODUCT_OWNER');
         const productOwnerRequest = createProductOwnerRequest(request);
+        const expectedProductOwnerContext = { ...productOwnerRequest.context };
+        const expectedProductOwnerPromptContextHash =
+          calculateProductOwnerSourcePromptContextHash(productOwnerRequest);
         const productOwnerResult = parseProductOwnerResult(
-          await options.productOwnerAgent.execute(
-            productOwnerRequest,
-            executionOptions.signal === undefined ? {} : { signal: executionOptions.signal },
-          ),
+          await options.productOwnerAgent.execute(productOwnerRequest, {
+            ...(executionOptions.signal === undefined ? {} : { signal: executionOptions.signal }),
+            ...(executionOptions.cacheMode === undefined
+              ? {}
+              : { cacheMode: executionOptions.cacheMode }),
+            ...(executionOptions.sourceExecutionId === undefined
+              ? {}
+              : { sourceExecutionId: executionOptions.sourceExecutionId }),
+          }),
         );
-        assertContextCorrelation(productOwnerResult, productOwnerRequest.context);
+        assertContextCorrelation(productOwnerResult, expectedProductOwnerContext);
+        if (
+          productOwnerResult.metadata.sourcePromptContextHash !==
+          expectedProductOwnerPromptContextHash
+        ) {
+          throw new StageBoundaryError(
+            'O contexto de origem do Product Owner não corresponde ao request atual.',
+            {
+              kind: 'LINEAGE_MISMATCH',
+              code: ORCHESTRATOR_ERROR_CODES.LINEAGE_MISMATCH,
+            },
+          );
+        }
         productOwner = productOwnerResult;
         const productOwnerCompletion = completeStage(
           'PRODUCT_OWNER',
@@ -413,13 +435,32 @@ export function createOrchestrator(options: CreateOrchestratorOptions): Orchestr
         assertNotAborted('DEVELOPER');
         const developerStartedAt = startStage('DEVELOPER');
         const developerRequest = createDeveloperRequest(request, productOwnerResult.specification);
+        const expectedDeveloperContext = { ...developerRequest.context };
+        const expectedDeveloperPromptContextHash =
+          calculateDeveloperSourcePromptContextHash(developerRequest);
         const developerResult = parseDeveloperResult(
-          await options.developerAgent.execute(
-            developerRequest,
-            executionOptions.signal === undefined ? {} : { signal: executionOptions.signal },
-          ),
+          await options.developerAgent.execute(developerRequest, {
+            ...(executionOptions.signal === undefined ? {} : { signal: executionOptions.signal }),
+            ...(executionOptions.cacheMode === undefined
+              ? {}
+              : { cacheMode: executionOptions.cacheMode }),
+            ...(executionOptions.sourceExecutionId === undefined
+              ? {}
+              : { sourceExecutionId: executionOptions.sourceExecutionId }),
+          }),
         );
-        assertContextCorrelation(developerResult, developerRequest.context);
+        assertContextCorrelation(developerResult, expectedDeveloperContext);
+        if (
+          developerResult.metadata.sourcePromptContextHash !== expectedDeveloperPromptContextHash
+        ) {
+          throw new StageBoundaryError(
+            'O contexto de origem do Developer não corresponde ao request atual.',
+            {
+              kind: 'LINEAGE_MISMATCH',
+              code: ORCHESTRATOR_ERROR_CODES.LINEAGE_MISMATCH,
+            },
+          );
+        }
         const productOwnerSpecificationHash = calculateKnowledgeHash(
           productOwnerResult.specification,
         );
@@ -444,13 +485,19 @@ export function createOrchestrator(options: CreateOrchestratorOptions): Orchestr
           productOwnerResult.specification,
           developerResult.specification,
         );
+        const expectedQAContext = { ...qaRequest.context };
         const qaResult = parseQAResult(
-          await options.qaAgent.execute(
-            qaRequest,
-            executionOptions.signal === undefined ? {} : { signal: executionOptions.signal },
-          ),
+          await options.qaAgent.execute(qaRequest, {
+            ...(executionOptions.signal === undefined ? {} : { signal: executionOptions.signal }),
+            ...(executionOptions.cacheMode === undefined
+              ? {}
+              : { cacheMode: executionOptions.cacheMode }),
+            ...(executionOptions.sourceExecutionId === undefined
+              ? {}
+              : { sourceExecutionId: executionOptions.sourceExecutionId }),
+          }),
         );
-        assertContextCorrelation(qaResult, qaRequest.context);
+        assertContextCorrelation(qaResult, expectedQAContext);
         const technicalSpecificationHash = calculateKnowledgeHash(developerResult.specification);
         if (
           qaResult.metadata.productOwnerSpecificationHash !== productOwnerSpecificationHash ||

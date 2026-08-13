@@ -78,9 +78,12 @@ async function createHarness(options: HarnessOptions = {}) {
       },
     ],
   );
+  const exactCacheProvider = Object.assign(provider, {
+    capabilities: Object.freeze({ exactResponseCache: true as const }),
+  });
   const agentRunner = createAgentRunner({
     promptBuilder: createPromptBuilder({ logger }),
-    aiProvider: provider,
+    aiProvider: exactCacheProvider,
     logger,
   });
   const agent = createProductOwnerAgent({
@@ -101,7 +104,11 @@ describe('ProductOwnerAgent', () => {
     const controller = new AbortController();
     const request = createProductOwnerRequest();
     const requestSnapshot = structuredClone(request);
-    const result = await agent.execute(request, { signal: controller.signal });
+    const result = await agent.execute(request, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: request.context.executionId,
+    });
 
     expect(result.outcome).toBe('GENERATED');
     expect(result.readiness).toBe('READY');
@@ -121,6 +128,8 @@ describe('ProductOwnerAgent', () => {
     expect(result.metadata.run.prompt.metadata.agent).toBe('PRODUCT_OWNER');
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0]?.options.signal).toBe(controller.signal);
+    expect(provider.calls[0]?.options.cacheMode).toBe('REQUIRE_HIT');
+    expect(provider.calls[0]?.options.sourceExecutionId).toBe(request.context.executionId);
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.artifacts)).toBe(true);
     expect(Object.isFrozen(result.specification)).toBe(true);
@@ -174,6 +183,29 @@ describe('ProductOwnerAgent', () => {
 
     expect(result.outcome).toBe('GENERATED');
     expect(result.readiness).toBe('PARTIALLY_READY');
+  });
+
+  it('does not silently rewrite an artificial uncertainty returned against the trusted prompt', async () => {
+    const specification = createProductOwnerSpecification({
+      readiness: 'PARTIALLY_READY',
+      openQuestions: [
+        {
+          id: 'Q-001',
+          question: 'Qual tom de azul deve ser usado no tabuleiro?',
+          impact: 'NON_BLOCKING',
+        },
+      ],
+    });
+    const { agent, provider } = await createHarness({
+      outcomes: [{ type: 'success', response: createProductOwnerAIResponse(specification) }],
+    });
+
+    const result = await agent.execute(createProductOwnerRequest());
+
+    expect(result).toMatchObject({ outcome: 'GENERATED', readiness: 'PARTIALLY_READY' });
+    expect(provider.calls[0]?.request.instructions).toContain(
+      'Preferência visual, texto ou nome reversível',
+    );
   });
 
   it('produz REQUIRES_CLARIFICATION e ainda gera drafts para pergunta bloqueante', async () => {

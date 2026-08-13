@@ -30,14 +30,14 @@ COPY --chown=0:0 --chmod=0444 runner/export.mjs /opt/brq/runner/export.mjs
 
 ENV PATH=/usr/local/bin:/usr/bin:/bin
 
-LABEL org.brq.sandbox.helper-abi="1.0.0" \
+LABEL org.brq.sandbox.helper-abi="1.1.0" \
   org.brq.sandbox.dependency-snapshot="none" \
   org.brq.sandbox.runtime-node="24.19.0" \
   org.brq.sandbox.toolchain.node="24.19.0" \
   org.brq.sandbox.toolchain.typescript="6.0.3" \
   org.brq.sandbox.factory-profile="node-web-preview-24-v1" \
-  org.brq.sandbox.execution-profile-hash="cffc60459d28119fa0e83488ff87ff017d49668ac542002194a40e9342c1c31f" \
-  org.brq.sandbox.execution-profile-snapshot-hash="75d736b1fc3b102df86c715e62f59c87fff1ca069db604400d98b5a2f13be591" \
+  org.brq.sandbox.execution-profile-hash="ba54cba53e383deab68a1382422e4dcadb8dc3ed14e903a026e023468dbc8b61" \
+  org.brq.sandbox.execution-profile-snapshot-hash="b671aed30fd78b4bda4219c00fafd1b056e2a46afe7ea81462a9c74d5c098587" \
   org.brq.preview.artifact-export-abi="1.0.0"
 
 USER 65532:65532

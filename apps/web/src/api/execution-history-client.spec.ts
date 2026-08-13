@@ -92,6 +92,13 @@ function detailData(overrides: Record<string, unknown> = {}) {
           agentVersion: '1.0.1',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           hashes: {
             assetBundleHash: HASH,
             knowledgeContextHash: KNOWLEDGE_HASH,
@@ -312,6 +319,11 @@ describe('execution history HTTP client', () => {
     expect(detail).not.toHaveProperty('rawResponse');
     expect(detail.lineage).not.toHaveProperty('privateValue');
     expect(detail.provenance?.stages[0]).not.toHaveProperty('privateValue');
+    expect(detail.provenance?.stages[0]?.readinessDecision).toEqual({
+      version: '1.0.0',
+      readiness: 'READY',
+      decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' }],
+    });
     expect(detail.lineage?.handoffs[0]).toEqual({
       from: 'PRODUCT_OWNER',
       to: 'DEVELOPER',
@@ -328,6 +340,167 @@ describe('execution history HTTP client', () => {
     expect(Object.isFrozen(detail)).toBe(true);
     expect(Object.isFrozen(detail.job)).toBe(true);
     expect(Object.isFrozen(detail.provenance?.stages[0]?.hashes.artifactHashes)).toBe(true);
+    expect(Object.isFrozen(detail.provenance?.stages[0]?.readinessDecision?.decisiveFactors)).toBe(
+      true,
+    );
+  });
+
+  it('accepts legacy null evidence and rejects contradictory readiness evidence', async () => {
+    const source = detailData();
+    const productOwner = source.provenance.stages[0]!;
+    const legacy = {
+      ...source,
+      provenance: {
+        ...source.provenance,
+        stages: [{ ...productOwner, readinessDecision: null }],
+      },
+    };
+    const legacyFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(legacy, EXECUTION_ID)),
+    );
+
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: legacyFetch }),
+    ).resolves.toMatchObject({
+      provenance: { stages: [{ outcome: 'GENERATED', readinessDecision: null }] },
+    });
+
+    const stageMismatch = {
+      ...source,
+      provenance: {
+        ...source.provenance,
+        stages: [
+          {
+            ...productOwner,
+            readinessDecision: {
+              version: '1.0.0',
+              readiness: 'PARTIALLY_READY',
+              decisiveFactors: [
+                { sourceStage: 'PRODUCT_OWNER', code: 'NON_BLOCKING_QUESTION_PRESENT' },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const stageMismatchFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(stageMismatch, EXECUTION_ID)),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: stageMismatchFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+
+    const sourceMismatch = {
+      ...source,
+      provenance: {
+        ...source.provenance,
+        stages: [
+          productOwner,
+          {
+            ...productOwner,
+            stage: 'DEVELOPER',
+            agentExecutionId: 'developer-001',
+            readiness: 'PARTIALLY_READY',
+            readinessDecision: {
+              version: '1.0.0',
+              readiness: 'PARTIALLY_READY',
+              decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_PARTIALLY_READY' }],
+            },
+          },
+        ],
+      },
+    };
+    const sourceMismatchFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(sourceMismatch, EXECUTION_ID)),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: sourceMismatchFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+
+    const invalidGeneratedReadinessFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          {
+            ...source,
+            provenance: {
+              ...source.provenance,
+              stages: [
+                { ...productOwner, readiness: 'MODEL_INVENTED_VALUE', readinessDecision: null },
+              ],
+            },
+          },
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: invalidGeneratedReadinessFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+
+    const rejectedWithReadinessFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          {
+            ...source,
+            provenance: {
+              ...source.provenance,
+              stages: [
+                {
+                  ...productOwner,
+                  outcome: 'VALIDATION_REJECTED',
+                  readiness: 'READY',
+                  readinessDecision: null,
+                },
+              ],
+            },
+          },
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: rejectedWithReadinessFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+
+    const duplicateStagesFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          {
+            ...source,
+            provenance: { ...source.provenance, stages: [productOwner, productOwner] },
+          },
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: duplicateStagesFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+
+    const developer = {
+      ...productOwner,
+      stage: 'DEVELOPER',
+      agentExecutionId: 'developer-001',
+      readinessDecision: {
+        version: '1.0.0',
+        readiness: 'READY',
+        decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_READY' }],
+      },
+    };
+    const reorderedStagesFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          {
+            ...source,
+            provenance: { ...source.provenance, stages: [developer, productOwner] },
+          },
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    await expect(
+      getExecution(EXECUTION_ID, { fetchImplementation: reorderedStagesFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 
   it('projects immutable safe Factory metadata and rejects non-canonical sensitive fields', async () => {
@@ -383,6 +556,8 @@ describe('execution history HTTP client', () => {
         code: 'SANDBOX_STEP_FAILED',
         sourceCode: null,
         reasonCode: 'INLINE_ACTIVE_CONTENT',
+        profileRuleId: null,
+        diagnosticSummary: null,
         stageId: 'SANDBOX_PREPARE',
       },
       stages: successful.stages.map((stage) =>
@@ -407,6 +582,8 @@ describe('execution history HTTP client', () => {
       code: 'SANDBOX_STEP_FAILED',
       sourceCode: null,
       reasonCode: 'INLINE_ACTIVE_CONTENT',
+      profileRuleId: null,
+      diagnosticSummary: null,
       stageId: 'SANDBOX_PREPARE',
     });
     expect(detail.factoryResult?.lineage).toMatchObject({
@@ -415,6 +592,158 @@ describe('execution history HTTP client', () => {
       profileValidationHash: HASH,
     });
     expect(JSON.stringify(detail.factoryResult)).not.toContain('EXIT_1');
+  });
+
+  it('preserves only bounded TypeScript diagnostic metadata in the browser contract', async () => {
+    const successful = historyFactoryResult();
+    const diagnosticSummary = {
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      truncated: false,
+    } as const;
+    const factoryResult = historyFactoryResult({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_TYPECHECK',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+        profileRuleId: null,
+        diagnosticSummary,
+        stageId: 'SANDBOX_TYPECHECK',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_TYPECHECK'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+              diagnosticSummary,
+            }
+          : stage,
+      ),
+    });
+    const validFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(detailData({ status: 'FAILED', factoryResult }), EXECUTION_ID)),
+    );
+
+    const detail = await getExecution(EXECUTION_ID, { fetchImplementation: validFetch });
+    expect(detail.factoryResult?.failure?.diagnosticSummary).toEqual(diagnosticSummary);
+    expect(
+      detail.factoryResult?.stages.find((stage) => stage.stageId === 'SANDBOX_TYPECHECK')
+        ?.diagnosticSummary,
+    ).toEqual(diagnosticSummary);
+
+    const unsafeFactoryResult = {
+      ...factoryResult,
+      failure: {
+        ...factoryResult.failure!,
+        diagnosticSummary: {
+          ...diagnosticSummary,
+          path: '/private/workspace/src/index.ts',
+          message: 'private source',
+        },
+      },
+      stages: factoryResult.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_TYPECHECK'
+          ? {
+              ...stage,
+              diagnosticSummary: {
+                ...diagnosticSummary,
+                path: '/private/workspace/src/index.ts',
+              },
+            }
+          : stage,
+      ),
+    };
+    const unsafeFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          detailData({ status: 'FAILED', factoryResult: unsafeFactoryResult }),
+          EXECUTION_ID,
+        ),
+      ),
+    );
+    const sanitized = await getExecution(EXECUTION_ID, { fetchImplementation: unsafeFetch });
+    expect(sanitized.factoryResult?.failure?.diagnosticSummary).toBeNull();
+    expect(
+      sanitized.factoryResult?.stages.find((stage) => stage.stageId === 'SANDBOX_TYPECHECK')
+        ?.diagnosticSummary,
+    ).toBeNull();
+    expect(JSON.stringify(sanitized)).not.toMatch(/private workspace|private source|index\.ts/iu);
+  });
+
+  it('preserves only allowlisted Factory Profile rule identifiers in the browser contract', async () => {
+    const successful = historyFactoryResult();
+    const factoryResult = historyFactoryResult({
+      status: 'FAILED',
+      terminalStage: 'CODE_PROFILE_VALIDATION',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+        sourceCode: null,
+        reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+        profileRuleId: 'content.javascript.relative-references',
+        diagnosticSummary: null,
+        stageId: 'CODE_PROFILE_VALIDATION',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'CODE_PROFILE_VALIDATION'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+              reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+              profileRuleId: 'content.javascript.relative-references',
+            }
+          : stage,
+      ),
+    });
+    const allowlistedFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(detailData({ status: 'FAILED', factoryResult }), EXECUTION_ID)),
+    );
+
+    const allowlisted = await getExecution(EXECUTION_ID, {
+      fetchImplementation: allowlistedFetch,
+    });
+
+    expect(allowlisted.factoryResult?.failure?.profileRuleId).toBe(
+      'content.javascript.relative-references',
+    );
+    expect(
+      allowlisted.factoryResult?.stages.find((stage) => stage.stageId === 'CODE_PROFILE_VALIDATION')
+        ?.profileRuleId,
+    ).toBe('content.javascript.relative-references');
+
+    const unknownFactoryResult = {
+      ...factoryResult,
+      failure: { ...factoryResult.failure!, profileRuleId: 'internal.customer.rule' },
+      stages: factoryResult.stages.map((stage) =>
+        stage.stageId === 'CODE_PROFILE_VALIDATION'
+          ? { ...stage, profileRuleId: 'internal.customer.rule' }
+          : stage,
+      ),
+    };
+    const unknownFetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope(
+          detailData({ status: 'FAILED', factoryResult: unknownFactoryResult }),
+          EXECUTION_ID,
+        ),
+      ),
+    );
+
+    const sanitized = await getExecution(EXECUTION_ID, { fetchImplementation: unknownFetch });
+
+    expect(sanitized.factoryResult?.failure?.profileRuleId).toBeNull();
+    expect(
+      sanitized.factoryResult?.stages.find((stage) => stage.stageId === 'CODE_PROFILE_VALIDATION')
+        ?.profileRuleId,
+    ).toBeNull();
+    expect(JSON.stringify(sanitized)).not.toContain('internal.customer.rule');
   });
 
   it('rejects an uncorrelated detail and an invalid execution identifier', async () => {

@@ -3,6 +3,7 @@ export {
   QA_READINESS_VALUES,
   createQABusinessStructureRejection,
   deriveQAReadiness,
+  explainQAReadiness,
   validateQABusinessRules,
   type QABusinessValidationInput,
   type QABusinessValidationIssueCode,
@@ -11,6 +12,9 @@ export {
   type QASpecificationStructureIssue,
 } from './business-validation';
 export * from './contracts';
+export { compileCanonicalQASpecification } from './canonical-qa-compiler';
+export { createDeterministicQAAgentRunner } from './deterministic-agent-runner';
+export { createDeterministicQAAgent } from './deterministic-qa-agent';
 export { createQAAgent } from './qa-agent';
 export { projectQAPromptContexts } from './knowledge-projection';
 export {

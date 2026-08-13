@@ -26,6 +26,9 @@ export const MAX_ARTIFACT_BYTES = 1024 * 1024;
 const MAX_PATH_BYTES = 512;
 const MAX_PATH_SEGMENTS = 20;
 const MAX_PATH_SEGMENT_BYTES = 255;
+const MAX_TYPESCRIPT_DIAGNOSTIC_COUNT = 10_000;
+const MAX_TYPESCRIPT_DIAGNOSTIC_CODES = 32;
+const MAX_TYPESCRIPT_DIAGNOSTIC_CODE = 99_999;
 const HASH = /^[a-f0-9]{64}$/u;
 const WORKSPACE_ID = /^workspace-[a-f0-9]{32}$/u;
 const SAFE_PATH_CHARACTERS = /^[A-Za-z0-9._/-]+$/u;
@@ -334,11 +337,20 @@ export function loadTypeScript() {
 
 export async function compilerRootNames(manifest) {
   const sources = sourcePathsFromManifest(manifest);
-  const declarations = [
-    "declare module 'node:test' { type TestBody = () => void | Promise<void>; export function test(name: string, body: TestBody): void; export default test; }",
-    "declare module 'node:assert' { interface Assert { ok(value: unknown, message?: string): asserts value; equal(actual: unknown, expected: unknown, message?: string): void; deepEqual(actual: unknown, expected: unknown, message?: string): void; strictEqual(actual: unknown, expected: unknown, message?: string): void; throws(body: () => unknown): void; } const assert: Assert; export = assert; }",
-    "declare module 'node:assert/strict' { import assert = require('node:assert'); export = assert; }",
-  ].join('\n');
+  const typeCheck = PROFILE_RULES.buildSemantics.typeCheck;
+  assertCondition(typeCheck.unlistedTestApis === 'FORBIDDEN', 'TYPESCRIPT_VERSION');
+  assertCondition(
+    JSON.stringify(Object.keys(typeCheck.testModuleDeclarations).sort()) ===
+      JSON.stringify([...PROFILE_RULES.modulePolicy.allowedTestBareImports].sort()),
+    'TYPESCRIPT_VERSION',
+  );
+  const declarations = Object.entries(typeCheck.testModuleDeclarations)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([moduleName, declaration]) =>
+        `declare module ${JSON.stringify(moduleName)} { ${declaration} }`,
+    )
+    .join('\n');
   await writeFile(NODE_TYPES, `${declarations}\n`, { flag: 'w', mode: 0o600 });
   return Object.freeze([
     ...sources.map((filePath) => containedPath(WORKSPACE_ROOT, filePath)),
@@ -349,24 +361,78 @@ export async function compilerRootNames(manifest) {
 export function compilerOptions(typescript, additional = {}) {
   const target = typescript.ScriptTarget[PROFILE_RULES.buildSemantics.target];
   const moduleKind = typescript.ModuleKind[PROFILE_RULES.buildSemantics.module];
-  assertCondition(target !== undefined && moduleKind !== undefined, 'TYPESCRIPT_VERSION');
+  const typeCheck = PROFILE_RULES.buildSemantics.typeCheck;
+  const moduleResolution =
+    typeCheck.moduleResolution === 'BUNDLER' ? typescript.ModuleResolutionKind.Bundler : undefined;
+  assertCondition(
+    target !== undefined && moduleKind !== undefined && moduleResolution !== undefined,
+    'TYPESCRIPT_VERSION',
+  );
   return Object.freeze({
     target,
     module: moduleKind,
-    moduleResolution: typescript.ModuleResolutionKind.Bundler,
+    moduleResolution,
     strict: PROFILE_RULES.buildSemantics.strict,
     allowJs: PROFILE_RULES.buildSemantics.allowJavaScript,
     checkJs: PROFILE_RULES.buildSemantics.checkJavaScript,
-    esModuleInterop: true,
-    noEmitOnError: true,
-    skipLibCheck: false,
-    types: [],
+    esModuleInterop: typeCheck.esModuleInterop,
+    noEmitOnError: typeCheck.noEmitOnError,
+    skipLibCheck: typeCheck.skipLibCheck,
+    types: typeCheck.ambientTypePackages,
     ...additional,
   });
 }
 
+export function typeScriptDiagnosticSummary(diagnostics) {
+  const observedCodes = diagnostics.map((diagnostic) => diagnostic.code);
+  const validCodes = observedCodes.filter(
+    (code) => Number.isInteger(code) && code > 0 && code <= MAX_TYPESCRIPT_DIAGNOSTIC_CODE,
+  );
+  const uniqueCodes = [...new Set(validCodes)].sort((left, right) => left - right);
+  return Object.freeze({
+    diagnosticCount: Math.min(diagnostics.length, MAX_TYPESCRIPT_DIAGNOSTIC_COUNT),
+    diagnosticCodes: Object.freeze(uniqueCodes.slice(0, MAX_TYPESCRIPT_DIAGNOSTIC_CODES)),
+    truncated:
+      diagnostics.length > MAX_TYPESCRIPT_DIAGNOSTIC_COUNT ||
+      uniqueCodes.length > MAX_TYPESCRIPT_DIAGNOSTIC_CODES ||
+      validCodes.length !== observedCodes.length,
+  });
+}
+
+export function formatTypeScriptDiagnosticMarker(name, summary) {
+  if (
+    name !== 'TYPECHECK' ||
+    summary === null ||
+    typeof summary !== 'object' ||
+    !Number.isInteger(summary.diagnosticCount) ||
+    summary.diagnosticCount <= 0 ||
+    summary.diagnosticCount > MAX_TYPESCRIPT_DIAGNOSTIC_COUNT ||
+    !Array.isArray(summary.diagnosticCodes) ||
+    summary.diagnosticCodes.length === 0 ||
+    summary.diagnosticCodes.length > MAX_TYPESCRIPT_DIAGNOSTIC_CODES ||
+    summary.diagnosticCodes.length > summary.diagnosticCount ||
+    !summary.diagnosticCodes.every(
+      (diagnosticCode, index) =>
+        Number.isInteger(diagnosticCode) &&
+        diagnosticCode > 0 &&
+        diagnosticCode <= MAX_TYPESCRIPT_DIAGNOSTIC_CODE &&
+        (index === 0 || diagnosticCode > summary.diagnosticCodes[index - 1]),
+    ) ||
+    typeof summary.truncated !== 'boolean'
+  ) {
+    return null;
+  }
+  return `BRQ_${name}_DIAGNOSTICS count=${summary.diagnosticCount} codes=${summary.diagnosticCodes.join(',')} truncated=${summary.truncated}`;
+}
+
 export function assertNoDiagnostics(typescript, program) {
-  assertCondition(typescript.getPreEmitDiagnostics(program).length === 0, 'TYPESCRIPT_DIAGNOSTICS');
+  const diagnostics = typescript.getPreEmitDiagnostics(program);
+  if (diagnostics.length === PROFILE_RULES.buildSemantics.typeCheck.requiredDiagnosticCount) return;
+  const error = new Error('TYPESCRIPT_DIAGNOSTICS');
+  Object.defineProperty(error, 'diagnosticSummary', {
+    value: typeScriptDiagnosticSummary(diagnostics),
+  });
+  throw error;
 }
 
 export async function writeVerifiedFile(root, relativePath, content) {
@@ -621,6 +687,16 @@ export async function runHelper(name, operation) {
       error instanceof Error && /^[A-Z0-9_]{2,64}$/u.test(error.message)
         ? error.message
         : 'UNEXPECTED';
+    const diagnosticSummary =
+      name === 'TYPECHECK' &&
+      code === 'TYPESCRIPT_DIAGNOSTICS' &&
+      error !== null &&
+      typeof error === 'object' &&
+      'diagnosticSummary' in error
+        ? error.diagnosticSummary
+        : null;
+    const diagnosticMarker = formatTypeScriptDiagnosticMarker(name, diagnosticSummary);
+    if (diagnosticMarker !== null) process.stderr.write(`${diagnosticMarker}\n`);
     process.stderr.write(`BRQ_${name}_FAILED code=${code}\n`);
     process.exitCode = 1;
   }

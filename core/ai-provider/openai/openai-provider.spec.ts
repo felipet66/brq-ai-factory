@@ -89,6 +89,23 @@ describe('OpenAIProvider', () => {
     vi.useRealTimers();
   });
 
+  it('fails closed for REQUIRE_HIT before invoking the OpenAI client', async () => {
+    const create = vi.fn().mockResolvedValue(responseFixture());
+    const provider = new OpenAIProvider(CONFIG, {
+      client: mockClient(create),
+      logger: silentLogger(),
+    });
+
+    await expect(
+      provider.generate(CONTRACT_REQUEST, { cacheMode: 'REQUIRE_HIT' }),
+    ).rejects.toMatchObject({
+      code: AI_PROVIDER_ERROR_CODES.CACHE_MISS,
+      provider: 'openai',
+      retryable: false,
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('should map only the abstract contract to the Responses API adapter', async () => {
     const create = vi
       .fn()

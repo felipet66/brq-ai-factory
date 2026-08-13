@@ -76,7 +76,7 @@ export const PLAYGROUND_TECHNICAL_SPECIFICATION = technicalSpecificationStructur
       id: 'CMP-001',
       name: 'Aplicação de consulta',
       kind: 'APPLICATION',
-      changeType: 'MODIFY',
+      changeType: 'CREATE',
       responsibility: 'Coordenar a consulta do andamento do pedido.',
       moduleIds: ['MOD-001'],
       dependsOnComponentIds: [],

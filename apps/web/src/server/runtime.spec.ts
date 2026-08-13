@@ -91,4 +91,16 @@ describe('application composition root', () => {
       }),
     ).rejects.toThrow('configuração Docker explícita');
   });
+
+  it('keeps generative QA outside the critical Factory topology', async () => {
+    await expect(
+      createApplicationFactoryRuntime({
+        qaExecutionMode: 'GENERATIVE',
+        aiProvider: new FakeAIProvider(),
+        knowledgeSource: new FakeKnowledgeSource(),
+        environment: { NODE_ENV: 'test' },
+        logger: createLogger({ sink: () => undefined }),
+      }),
+    ).rejects.toThrow('QA determinístico');
+  });
 });

@@ -1,8 +1,11 @@
 import type { AgentRunner } from '@brq/agent-runner';
 import type { ArtifactGenerator } from '@brq/artifact-generator';
 import type { KnowledgeLoader } from '@brq/knowledge-loader';
+import type { PromptBuilder } from '@brq/prompt-builder';
 import type { ResponseValidator } from '@brq/response-validator';
 import type { Logger } from '@brq/shared/logger/logger';
+import type { TechnicalSpecification } from '@brq/developer-agent';
+import type { ProductOwnerSpecification } from '@brq/product-owner-agent';
 import type { z } from 'zod';
 
 import type { QAPromptAssets } from './prompt-assets';
@@ -88,6 +91,8 @@ export type QAAgentResult = DeepReadonly<z.infer<typeof qaAgentResultSchema>>;
 
 export interface QAAgentRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateQAAgentOptions {
@@ -98,6 +103,24 @@ export interface CreateQAAgentOptions {
   readonly promptAssets: QAPromptAssets;
   readonly logger?: Logger;
   readonly now?: () => number;
+}
+
+export interface CanonicalQACompilationInput {
+  readonly productOwnerSpecification: ProductOwnerSpecification;
+  readonly technicalSpecification: TechnicalSpecification;
+}
+
+export interface CreateDeterministicQAAgentRunnerOptions {
+  readonly promptBuilder: PromptBuilder;
+  readonly logger?: Logger;
+  readonly now?: () => number;
+}
+
+export interface CreateDeterministicQAAgentOptions extends Omit<
+  CreateQAAgentOptions,
+  'agentRunner'
+> {
+  readonly promptBuilder: PromptBuilder;
 }
 
 export interface QAAgent {

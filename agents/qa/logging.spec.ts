@@ -40,6 +40,10 @@ describe('QA Agent logging', () => {
       businessValidationLogContext(validation),
       specificationLogContext(createQASpecification()),
     ];
+    expect(contexts[0]).toMatchObject({
+      deliveryIntentVersion: '1.0.0',
+      deliveryMode: 'GREENFIELD',
+    });
     expect(JSON.stringify(contexts)).not.toContain(SECRET);
     expect(allKeys(contexts)).not.toEqual(
       expect.arrayContaining([

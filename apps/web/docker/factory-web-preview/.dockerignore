@@ -3,3 +3,4 @@
 !idle
 !runner/
 !runner/*.mjs
+!runner/execution-profile.snapshot.json

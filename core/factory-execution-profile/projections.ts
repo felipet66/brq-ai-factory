@@ -18,6 +18,22 @@ function domainHash(domain: string, value: unknown): string {
     .digest('hex');
 }
 
+const RELATIVE_REFERENCE_POLICY = Object.freeze({
+  trimWhitespace: true,
+  requireNonEmpty: true,
+  forbiddenLeadingSchemePattern: '^[A-Za-z][A-Za-z0-9+.-]*:',
+  forbiddenLeadingSchemeCaseInsensitive: true,
+  forbidLeadingDoubleSlash: true,
+  forbidLeadingSlash: true,
+  forbidLeadingHash: true,
+  forbidBackslash: true,
+  forbidParentTraversalSegment: true,
+  parentTraversalScope: 'PATH_BEFORE_FIRST_QUERY_OR_FRAGMENT',
+});
+
+const RELATIVE_REFERENCE_REQUIREMENT =
+  'Trim each reference before validation. The trimmed reference MUST be non-empty; MUST NOT begin with a URI scheme matching ^[A-Za-z][A-Za-z0-9+.-]*: case-insensitively, //, /, or #; MUST NOT contain a backslash; and its path before the first ? or # MUST NOT contain a complete .. segment.';
+
 export function projectGenerationProfileConstraints(
   rawProfile: FactoryExecutionProfile,
 ): GenerationProfileConstraints {
@@ -66,11 +82,17 @@ export function projectGenerationProfileConstraints(
     {
       id: profile.modulePolicy.importRule.ruleId,
       requirement:
-        'Relative module imports MUST use one of relativeExtensions. Bare imports are forbidden except for test files using a value listed in testBareImports.',
+        'Relative module imports MUST use one of relativeExtensions. Bare imports are forbidden except for test files using a value listed in testBareImports. An allowed bare import grants only the exact test API surface supplied by the TypeScript compatibility rule, never unlisted exports, hooks or members.',
       parameters: {
         relativeExtensions: profile.modulePolicy.relativeImportExtensions,
         testBareImports: profile.modulePolicy.allowedTestBareImports,
       },
+    },
+    {
+      id: 'build.typescript-zero-diagnostics',
+      requirement:
+        'Every generated .ts and .js source or test file MUST produce exactly zero TypeScript diagnostics under the supplied buildSemantics. When strict, allowJavaScript and checkJavaScript are true, JavaScript is strictly type-checked: every parameter MUST have an inferred type or JSDoc, nullable DOM results MUST be narrowed before use, and tests MUST use only the exact supplied API surface. Unlisted test exports, hooks and assertion members are forbidden. Verify the complete bundle before emitting the final JSON.',
+      parameters: profile.buildSemantics.typeCheck,
     },
     {
       id: profile.packagePolicy.rule.ruleId,
@@ -101,11 +123,11 @@ export function projectGenerationProfileConstraints(
     },
     {
       id: profile.contentRules.html.referencesRule.ruleId,
-      requirement:
-        'Every HTML reference in the supplied attributes MUST obey the supplied reference policy.',
+      requirement: `Every HTML reference in the supplied attributes MUST obey the supplied reference policy. ${RELATIVE_REFERENCE_REQUIREMENT}`,
       parameters: {
         attributes: profile.contentRules.html.referenceAttributes,
         policy: 'RELATIVE_ONLY',
+        relativeReferencePolicy: RELATIVE_REFERENCE_POLICY,
       },
     },
     {
@@ -115,8 +137,11 @@ export function projectGenerationProfileConstraints(
     },
     {
       id: profile.contentRules.css.urlsRule.ruleId,
-      requirement: 'Every CSS url() reference MUST be relative when relativeOnly is true.',
-      parameters: { relativeOnly: profile.contentRules.css.relativeUrlsOnly },
+      requirement: `Every CSS url() reference MUST be relative when relativeOnly is true. ${RELATIVE_REFERENCE_REQUIREMENT}`,
+      parameters: {
+        relativeOnly: profile.contentRules.css.relativeUrlsOnly,
+        relativeReferencePolicy: RELATIVE_REFERENCE_POLICY,
+      },
     },
     {
       id: profile.contentRules.javaScript.capabilitiesRule.ruleId,
@@ -125,11 +150,12 @@ export function projectGenerationProfileConstraints(
     },
     {
       id: profile.contentRules.javaScript.referencesRule.ruleId,
-      requirement:
-        'JavaScript imports and fetch references MUST obey the supplied relative-only flags.',
+      requirement: `JavaScript imports and fetch references MUST obey the supplied relative-only flags. ${RELATIVE_REFERENCE_REQUIREMENT} If sibling modules would require a .. segment, generate a shared or root-level composition module so every import remains permitted without parent traversal. Verify this condition before emitting the final bundle JSON.`,
       parameters: {
         relativeImportsOnly: profile.contentRules.javaScript.relativeImportsOnly,
         relativeFetchOnly: profile.contentRules.javaScript.relativeFetchOnly,
+        relativeReferencePolicy: RELATIVE_REFERENCE_POLICY,
+        siblingModuleComposition: 'ROOT_OR_SHARED_MODULE_WITHOUT_PARENT_TRAVERSAL',
       },
     },
     {
@@ -139,7 +165,7 @@ export function projectGenerationProfileConstraints(
     },
   ];
   const projectionWithoutHash = {
-    projectionVersion: '1.1.0' as const,
+    projectionVersion: '1.3.0' as const,
     profile: profile.identity,
     rules,
     buildSemantics: profile.buildSemantics,
@@ -149,7 +175,7 @@ export function projectGenerationProfileConstraints(
     generationProfileConstraintsSchema.parse({
       ...projectionWithoutHash,
       generationProjectionHash: domainHash(
-        'brq-factory-execution-profile:generation-projection:v2',
+        'brq-factory-execution-profile:generation-projection:v4',
         projectionWithoutHash,
       ),
     }),
@@ -171,7 +197,7 @@ export function projectSandboxExecutionProfileSnapshot(
     previewProjection: profile.previewProjection,
   };
   const snapshotWithoutHash = {
-    snapshotVersion: '1.0.0' as const,
+    snapshotVersion: '1.1.0' as const,
     profileId: profile.identity.profileId,
     profileVersion: profile.identity.version,
     profileHash: profile.identity.profileHash,
@@ -182,7 +208,7 @@ export function projectSandboxExecutionProfileSnapshot(
     sandboxExecutionProfileSnapshotSchema.parse({
       ...snapshotWithoutHash,
       snapshotHash: domainHash(
-        'brq-factory-execution-profile:sandbox-snapshot:v1',
+        'brq-factory-execution-profile:sandbox-snapshot:v2',
         snapshotWithoutHash,
       ),
     }),

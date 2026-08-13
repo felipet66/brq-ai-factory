@@ -1,6 +1,7 @@
 import {
   createExecutionEngine,
   deriveExecutionIdentity,
+  executionResultSchema,
   type ExecutionEngine,
   type ExecutionOptions,
   type ExecutionRequest,
@@ -15,6 +16,7 @@ import {
   type PersistentExecutionHistory,
 } from '@brq/execution-repository';
 import {
+  FactoryPipelineError,
   createFactoryPipelineCoordinator,
   type FactoryExecutionResult,
 } from '@brq/factory-pipeline';
@@ -100,6 +102,73 @@ function deferred<T>() {
 }
 
 describe('execution worker', () => {
+  it('propagates a private REQUIRE_HIT dispatch mode to the executor', async () => {
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createWorkerExecutionRequestFixture();
+    const execute = vi.fn(async () =>
+      createFactoryExecutionResultFixture({
+        executionId: deriveExecutionIdentity(request).executionId,
+        workflowId: request.workflowId,
+      }),
+    );
+    const worker = createExecutionWorker({ queue, repository, pipeline: { execute } });
+    const dispatcher = createExecutionDispatcher({
+      queue,
+      repository,
+      now: () => EXECUTION_WORKER_FIXTURE_EPOCH,
+    });
+
+    await dispatcher.dispatchWithOptions(request, {
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: `execution-${'f'.repeat(32)}`,
+    });
+    await worker.drain();
+
+    expect(execute).toHaveBeenCalledWith(request, {
+      signal: expect.any(AbortSignal),
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: `execution-${'f'.repeat(32)}`,
+    });
+  });
+
+  it('surfaces a strict cache miss on the terminal job without retrying', async () => {
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createWorkerExecutionRequestFixture();
+    const failed = createFailedExecutionResultFixture(request);
+    const cacheMiss = executionResultSchema.parse({
+      ...failed,
+      failure: {
+        ...failed.failure,
+        sourceCode: 'AI_PROVIDER_CACHE_MISS',
+      },
+    });
+    const execute = vi.fn(async () => cacheMiss);
+    const worker = createExecutionWorker({ queue, repository, engine: { execute } });
+    const dispatcher = createExecutionDispatcher({
+      queue,
+      repository,
+      now: () => EXECUTION_WORKER_FIXTURE_EPOCH,
+    });
+    const job = await dispatcher.dispatchWithOptions(request, {
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: `execution-${'f'.repeat(32)}`,
+    });
+
+    await worker.drain();
+
+    expect(execute).toHaveBeenCalledOnce();
+    await expect(queue.get(job.jobId)).resolves.toMatchObject({
+      status: 'FAILED',
+      failure: { code: 'AI_PROVIDER_CACHE_MISS' },
+    });
+  });
+
   it('settles a job only after the full Factory Pipeline returns its terminal result', async () => {
     const queue = createInMemoryJobQueue({
       now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
@@ -198,7 +267,7 @@ describe('execution worker', () => {
     expect(result).toMatchObject({
       status: 'FAILED',
       terminalStage: 'DEVELOPER',
-      failure: { stage: 'DEVELOPER', sourceCode: 'ORCHESTRATOR_DEVELOPER_FAILED' },
+      failure: { stage: 'DEVELOPER', sourceCode: 'RESPONSE_VALIDATION' },
       generation: { status: 'SKIPPED' },
       workspace: {
         planStatus: 'SKIPPED',
@@ -228,7 +297,7 @@ describe('execution worker', () => {
     expect(sandboxRun).not.toHaveBeenCalled();
     expect(await queue.get(job.jobId)).toMatchObject({
       status: 'FAILED',
-      failure: { code: result.failure?.code },
+      failure: { code: result.failure?.sourceCode ?? result.failure?.code },
     });
     expect(await repository.findByJobId(job.jobId)).toMatchObject({
       status: 'FAILED',
@@ -458,6 +527,38 @@ describe('execution worker', () => {
     expect(lines.join('\n')).toContain(EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED);
     expect(lines.join('\n')).not.toContain('TOP-SECRET');
     expect(lines.join('\n')).not.toContain('Private title');
+  });
+
+  it('preserves a safe Factory preflight source code without exposing its private cause', async () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (line) => lines.push(line), now: () => new Date(0) });
+    const queue = createInMemoryJobQueue({
+      logger,
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const repository = createInMemoryExecutionRecordRepository();
+    const request = createWorkerExecutionRequestFixture();
+    const execute = vi.fn(async () =>
+      Promise.reject(
+        new FactoryPipelineError('PRIVATE DOCKER DETAILS', {
+          code: 'FACTORY_PIPELINE_SANDBOX_FAILED',
+          stage: 'SANDBOX_PREPARE',
+          sourceCode: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH',
+        }),
+      ),
+    );
+    const worker = createExecutionWorker({ queue, repository, pipeline: { execute }, logger });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(await queue.get(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      failure: { code: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH' },
+    });
+    expect(lines.join('\n')).toContain('DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH');
+    expect(lines.join('\n')).not.toContain('PRIVATE DOCKER DETAILS');
   });
 
   it('cancels a queued job without calling the Engine and persists cancellation', async () => {

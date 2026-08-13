@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  calculateFactoryPipelineResultHash,
+  type FactoryExecutionResult,
+} from '@brq/factory-pipeline';
 import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
 import {
   createInMemoryExecutionHistory,
@@ -24,6 +28,132 @@ import {
 
 const OWNER_USER_ID = 'user-execution-owner';
 const OTHER_USER_ID = 'user-other-owner';
+
+function profileValidationFailureResult(
+  executionId: string,
+  workflowId: string,
+): FactoryExecutionResult {
+  const successful = createFactoryExecutionResultFixture({ executionId, workflowId });
+  const profileRuleId = 'content.javascript.relative-references' as const;
+  const failure = {
+    code: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+    stage: 'CODE_PROFILE_VALIDATION' as const,
+    sourceCode: null,
+    reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+    profileRuleId,
+    diagnosticSummary: null,
+    message: 'O Factory Execution Profile rejeitou o bundle.',
+  };
+  const candidate = {
+    ...successful,
+    status: 'FAILED' as const,
+    terminalStage: 'CODE_PROFILE_VALIDATION' as const,
+    failure,
+    stages: successful.stages.map((stage) =>
+      stage.stageId === 'CODE_PROFILE_VALIDATION'
+        ? { ...stage, status: 'FAILED' as const, profileRuleId, failure }
+        : stage,
+    ),
+  };
+  const { factoryResultHash: _factoryResultHash, ...hashes } = candidate.hashes;
+  void _factoryResultHash;
+  return {
+    ...candidate,
+    hashes: {
+      ...hashes,
+      factoryResultHash: calculateFactoryPipelineResultHash({ ...candidate, hashes }),
+    },
+  };
+}
+
+function typecheckFailureResult(executionId: string, workflowId: string): FactoryExecutionResult {
+  const successful = createFactoryExecutionResultFixture({ executionId, workflowId });
+  const diagnosticSummary = {
+    diagnosticCount: 3,
+    diagnosticCodes: [2307, 2322],
+    truncated: false,
+  } as const;
+  const factoryFailure = {
+    code: 'SANDBOX_STEP_FAILED',
+    stage: 'SANDBOX_TYPECHECK' as const,
+    sourceCode: null,
+    reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+    profileRuleId: null,
+    diagnosticSummary,
+    message: 'A etapa de typecheck falhou.',
+  };
+  const sandboxFailure = {
+    code: 'SANDBOX_STEP_FAILED',
+    stage: 'TYPECHECK',
+    sourceCode: null,
+    reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+    diagnosticSummary,
+    message: '/private/workspace/src/index.ts contains private source',
+  };
+  const candidate = {
+    ...successful,
+    status: 'FAILED' as const,
+    terminalStage: 'SANDBOX_TYPECHECK' as const,
+    failure: factoryFailure,
+    stages: successful.stages.map((stage) => {
+      if (stage.stageId === 'SANDBOX_TYPECHECK') {
+        return {
+          ...stage,
+          status: 'FAILED' as const,
+          diagnosticSummary,
+          failure: factoryFailure,
+        };
+      }
+      if (stage.stageId === 'SANDBOX_BUILD' || stage.stageId === 'SANDBOX_TEST') {
+        return {
+          ...stage,
+          status: 'SKIPPED' as const,
+          startedAt: null,
+          finishedAt: null,
+          durationMs: null,
+          outputHash: null,
+          profileRuleId: null,
+          diagnosticSummary: null,
+          failure: null,
+        };
+      }
+      return stage;
+    }),
+    sandbox: {
+      ...successful.sandbox,
+      status: 'FAILED' as const,
+      steps: successful.sandbox.steps.map((step) => {
+        if (step.stepId === 'TYPECHECK') {
+          return { ...step, status: 'FAILED' as const, exitCode: 2, failure: sandboxFailure };
+        }
+        if (step.stepId === 'BUILD' || step.stepId === 'TEST') {
+          return {
+            ...step,
+            status: 'SKIPPED' as const,
+            startedAt: null,
+            finishedAt: null,
+            durationMs: null,
+            exitCode: null,
+            stdout: null,
+            stderr: null,
+            resourceOutcome: 'NONE' as const,
+            failure: null,
+          };
+        }
+        return step;
+      }),
+    },
+  };
+  const { factoryResultHash: _factoryResultHash, ...hashes } = candidate.hashes;
+  void _factoryResultHash;
+  return {
+    ...candidate,
+    hashes: {
+      ...hashes,
+      factoryResultHash: calculateFactoryPipelineResultHash({ ...candidate, hashes }),
+    },
+  };
+}
 
 function ownerRepository(context: DatabaseTestContext, userId = OWNER_USER_ID) {
   return new PrismaExecutionRecordRepository(context.client, { access: 'OWNER', userId });
@@ -247,6 +377,97 @@ describe('Prisma execution record repository', () => {
     const serialized = JSON.stringify(restored?.factoryResult);
     expect(serialized).not.toMatch(
       /"(?:imageReference|containerId|prompt|content|path|stdout|stderr)"\s*:/,
+    );
+  });
+
+  it('round-trips the allowlisted profile rule without persisting rejected content', async () => {
+    const repository = ownerRepository(context);
+    const request = createObservabilityRequest();
+    const result = profileValidationFailureResult(EXECUTION_RECORD_FIXTURE_ID, request.workflowId);
+
+    await repository.create({
+      workflowId: request.workflowId,
+      requestId: request.requestId ?? null,
+      traceId: request.traceId ?? null,
+      projectName: request.demand.title,
+      createdAt: result.startedAt,
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markRunning({
+      workflowId: request.workflowId,
+      startedAt: result.startedAt,
+    });
+    await repository.completeFactory(request.workflowId, result, null);
+
+    const restored = await ownerRepository(context).findByExecutionId(result.executionId);
+    const profileStage = restored?.factoryResult?.stages.find(
+      (stage) => stage.stageId === 'CODE_PROFILE_VALIDATION',
+    );
+
+    expect(restored?.factoryResult?.failure).toMatchObject({
+      reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+      profileRuleId: 'content.javascript.relative-references',
+    });
+    expect(profileStage).toMatchObject({
+      reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+      profileRuleId: 'content.javascript.relative-references',
+    });
+    expect(JSON.stringify(restored?.factoryResult)).not.toMatch(/\.\.\/|https?:|private literal/iu);
+  });
+
+  it('round-trips only bounded TypeScript diagnostic metadata in explicit nullable columns', async () => {
+    const repository = ownerRepository(context);
+    const request = createObservabilityRequest();
+    const result = typecheckFailureResult(EXECUTION_RECORD_FIXTURE_ID, request.workflowId);
+
+    await repository.create({
+      workflowId: request.workflowId,
+      requestId: request.requestId ?? null,
+      traceId: request.traceId ?? null,
+      projectName: request.demand.title,
+      createdAt: result.startedAt,
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markRunning({
+      workflowId: request.workflowId,
+      startedAt: result.startedAt,
+    });
+    await repository.completeFactory(request.workflowId, result, null);
+
+    const restored = await ownerRepository(context).findByExecutionId(result.executionId);
+    const typecheck = restored?.factoryResult?.stages.find(
+      (stage) => stage.stageId === 'SANDBOX_TYPECHECK',
+    );
+    expect(restored?.factoryResult?.failure?.diagnosticSummary).toEqual({
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      truncated: false,
+    });
+    expect(typecheck?.diagnosticSummary).toEqual(
+      restored?.factoryResult?.failure?.diagnosticSummary,
+    );
+
+    const storedResult = await context.client.executionFactoryResult.findUniqueOrThrow({
+      where: { executionRecordId: restored!.storageId },
+    });
+    const storedStage = await context.client.executionFactoryStageResult.findFirstOrThrow({
+      where: {
+        executionFactoryResultId: restored!.storageId,
+        stageId: 'SANDBOX_TYPECHECK',
+      },
+    });
+    expect(storedResult).toMatchObject({
+      failureDiagnosticCount: 3,
+      failureDiagnosticCodes: [2307, 2322],
+      failureDiagnosticTruncated: false,
+    });
+    expect(storedStage).toMatchObject({
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      diagnosticTruncated: false,
+    });
+    expect(JSON.stringify(restored?.factoryResult)).not.toMatch(
+      /private workspace|private source|index\.ts|sourceCodeText/iu,
     );
   });
 

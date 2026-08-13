@@ -5,6 +5,7 @@ import {
 } from '@brq/developer-agent';
 import type { ProductOwnerAgent } from '@brq/product-owner-agent';
 import type { QAAgent } from '@brq/qa-agent';
+import { CHANGE_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { createLogger } from '@brq/shared/logger/logger';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -75,10 +76,14 @@ describe('Orchestrator', () => {
     const snapshot = structuredClone(request);
     const orchestrator = createOrchestrator(options(ports));
 
-    const result = await orchestrator.execute(request, { signal: controller.signal });
+    const result = await orchestrator.execute(request, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+    });
 
     expect(calls).toEqual(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
     expect(result.status).toBe('SUCCESS');
+    expect(result.contractVersion).toBe('1.1.0');
     expect(result.terminalStage).toBe('FINALIZATION');
     expect(result.completedStages).toEqual(['PRODUCT_OWNER', 'DEVELOPER', 'QA', 'FINALIZATION']);
     expect(result.results.productOwner?.outcome).toBe('GENERATED');
@@ -108,6 +113,8 @@ describe('Orchestrator', () => {
     const developerCall = vi.mocked(ports.developerAgent.execute).mock.calls[0];
     const qaCall = vi.mocked(ports.qaAgent.execute).mock.calls[0];
     expect(productOwnerCall?.[0].context.attempt).toBe(1);
+    expect(productOwnerCall?.[0].deliveryIntent).toEqual(request.deliveryIntent);
+    expect(developerCall?.[0].deliveryIntent).toEqual(request.deliveryIntent);
     expect(developerCall?.[0].productOwnerSpecification).toEqual(
       fixtures.generated.productOwner.specification,
     );
@@ -115,9 +122,13 @@ describe('Orchestrator', () => {
       fixtures.generated.productOwner.specification,
     );
     expect(qaCall?.[0].technicalSpecification).toEqual(fixtures.generated.developer.specification);
+    expect(qaCall?.[0].deliveryIntent).toEqual(request.deliveryIntent);
     expect(productOwnerCall?.[1]?.signal).toBe(controller.signal);
     expect(developerCall?.[1]?.signal).toBe(controller.signal);
     expect(qaCall?.[1]?.signal).toBe(controller.signal);
+    expect(productOwnerCall?.[1]?.cacheMode).toBe('REQUIRE_HIT');
+    expect(developerCall?.[1]?.cacheMode).toBe('REQUIRE_HIT');
+    expect(qaCall?.[1]?.cacheMode).toBe('REQUIRE_HIT');
   });
 
   it('mantém hashes determinísticos apesar de timestamps e durações diferentes', async () => {
@@ -254,6 +265,69 @@ describe('Orchestrator', () => {
     expect(ports.qaAgent.execute).not.toHaveBeenCalled();
   });
 
+  it('rejeita resultado do Product Owner produzido para outro delivery intent', async () => {
+    const changedRequest = createWorkflowRequestFixture({
+      deliveryIntent: CHANGE_DELIVERY_INTENT,
+    });
+    const ports = agents(fixtures.generated);
+
+    const error = await createOrchestrator(options(ports))
+      .execute(changedRequest)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(OrchestratorError);
+    expect(error).toMatchObject({
+      code: ORCHESTRATOR_ERROR_CODES.LINEAGE_MISMATCH,
+      result: { status: 'FAILED', results: { productOwner: null, developer: null, qa: null } },
+    });
+    expect(ports.developerAgent.execute).not.toHaveBeenCalled();
+  });
+
+  it('captures Product Owner correlation before an untrusted port can mutate its request', async () => {
+    const changedRequest = createWorkflowRequestFixture({
+      deliveryIntent: CHANGE_DELIVERY_INTENT,
+    });
+    const ports = agents(fixtures.generated);
+    vi.mocked(ports.productOwnerAgent.execute).mockImplementation(async (agentRequest) => {
+      (agentRequest.deliveryIntent as { mode: 'GREENFIELD' | 'CHANGE' }).mode = 'GREENFIELD';
+      return fixtures.generated.productOwner;
+    });
+
+    const error = await createOrchestrator(options(ports))
+      .execute(changedRequest)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(OrchestratorError);
+    expect(error).toMatchObject({
+      code: ORCHESTRATOR_ERROR_CODES.LINEAGE_MISMATCH,
+      result: { status: 'FAILED', results: { productOwner: null, developer: null, qa: null } },
+    });
+    expect(ports.developerAgent.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejeita resultado do Developer produzido para outro delivery intent', async () => {
+    const changedRequest = createWorkflowRequestFixture({
+      deliveryIntent: CHANGE_DELIVERY_INTENT,
+    });
+    const changedFixtures = await createOrchestratorAgentResultFixtures(changedRequest);
+    const ports = agents(changedFixtures.generated);
+    vi.mocked(ports.developerAgent.execute).mockResolvedValue(fixtures.generated.developer);
+
+    const error = await createOrchestrator(options(ports))
+      .execute(changedRequest)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(OrchestratorError);
+    expect(error).toMatchObject({
+      code: ORCHESTRATOR_ERROR_CODES.LINEAGE_MISMATCH,
+      result: {
+        status: 'FAILED',
+        results: { productOwner: { outcome: 'GENERATED' }, developer: null, qa: null },
+      },
+    });
+    expect(ports.qaAgent.execute).not.toHaveBeenCalled();
+  });
+
   it('não inclui conteúdo do usuário, specifications ou artifacts nos logs', async () => {
     const logLines: string[] = [];
     const sensitiveRequest = createWorkflowRequestFixture({
@@ -262,16 +336,19 @@ describe('Orchestrator', () => {
         description: 'SENTINEL_USER_CONTENT',
       },
     });
+    const sensitiveFixtures = await createOrchestratorAgentResultFixtures(sensitiveRequest);
     await createOrchestrator(
-      options(agents(fixtures.generated), {
+      options(agents(sensitiveFixtures.generated), {
         logger: createLogger({ sink: (line) => logLines.push(line) }),
       }),
     ).execute(sensitiveRequest);
 
     const logs = logLines.join('\n');
     expect(logs).not.toContain('SENTINEL_USER_CONTENT');
-    expect(logs).not.toContain(fixtures.generated.productOwner.specification.title);
-    expect(logs).not.toContain(fixtures.generated.productOwner.artifacts[0]?.draft.content);
+    expect(logs).not.toContain(sensitiveFixtures.generated.productOwner.specification.title);
+    expect(logs).not.toContain(
+      sensitiveFixtures.generated.productOwner.artifacts[0]?.draft.content,
+    );
     expect(logs).not.toContain('"promptHash"');
   });
 

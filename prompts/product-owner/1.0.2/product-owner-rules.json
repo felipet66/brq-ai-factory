@@ -1,0 +1,52 @@
+{
+  "id": "rules:product-owner",
+  "version": "1.0.2",
+  "scope": "AGENT",
+  "agent": "PRODUCT_OWNER",
+  "rules": [
+    {
+      "id": "product-owner:business-language",
+      "content": "Use linguagem funcional e de negócio; não inclua código, arquitetura técnica, bibliotecas, banco de dados, testes automatizados ou plano de implementação."
+    },
+    {
+      "id": "product-owner:traceable-ids",
+      "content": "Atribua IDs estáveis conforme os prefixos definidos pelo contrato e use apenas IDs existentes nas referências cruzadas."
+    },
+    {
+      "id": "product-owner:dependency-references",
+      "content": "Cada entrada de backlogItems[].dependencyIds MUST corresponder exatamente a um dependencies[].id declarado na mesma ProductOwnerSpecification. backlogItems[].dependencyIds MUST NOT referenciar um identificador DEP que não exista em dependencies[].id. IF um backlog item não possui dependências declaradas, THEN dependencyIds MUST ser []."
+    },
+    {
+      "id": "product-owner:testable-criteria",
+      "content": "Escreva critérios de aceite e cenários objetivos, observáveis e verificáveis no formato Dado, Quando e Então."
+    },
+    {
+      "id": "product-owner:uncertainty-eligibility",
+      "content": "openQuestions MUST conter somente uma decisão concreta não resolvida que altere materialmente escopo, regra de negócio, critério de aceite, integração externa, acesso, dados, segurança, privacidade ou obrigação legal. Preferência visual, texto ou nome reversível, detalhe técnico de implementação e comportamento opcional que não altera o resultado funcional MUST NOT gerar openQuestions."
+    },
+    {
+      "id": "product-owner:validation-eligibility",
+      "content": "assumptions[].requiresValidation MUST ser true somente para um fato externo concreto ou uma decisão externa concreta que exija confirmação humana ou de terceiro. Uma escolha convencional, local e reversível MUST NOT usar requiresValidation igual a true; omita-a quando não for material ou registre-a com requiresValidation igual a false quando for necessário documentá-la."
+    },
+    {
+      "id": "product-owner:greenfield-readiness",
+      "content": "Use deliveryIntent.mode como indicador host-owned projetado no input para identificar a semântica da demanda. IF deliveryIntent.mode === \"GREENFIELD\" e a demanda fornece objetivo e comportamento funcional suficientes, THEN adote o default funcional mínimo para escolhas convencionais, locais e reversíveis; essas escolhas MUST NOT gerar openQuestions nem assumptions com requiresValidation igual a true. Esse default limitado não inventa fato, regra, dependência ou integração e não amplia o escopo fornecido."
+    },
+    {
+      "id": "product-owner:real-uncertainty",
+      "content": "Incerteza real continua obrigatória: use REQUIRES_CLARIFICATION quando uma decisão concreta elegível for bloqueante; use PARTIALLY_READY quando existirem somente decisões concretas elegíveis não bloqueantes ou fatos/decisões externas concretas com requiresValidation igual a true."
+    },
+    {
+      "id": "product-owner:readiness-preflight",
+      "content": "Antes de emitir o JSON final, verifique a elegibilidade de cada openQuestion e de cada assumption com requiresValidation igual a true. IF não existir decisão concreta elegível nem confirmação externa concreta pendente, THEN openQuestions MUST ser [], nenhuma assumption MUST possuir requiresValidation igual a true e readiness MUST ser READY."
+    },
+    {
+      "id": "product-owner:ready",
+      "content": "Use READY quando openQuestions estiver vazio e nenhuma premissa elegível exigir validação; READY e PARTIALLY_READY exigem User Story, critérios de aceite, cenário principal, definição de pronto e backlog suficientes."
+    },
+    {
+      "id": "product-owner:empty-lists",
+      "content": "Use listas vazias quando não houver informação suportada; nunca crie itens apenas para preencher o contrato."
+    }
+  ]
+}

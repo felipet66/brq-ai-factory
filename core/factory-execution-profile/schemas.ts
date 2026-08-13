@@ -7,6 +7,7 @@ const FILE_EXTENSION = /^\.[a-z0-9]+$/u;
 const SAFE_PROFILE_PATH = /^[A-Za-z0-9._/-]+$/u;
 const RULE_ID = /^[a-z][a-z0-9.-]{2,95}$/u;
 const REASON_CODE = /^[A-Z][A-Z0-9_]{1,63}$/u;
+const TEST_BARE_IMPORT = /^node:[a-z][a-z0-9./-]{0,126}$/u;
 const browserCapabilitySchema = z.enum([
   'EventSource',
   'SharedWorker',
@@ -108,7 +109,7 @@ export const factoryExecutionProfileDescriptorSchema = z
       .object({
         format: z.literal('ESM'),
         relativeImportExtensions: uniqueStrings(z.string().regex(FILE_EXTENSION), 8).min(1),
-        allowedTestBareImports: uniqueStrings(z.string().trim().min(1).max(128), 16),
+        allowedTestBareImports: uniqueStrings(z.string().regex(TEST_BARE_IMPORT), 16),
         formatRule: reasonRuleSchema,
         importRule: reasonRuleSchema,
       })
@@ -174,6 +175,26 @@ export const factoryExecutionProfileDescriptorSchema = z
         allowJavaScript: z.literal(true),
         checkJavaScript: z.literal(true),
         packageManager: z.literal('NONE'),
+        typeCheck: z
+          .object({
+            requiredDiagnosticCount: z.literal(0),
+            moduleResolution: z.literal('BUNDLER'),
+            esModuleInterop: z.literal(true),
+            noEmitOnError: z.literal(true),
+            skipLibCheck: z.literal(false),
+            ambientTypePackages: z.tuple([]),
+            javaScriptParameterTyping: z.literal('INFERENCE_OR_JSDOC_REQUIRED'),
+            nullableDomAccess: z.literal('EXPLICIT_NARROWING_REQUIRED'),
+            testModuleDeclarations: z
+              .record(z.string().regex(TEST_BARE_IMPORT), z.string().trim().min(1).max(4096))
+              .refine(
+                (declarations) =>
+                  Object.keys(declarations).length > 0 && Object.keys(declarations).length <= 16,
+                'As declarations de teste devem possuir entre 1 e 16 módulos.',
+              ),
+            unlistedTestApis: z.literal('FORBIDDEN'),
+          })
+          .strict(),
       })
       .strict(),
     previewProjection: z
@@ -238,6 +259,21 @@ export const factoryExecutionProfileDescriptorSchema = z
         message: 'A policy do Sandbox deve corresponder ao execution profile.',
       });
     }
+    const allowedTestBareImports = new Set(profile.modulePolicy.allowedTestBareImports);
+    const declaredTestModules = Object.keys(
+      profile.buildSemantics.typeCheck.testModuleDeclarations,
+    );
+    if (
+      declaredTestModules.length !== allowedTestBareImports.size ||
+      declaredTestModules.some((module) => !allowedTestBareImports.has(module))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['buildSemantics', 'typeCheck', 'testModuleDeclarations'],
+        message:
+          'As declarations de teste devem corresponder exatamente aos bare imports permitidos.',
+      });
+    }
     const publicPrepare = new Set(profile.publicReasonCodes.PREPARE);
     const declaredRules = [
       profile.files.rule,
@@ -289,7 +325,7 @@ export const factoryExecutionProfileSchema = factoryExecutionProfileDescriptorSc
 
 export const generationProfileConstraintsSchema = z
   .object({
-    projectionVersion: z.literal('1.1.0'),
+    projectionVersion: z.literal('1.3.0'),
     profile: z
       .object({
         profileId: z.string().regex(PROFILE_ID),
@@ -318,7 +354,7 @@ export const generationProfileConstraintsSchema = z
 
 export const sandboxExecutionProfileSnapshotSchema = z
   .object({
-    snapshotVersion: z.literal('1.0.0'),
+    snapshotVersion: z.literal('1.1.0'),
     profileId: z.string().regex(PROFILE_ID),
     profileVersion: z.string().regex(SEMANTIC_VERSION),
     profileHash: z.string().regex(HASH),

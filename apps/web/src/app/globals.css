@@ -38,18 +38,21 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
 
 button,
 input,
+select,
 textarea {
   outline: none;
 }
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   box-shadow: 0 0 0 3px rgb(101 215 189 / 32%);
   border-color: var(--accent);
@@ -210,7 +213,8 @@ textarea:focus-visible {
 }
 
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 0.8rem;
@@ -223,6 +227,11 @@ textarea:focus-visible {
 
 .form-field input {
   height: 3rem;
+  padding: 0 0.9rem;
+}
+
+.form-field select {
+  min-height: 3rem;
   padding: 0 0.9rem;
 }
 
@@ -242,6 +251,13 @@ textarea:focus-visible {
   margin: 0;
   color: var(--danger);
   font-size: 0.875rem;
+}
+
+.form-field__help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.45;
 }
 
 .execution-form__submit {

@@ -14,7 +14,7 @@ const hash = 'a'.repeat(64);
 function metadata() {
   return {
     requestId: 'request-123e4567-e89b-42d3-a456-426614174000',
-    apiVersion: '3.2.0',
+    apiVersion: '4.0.0',
     executionId,
   };
 }

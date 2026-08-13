@@ -1,3 +1,6 @@
+import { READINESS_DECISION_VERSION } from '@brq/shared/schemas/readiness-decision.schema';
+import type { ReadinessDecision } from '@brq/shared/types/readiness-decision';
+
 import { deepFreeze } from './immutability';
 
 export const QA_BUSINESS_VALIDATION_ISSUE_CODES = {
@@ -222,6 +225,81 @@ function validateReferences(
   });
 }
 
+export function explainQAReadiness(
+  productOwnerReadiness: QAReadiness,
+  technicalReadiness: QAReadiness,
+  openQuestions: readonly QAQuestion[],
+  assumptions: readonly QAAssumption[],
+  blockingItems: readonly QABlocker[],
+): ReadinessDecision {
+  if (
+    productOwnerReadiness === 'REQUIRES_CLARIFICATION' ||
+    technicalReadiness === 'REQUIRES_CLARIFICATION' ||
+    blockingItems.length > 0 ||
+    openQuestions.some((question) => question.impact === 'BLOCKING')
+  ) {
+    const decisiveFactors: ReadinessDecision['decisiveFactors'][number][] = [];
+    if (productOwnerReadiness === 'REQUIRES_CLARIFICATION') {
+      decisiveFactors.push({
+        sourceStage: 'PRODUCT_OWNER',
+        code: 'SOURCE_REQUIRES_CLARIFICATION',
+      });
+    }
+    if (technicalReadiness === 'REQUIRES_CLARIFICATION') {
+      decisiveFactors.push({ sourceStage: 'DEVELOPER', code: 'SOURCE_REQUIRES_CLARIFICATION' });
+    }
+    if (openQuestions.some((question) => question.impact === 'BLOCKING')) {
+      decisiveFactors.push({ sourceStage: 'QA', code: 'BLOCKING_QUESTION_PRESENT' });
+    }
+    if (blockingItems.length > 0) {
+      decisiveFactors.push({ sourceStage: 'QA', code: 'BLOCKING_ITEM_PRESENT' });
+    }
+    return deepFreeze({
+      version: READINESS_DECISION_VERSION,
+      readiness: 'REQUIRES_CLARIFICATION',
+      decisiveFactors,
+    });
+  }
+
+  const decisiveFactors: ReadinessDecision['decisiveFactors'][number][] = [];
+  if (productOwnerReadiness === 'PARTIALLY_READY') {
+    decisiveFactors.push({
+      sourceStage: 'PRODUCT_OWNER',
+      code: 'SOURCE_PARTIALLY_READY',
+    });
+  }
+  if (technicalReadiness === 'PARTIALLY_READY') {
+    decisiveFactors.push({ sourceStage: 'DEVELOPER', code: 'SOURCE_PARTIALLY_READY' });
+  }
+  if (openQuestions.length > 0) {
+    decisiveFactors.push({ sourceStage: 'QA', code: 'NON_BLOCKING_QUESTION_PRESENT' });
+  }
+  if (assumptions.some((assumption) => assumption.requiresValidation)) {
+    decisiveFactors.push({
+      sourceStage: 'QA',
+      code: 'VALIDATION_REQUIRED_ASSUMPTION_PRESENT',
+    });
+  }
+
+  return deepFreeze(
+    decisiveFactors.length > 0
+      ? {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'PARTIALLY_READY',
+          decisiveFactors,
+        }
+      : {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'READY',
+          decisiveFactors: [
+            { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_READY' },
+            { sourceStage: 'DEVELOPER', code: 'SOURCE_READY' },
+            { sourceStage: 'QA', code: 'NO_LOCAL_READINESS_CONCERNS' },
+          ],
+        },
+  );
+}
+
 export function deriveQAReadiness(
   productOwnerReadiness: QAReadiness,
   technicalReadiness: QAReadiness,
@@ -229,23 +307,13 @@ export function deriveQAReadiness(
   assumptions: readonly QAAssumption[],
   blockingItems: readonly QABlocker[],
 ): QAReadiness {
-  if (
-    productOwnerReadiness === 'REQUIRES_CLARIFICATION' ||
-    technicalReadiness === 'REQUIRES_CLARIFICATION' ||
-    blockingItems.length > 0 ||
-    openQuestions.some((question) => question.impact === 'BLOCKING')
-  ) {
-    return 'REQUIRES_CLARIFICATION';
-  }
-  if (
-    productOwnerReadiness === 'PARTIALLY_READY' ||
-    technicalReadiness === 'PARTIALLY_READY' ||
-    openQuestions.length > 0 ||
-    assumptions.some((assumption) => assumption.requiresValidation)
-  ) {
-    return 'PARTIALLY_READY';
-  }
-  return 'READY';
+  return explainQAReadiness(
+    productOwnerReadiness,
+    technicalReadiness,
+    openQuestions,
+    assumptions,
+    blockingItems,
+  ).readiness;
 }
 
 function coveredSourceIds(

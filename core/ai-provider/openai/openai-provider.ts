@@ -88,6 +88,13 @@ function invalidResponse(cause?: unknown): AIProviderError {
   });
 }
 
+function requiredCacheUnavailable(): AIProviderError {
+  return new AIProviderError('O OpenAI Provider não possui cache exato para esta solicitação.', {
+    code: AI_PROVIDER_ERROR_CODES.CACHE_MISS,
+    provider: 'openai',
+  });
+}
+
 function collectResponseContent(response: Response): {
   text: string;
   refusal: string | null;
@@ -240,6 +247,13 @@ export class OpenAIProvider implements AIProvider {
     const requestResult = aiRequestSchema.safeParse(request);
     if (!requestResult.success) {
       throw invalidAIRequest(this.provider, requestResult.error);
+    }
+
+    if (options.cacheMode === 'REQUIRE_HIT') {
+      throw requiredCacheUnavailable();
+    }
+    if (options.cacheMode !== undefined && options.cacheMode !== 'READ_WRITE') {
+      throw invalidAIRequest(this.provider, new TypeError('cacheMode inválido.'));
     }
 
     const optionResult = aiGenerateMetadataSchema.safeParse({

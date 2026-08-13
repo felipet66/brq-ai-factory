@@ -1,3 +1,7 @@
+import type { ExecutionReadinessDecision } from './execution-readiness-contracts';
+import type { PublicFactoryProfileRuleId } from './factory-profile-rule-contracts';
+import type { PublicTypeScriptDiagnosticSummary } from './typescript-diagnostic-contracts';
+
 export type ExecutionHistoryStatus = 'CREATED' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
 
 export interface ExecutionHistoryItem {
@@ -54,6 +58,7 @@ export interface ExecutionHistoryProvenance {
     readonly agentVersion: string;
     readonly outcome: 'GENERATED' | 'VALIDATION_REJECTED';
     readonly readiness: string | null;
+    readonly readinessDecision: ExecutionReadinessDecision | null;
     readonly hashes: {
       readonly assetBundleHash: string;
       readonly knowledgeContextHash: string;
@@ -97,6 +102,8 @@ export interface ExecutionHistoryFactoryStage {
   readonly outputHash: string | null;
   readonly failureCode: string | null;
   readonly reasonCode: string | null;
+  readonly profileRuleId: PublicFactoryProfileRuleId | null;
+  readonly diagnosticSummary: PublicTypeScriptDiagnosticSummary | null;
   readonly resourceOutcome:
     'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
 }
@@ -131,6 +138,8 @@ export interface ExecutionHistoryFactoryResult {
     readonly code: string;
     readonly sourceCode: string | null;
     readonly reasonCode: string | null;
+    readonly profileRuleId: PublicFactoryProfileRuleId | null;
+    readonly diagnosticSummary: PublicTypeScriptDiagnosticSummary | null;
     readonly stageId: FactoryPipelineStageId | 'EXECUTION' | 'SANDBOX';
   } | null;
   readonly stages: readonly ExecutionHistoryFactoryStage[];

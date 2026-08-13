@@ -14,6 +14,9 @@ describe('Factory Pipeline hashing', () => {
     const result = createFactoryExecutionResultFixture();
     const { factoryResultHash, ...hashes } = result.hashes;
     expect(calculateFactoryPipelineResultHash({ ...result, hashes })).toBe(factoryResultHash);
+    expect(factoryResultHash).toBe(
+      '46aee8db3e45446af65c394b131c79f0e76d1a55b77a1cfc7d4f40ec6478bdd3',
+    );
     expect(deriveCodeGeneratorExecutionId(result.hashes.executionHash)).toBe(
       deriveCodeGeneratorExecutionId(result.hashes.executionHash),
     );
@@ -35,5 +38,35 @@ describe('Factory Pipeline hashing', () => {
     observed.stages[0]!.durationMs = 999;
     observed.sandbox.steps[0]!.durationMs = 888;
     expect(calculateFactoryPipelineResultHash(observed)).toBe(result.hashes.factoryResultHash);
+  });
+
+  it('includes the safe TypeScript diagnostic summary in the v2 result identity', () => {
+    const result = createFactoryExecutionResultFixture();
+    const { factoryResultHash, ...hashes } = result.hashes;
+    void factoryResultHash;
+    const observed = structuredClone({ ...result, hashes }) as Mutable<
+      Omit<typeof result, 'hashes'> & { hashes: typeof hashes }
+    >;
+    const stage = observed.stages.find((candidate) => candidate.stageId === 'SANDBOX_TYPECHECK')!;
+    stage.status = 'FAILED';
+    stage.diagnosticSummary = {
+      diagnosticCount: 2,
+      diagnosticCodes: [2307, 2322],
+      truncated: false,
+    };
+    stage.failure = {
+      code: 'FACTORY_PIPELINE_SANDBOX_FAILED',
+      stage: 'SANDBOX_TYPECHECK',
+      sourceCode: null,
+      reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+      profileRuleId: null,
+      diagnosticSummary: stage.diagnosticSummary,
+      message: 'TypeScript diagnostics.',
+    };
+
+    expect(calculateFactoryPipelineResultHash(observed)).not.toBe(result.hashes.factoryResultHash);
+    expect(calculateFactoryPipelineResultHash(observed)).toBe(
+      calculateFactoryPipelineResultHash(structuredClone(observed)),
+    );
   });
 });

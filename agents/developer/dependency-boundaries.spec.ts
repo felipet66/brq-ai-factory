@@ -146,9 +146,8 @@ describe('Developer Agent dependency boundaries', () => {
 
     expect(tsconfig.compilerOptions?.paths?.['@brq/developer-agent/*']).toBeUndefined();
     expect(publicIndex).not.toContain('deepFreeze');
-    expect(publicIndex).toContain(
-      "export { projectDeveloperPromptContexts } from './knowledge-projection';",
-    );
+    expect(publicIndex).toContain('calculateDeveloperSourcePromptContextHash');
+    expect(publicIndex).toContain('projectDeveloperPromptContexts');
     expect(publicIndex).not.toContain('createDeveloperAgentRunRequest');
     expect(publicIndex).not.toContain('createGeneratedResult');
     expect(publicIndex).not.toContain('requestLogContext');

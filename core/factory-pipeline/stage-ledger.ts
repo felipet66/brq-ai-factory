@@ -12,6 +12,8 @@ interface MutableStage {
   startedAtMs: number | null;
   finishedAtMs: number | null;
   outputHash: string | null;
+  profileRuleId: FactoryPipelineStageResult['profileRuleId'];
+  diagnosticSummary: FactoryPipelineStageResult['diagnosticSummary'];
   failure: FactoryPipelineFailure | null;
 }
 
@@ -42,6 +44,8 @@ export function createFactoryStageLedger(
         startedAtMs: null,
         finishedAtMs: null,
         outputHash: null,
+        profileRuleId: null,
+        diagnosticSummary: null,
         failure: null,
       },
     ]),
@@ -54,6 +58,8 @@ export function createFactoryStageLedger(
       startedAtMs: stage.startedAt === null ? null : Date.parse(stage.startedAt),
       finishedAtMs: stage.finishedAt === null ? null : Date.parse(stage.finishedAt),
       outputHash: stage.outputHash,
+      profileRuleId: stage.profileRuleId,
+      diagnosticSummary: stage.diagnosticSummary,
       failure: stage.failure,
     });
   };
@@ -70,6 +76,8 @@ export function createFactoryStageLedger(
       stage.status = transitionFactoryPipelineStage(stage.status, status, stageId);
       stage.finishedAtMs = Math.max(stage.startedAtMs ?? timestampMs, timestampMs);
       stage.outputHash = outputHash;
+      stage.profileRuleId = failure?.profileRuleId ?? null;
+      stage.diagnosticSummary = failure?.diagnosticSummary ?? null;
       stage.failure = failure;
     },
     replace,
@@ -94,6 +102,8 @@ export function createFactoryStageLedger(
             finishedAt: null,
             durationMs: null,
             outputHash: null,
+            profileRuleId: null,
+            diagnosticSummary: null,
             failure: null,
           };
         }
@@ -106,6 +116,8 @@ export function createFactoryStageLedger(
           finishedAt: new Date(finishedAtMs).toISOString(),
           durationMs: Math.max(0, finishedAtMs - startedAtMs),
           outputHash: stage.outputHash,
+          profileRuleId: stage.profileRuleId,
+          diagnosticSummary: stage.diagnosticSummary,
           failure: stage.failure,
         };
       });

@@ -58,6 +58,33 @@ export function FactoryTechnicalPipeline({ stages }: FactoryTechnicalPipelinePro
                   <dd>{stage.reasonCode}</dd>
                 </div>
               )}
+              {stage.profileRuleId === null ? null : (
+                <div>
+                  <dt>Profile rule</dt>
+                  <dd>{stage.profileRuleId}</dd>
+                </div>
+              )}
+              {stage.diagnosticSummary === null ? null : (
+                <>
+                  <div>
+                    <dt>TypeScript diagnostics</dt>
+                    <dd>
+                      {stage.diagnosticSummary.diagnosticCount}
+                      {stage.diagnosticSummary.truncated ? ' (truncated)' : ''}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Diagnostic codes</dt>
+                    <dd>
+                      {stage.diagnosticSummary.diagnosticCodes.length === 0
+                        ? 'Not available'
+                        : stage.diagnosticSummary.diagnosticCodes
+                            .map((code) => `TS${code}`)
+                            .join(', ')}
+                    </dd>
+                  </div>
+                </>
+              )}
               {stage.resourceOutcome === null ? null : (
                 <div>
                   <dt>Resource</dt>

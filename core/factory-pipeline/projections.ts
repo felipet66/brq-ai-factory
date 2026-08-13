@@ -1,4 +1,5 @@
 import {
+  CODE_GENERATOR_SOURCE_REASON_CODES,
   codeGenerationRequestSchema,
   codeGeneratorAgentResultSchema,
   generatedCodeBundleSchema,
@@ -122,6 +123,7 @@ export function projectExecutionToCodeGenerationRequest(
         code: FACTORY_PIPELINE_ERROR_CODES.INVALID_APPROVAL,
         stage: 'CODE_GENERATOR',
         executionId: result.executionId,
+        reasonCode: CODE_GENERATOR_SOURCE_REASON_CODES.HANDOFF_NOT_VERIFIED,
       },
     );
   }
@@ -130,6 +132,7 @@ export function projectExecutionToCodeGenerationRequest(
       code: FACTORY_PIPELINE_ERROR_CODES.QA_NOT_READY,
       stage: 'CODE_GENERATOR',
       executionId: result.executionId,
+      reasonCode: CODE_GENERATOR_SOURCE_REASON_CODES.QA_READINESS_NOT_READY,
     });
   }
 
@@ -629,6 +632,8 @@ export function projectAgentStages(
         finishedAt: null,
         durationMs: null,
         outputHash: null,
+        profileRuleId: null,
+        diagnosticSummary: null,
         failure: null,
       };
     }
@@ -657,6 +662,8 @@ export function projectAgentStages(
             stage: stageId,
             sourceCode: sourceFailure?.sourceCode ?? null,
             reasonCode: null,
+            profileRuleId: null,
+            diagnosticSummary: null,
             message:
               status === 'CANCELLED'
                 ? 'A etapa foi cancelada.'
@@ -669,6 +676,8 @@ export function projectAgentStages(
       finishedAt: new Date(Math.max(startedAtMs, finishedAtMs)).toISOString(),
       durationMs: finished?.durationMs ?? Math.max(0, finishedAtMs - startedAtMs),
       outputHash: workflow?.hashes.stageHashes[key] ?? null,
+      profileRuleId: null,
+      diagnosticSummary: null,
       failure,
     };
   });

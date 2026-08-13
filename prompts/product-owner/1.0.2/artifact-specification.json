@@ -1,0 +1,104 @@
+{
+  "id": "artifacts:product-owner",
+  "version": "1.0.2",
+  "sourceContract": {
+    "id": "contract:product-owner-specification",
+    "version": "1.0.2",
+    "format": "JSON_SCHEMA",
+    "contractHash": "1946f377383ef1c7ec8283c8fd689afe93fda65baaf8bdb233a4234a7bb01486"
+  },
+  "templates": [
+    {
+      "id": "artifact:product-owner-story",
+      "name": "Product Owner Story",
+      "filename": "story.md",
+      "type": "PRODUCT_OWNER_STORY",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "readiness", "path": ["readiness"] },
+        { "id": "title", "path": ["title"] },
+        { "id": "summary", "path": ["summary"] },
+        { "id": "objective", "path": ["objective"] },
+        { "id": "context", "path": ["context"] },
+        { "id": "user-story", "path": ["userStory"] },
+        { "id": "assumptions", "path": ["assumptions"] },
+        { "id": "out-of-scope", "path": ["outOfScope"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Readiness\n\n" },
+        { "kind": "BINDING", "bindingId": "readiness", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Resumo\n\n" },
+        { "kind": "BINDING", "bindingId": "summary", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Objetivo\n\n" },
+        { "kind": "BINDING", "bindingId": "objective", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Contexto\n\n" },
+        { "kind": "BINDING", "bindingId": "context", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## User Story\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "user-story", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Premissas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "assumptions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Fora de escopo\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "out-of-scope", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    },
+    {
+      "id": "artifact:product-owner-acceptance",
+      "name": "Product Owner Acceptance",
+      "filename": "acceptance.md",
+      "type": "PRODUCT_OWNER_ACCEPTANCE",
+      "format": "TEXT",
+      "mediaType": "text/markdown",
+      "bindings": [
+        { "id": "title", "path": ["title"] },
+        { "id": "acceptance-criteria", "path": ["acceptanceCriteria"] },
+        { "id": "business-rules", "path": ["businessRules"] },
+        { "id": "scenarios", "path": ["scenarios"] },
+        { "id": "dependencies", "path": ["dependencies"] },
+        { "id": "risks", "path": ["risks"] },
+        { "id": "open-questions", "path": ["openQuestions"] },
+        { "id": "definition-of-ready", "path": ["definitionOfReady"] }
+      ],
+      "fragments": [
+        { "kind": "LITERAL", "value": "# Aceite — " },
+        { "kind": "BINDING", "bindingId": "title", "serialization": "TEXT" },
+        { "kind": "LITERAL", "value": "\n\n## Critérios de aceite\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "acceptance-criteria",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n\n## Regras de negócio\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "business-rules", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Cenários\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "scenarios", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Dependências\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "dependencies", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Riscos\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "risks", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Dúvidas abertas\n\n```json\n" },
+        { "kind": "BINDING", "bindingId": "open-questions", "serialization": "JSON_PRETTY" },
+        { "kind": "LITERAL", "value": "\n```\n\n## Definition of Ready\n\n```json\n" },
+        {
+          "kind": "BINDING",
+          "bindingId": "definition-of-ready",
+          "serialization": "JSON_PRETTY"
+        },
+        { "kind": "LITERAL", "value": "\n```\n" }
+      ]
+    },
+    {
+      "id": "artifact:product-owner-backlog",
+      "name": "Product Owner Backlog",
+      "filename": "backlog.json",
+      "type": "PRODUCT_OWNER_BACKLOG",
+      "format": "JSON",
+      "mediaType": "application/json",
+      "bindings": [{ "id": "backlog", "path": ["backlogItems"] }],
+      "rootBindingId": "backlog"
+    }
+  ]
+}

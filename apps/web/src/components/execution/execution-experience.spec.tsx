@@ -36,7 +36,10 @@ function deferred<Value>() {
   return { promise, resolve };
 }
 
-function fillAndSubmit(): void {
+function fillAndSubmit(deliveryMode: 'GREENFIELD' | 'CHANGE' = 'GREENFIELD'): void {
+  fireEvent.change(screen.getByLabelText('Delivery Mode'), {
+    target: { value: deliveryMode },
+  });
   fireEvent.change(screen.getByLabelText('Project Name'), {
     target: { value: 'Customer Portal' },
   });
@@ -73,6 +76,7 @@ describe('ExecutionExperience asynchronous flow', () => {
     expect(screen.getByRole('button', { name: 'Execute Workflow' })).toBeDisabled();
     expect(enqueueExecutionMock).toHaveBeenCalledWith(
       {
+        deliveryMode: 'GREENFIELD',
         projectName: 'Customer Portal',
         objective: 'Let customers track their orders.',
       },
@@ -84,6 +88,24 @@ describe('ExecutionExperience asynchronous flow', () => {
       expect(pushMock).toHaveBeenCalledWith(`/executions/${EXECUTION_ID}/factory`),
     );
     expect(screen.getByRole('status')).toHaveTextContent('Workflow queued. Opening Factory View.');
+  });
+
+  it('forwards an explicit change selection to the execution client', async () => {
+    enqueueExecutionMock.mockResolvedValueOnce(job('QUEUED', false));
+    render(<ExecutionExperience />);
+
+    fillAndSubmit('CHANGE');
+
+    await waitFor(() =>
+      expect(enqueueExecutionMock).toHaveBeenCalledWith(
+        {
+          deliveryMode: 'CHANGE',
+          projectName: 'Customer Portal',
+          objective: 'Let customers track their orders.',
+        },
+        { signal: expect.any(AbortSignal) },
+      ),
+    );
   });
 
   it('renders a safe client error without navigating', async () => {

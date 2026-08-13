@@ -61,6 +61,8 @@ export function historyFactoryResult(
       outputHash: '6'.repeat(64),
       failureCode: null,
       reasonCode: null,
+      profileRuleId: null,
+      diagnosticSummary: null,
       resourceOutcome: stageId.startsWith('SANDBOX_') ? 'NONE' : null,
     })),
     lineage: {
@@ -182,6 +184,13 @@ export function historyDetail(
           agentVersion: '1.0.1',
           outcome: 'GENERATED',
           readiness: 'READY',
+          readinessDecision: {
+            version: '1.0.0',
+            readiness: 'READY',
+            decisiveFactors: [
+              { sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+            ],
+          },
           hashes: {
             assetBundleHash: HASH,
             knowledgeContextHash: KNOWLEDGE_HASH,

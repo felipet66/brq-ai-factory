@@ -1,3 +1,7 @@
+import { READINESS_DECISION_VERSION } from '@brq/shared/schemas/readiness-decision.schema';
+import type { DeliveryIntent } from '@brq/shared/types/delivery-intent';
+import type { ReadinessDecision } from '@brq/shared/types/readiness-decision';
+
 import { deepFreeze } from './immutability';
 
 export const DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES = {
@@ -15,6 +19,7 @@ export const DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES = {
   INCOMPLETE_SPECIFICATION: 'DEVELOPER_INCOMPLETE_SPECIFICATION',
   MISSING_ACCEPTANCE_CRITERION_COVERAGE: 'DEVELOPER_MISSING_ACCEPTANCE_CRITERION_COVERAGE',
   INCOMPLETE_TRACEABILITY: 'DEVELOPER_INCOMPLETE_TRACEABILITY',
+  CHANGE_TYPE_NOT_ALLOWED: 'DEVELOPER_CHANGE_TYPE_NOT_ALLOWED',
 } as const;
 
 export const DEVELOPER_READINESS_VALUES = [
@@ -75,10 +80,12 @@ export interface DeveloperBusinessValidationInput {
   readonly readiness: DeveloperReadiness;
   readonly architecture: object;
   readonly components: readonly (IdentifiedValue & {
+    readonly changeType?: 'CREATE' | 'MODIFY' | 'DELETE';
     readonly moduleIds: readonly string[];
     readonly dependsOnComponentIds: readonly string[];
   })[];
   readonly modules: readonly (IdentifiedValue & {
+    readonly changeType?: 'CREATE' | 'MODIFY' | 'DELETE';
     readonly path: string;
     readonly componentId: string;
     readonly dependsOnModuleIds: readonly string[];
@@ -355,27 +362,73 @@ function validateDependencyGraph(
   }
 }
 
+export function explainDeveloperReadiness(
+  productOwnerReadiness: DeveloperReadiness,
+  openQuestions: readonly Question[],
+  assumptions: readonly Assumption[],
+): ReadinessDecision {
+  if (
+    productOwnerReadiness === 'REQUIRES_CLARIFICATION' ||
+    openQuestions.some((question) => question.impact === 'BLOCKING')
+  ) {
+    const decisiveFactors: ReadinessDecision['decisiveFactors'][number][] = [];
+    if (productOwnerReadiness === 'REQUIRES_CLARIFICATION') {
+      decisiveFactors.push({
+        sourceStage: 'PRODUCT_OWNER',
+        code: 'SOURCE_REQUIRES_CLARIFICATION',
+      });
+    }
+    if (openQuestions.some((question) => question.impact === 'BLOCKING')) {
+      decisiveFactors.push({ sourceStage: 'DEVELOPER', code: 'BLOCKING_QUESTION_PRESENT' });
+    }
+    return deepFreeze({
+      version: READINESS_DECISION_VERSION,
+      readiness: 'REQUIRES_CLARIFICATION',
+      decisiveFactors,
+    });
+  }
+
+  const decisiveFactors: ReadinessDecision['decisiveFactors'][number][] = [];
+  if (productOwnerReadiness === 'PARTIALLY_READY') {
+    decisiveFactors.push({
+      sourceStage: 'PRODUCT_OWNER',
+      code: 'SOURCE_PARTIALLY_READY',
+    });
+  }
+  if (openQuestions.length > 0) {
+    decisiveFactors.push({ sourceStage: 'DEVELOPER', code: 'NON_BLOCKING_QUESTION_PRESENT' });
+  }
+  if (assumptions.some((assumption) => assumption.requiresValidation)) {
+    decisiveFactors.push({
+      sourceStage: 'DEVELOPER',
+      code: 'VALIDATION_REQUIRED_ASSUMPTION_PRESENT',
+    });
+  }
+
+  return deepFreeze(
+    decisiveFactors.length > 0
+      ? {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'PARTIALLY_READY',
+          decisiveFactors,
+        }
+      : {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'READY',
+          decisiveFactors: [
+            { sourceStage: 'PRODUCT_OWNER', code: 'SOURCE_READY' },
+            { sourceStage: 'DEVELOPER', code: 'NO_LOCAL_READINESS_CONCERNS' },
+          ],
+        },
+  );
+}
+
 export function deriveDeveloperReadiness(
   productOwnerReadiness: DeveloperReadiness,
   openQuestions: readonly Question[],
   assumptions: readonly Assumption[],
 ): DeveloperReadiness {
-  if (
-    productOwnerReadiness === 'REQUIRES_CLARIFICATION' ||
-    openQuestions.some((question) => question.impact === 'BLOCKING')
-  ) {
-    return 'REQUIRES_CLARIFICATION';
-  }
-
-  if (
-    productOwnerReadiness === 'PARTIALLY_READY' ||
-    openQuestions.length > 0 ||
-    assumptions.some((assumption) => assumption.requiresValidation)
-  ) {
-    return 'PARTIALLY_READY';
-  }
-
-  return 'READY';
+  return explainDeveloperReadiness(productOwnerReadiness, openQuestions, assumptions).readiness;
 }
 
 function validateCompleteness(
@@ -498,6 +551,7 @@ function validateTraceability(
 export function validateDeveloperBusinessRules(
   specification: DeveloperBusinessValidationInput,
   productOwnerSpecification: DeveloperProductOwnerSpecificationInput,
+  deliveryIntent: DeliveryIntent,
 ): DeveloperBusinessValidationResult {
   const issues: DeveloperBusinessValidationIssue[] = [];
   const collections: readonly [string, readonly IdentifiedValue[]][] = [
@@ -543,6 +597,29 @@ export function validateDeveloperBusinessRules(
     ...productOwnerSpecification.businessRules.map(({ id }) => id),
     ...productOwnerSpecification.backlogItems.map(({ id }) => id),
   ]);
+
+  if (deliveryIntent.mode === 'GREENFIELD') {
+    specification.components.forEach((component, index) => {
+      if (component.changeType !== 'CREATE') {
+        addIssue(
+          issues,
+          DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED,
+          ['components', index, 'changeType'],
+          'Uma entrega GREENFIELD exige changeType CREATE em todos os componentes.',
+        );
+      }
+    });
+    specification.modules.forEach((module, index) => {
+      if (module.changeType !== 'CREATE') {
+        addIssue(
+          issues,
+          DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED,
+          ['modules', index, 'changeType'],
+          'Uma entrega GREENFIELD exige changeType CREATE em todos os módulos.',
+        );
+      }
+    });
+  }
 
   specification.components.forEach((component, index) => {
     validateReferences(issues, component.moduleIds, moduleIds, ['components', index, 'moduleIds']);

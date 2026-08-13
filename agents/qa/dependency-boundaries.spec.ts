@@ -98,7 +98,8 @@ describe('QA Agent dependency boundaries', () => {
     );
     const source = files.map((path) => readFileSync(path, 'utf8')).join('\n');
 
-    expect(productOwnerImports).toEqual(['@brq/product-owner-agent']);
+    expect(productOwnerImports.length).toBeGreaterThan(0);
+    expect(new Set(productOwnerImports)).toEqual(new Set(['@brq/product-owner-agent']));
     expect(source).not.toMatch(/\bcreateProductOwnerAgent\b/);
     expect(source).not.toMatch(/\bloadProductOwnerPromptAssets\b/);
     const developerImports = files.flatMap((path) =>
@@ -106,7 +107,8 @@ describe('QA Agent dependency boundaries', () => {
         specifier.startsWith('@brq/developer-agent'),
       ),
     );
-    expect(developerImports).toEqual(['@brq/developer-agent', '@brq/developer-agent']);
+    expect(developerImports.length).toBeGreaterThan(0);
+    expect(new Set(developerImports)).toEqual(new Set(['@brq/developer-agent']));
     expect(source).not.toMatch(/\bcreateDeveloperAgent\b/);
     expect(source).not.toMatch(/\bloadDeveloperPromptAssets\b/);
   });
@@ -115,10 +117,24 @@ describe('QA Agent dependency boundaries', () => {
     const files = productionTypeScriptFiles(MODULE_ROOT);
     const source = files.map((path) => readFileSync(path, 'utf8')).join('\n');
     const facade = readFileSync(join(MODULE_ROOT, 'qa-agent.ts'), 'utf8');
+    const deterministicRunner = readFileSync(
+      join(MODULE_ROOT, 'deterministic-agent-runner.ts'),
+      'utf8',
+    );
     const filenames = files.map((path) => path.slice(MODULE_ROOT.length + 1));
+    const promptBuilderTypeFiles = files
+      .filter((path) => /\bPromptBuilder\b/.test(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(MODULE_ROOT.length + 1))
+      .sort();
+    const directBuildFiles = files
+      .filter((path) => /\.build\s*\(/.test(readFileSync(path, 'utf8')))
+      .map((path) => path.slice(MODULE_ROOT.length + 1));
 
-    expect(source).not.toMatch(/\b(?:createPromptBuilder|PromptBuilder)\b/);
-    expect(source).not.toMatch(/\.build\s*\(/);
+    expect(source).not.toMatch(/\bcreatePromptBuilder\b/);
+    expect(promptBuilderTypeFiles).toEqual(['contracts.ts']);
+    expect(directBuildFiles).toEqual(['deterministic-agent-runner.ts']);
+    expect(deterministicRunner).toContain('options.promptBuilder.build');
+    expect(deterministicRunner).not.toContain('@brq/ai-provider');
     expect(facade).not.toContain('@brq/prompt-builder');
     expect(facade).not.toContain('@brq/ai-provider');
     expect(source).not.toContain("from 'node:crypto'");

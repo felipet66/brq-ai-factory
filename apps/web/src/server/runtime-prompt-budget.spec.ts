@@ -14,10 +14,6 @@ import {
   createProductOwnerRequest,
   createProductOwnerSpecification,
 } from '../../../../agents/product-owner/testing/product-owner-fixtures';
-import {
-  createQAAIResponse,
-  createQASpecification,
-} from '../../../../agents/qa/testing/qa-fixtures';
 import { createDeveloperAgentRunRequest } from '../../../../agents/developer/prompt-request';
 import { projectDeveloperPromptContexts } from '../../../../agents/developer/knowledge-projection';
 import { createDeveloperRequest } from '../../../../agents/developer/testing/developer-fixtures';
@@ -26,6 +22,7 @@ import { createProductOwnerAgentRunRequest } from '../../../../agents/product-ow
 import { projectQAPromptContexts } from '../../../../agents/qa/knowledge-projection';
 import { createQAAgentRunRequest } from '../../../../agents/qa/prompt-request';
 import { createQARequest } from '../../../../agents/qa/testing/qa-fixtures';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import {
   developerAgentRequestSchema,
   loadDeveloperPromptAssets,
@@ -295,8 +292,11 @@ describe('AI Factory host Prompt Builder budget', () => {
     const denseTechnicalSpecification = createDenseTechnicalSpecification();
     expect(validateProductOwnerBusinessRules(denseProductOwnerSpecification).valid).toBe(true);
     expect(
-      validateDeveloperBusinessRules(denseTechnicalSpecification, denseProductOwnerSpecification)
-        .valid,
+      validateDeveloperBusinessRules(
+        denseTechnicalSpecification,
+        denseProductOwnerSpecification,
+        GREENFIELD_DELIVERY_INTENT,
+      ).valid,
     ).toBe(true);
     const qaAssets = loadQAPromptAssets();
     expect(qaAssets.manifest.version).toBe('1.0.4');
@@ -332,17 +332,17 @@ describe('AI Factory host Prompt Builder budget', () => {
     });
     expect(productOwnerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 103_677,
-      instructionsBytes: 30_361,
-      inputBytes: 66_476,
-      outputContractBytes: 6_840,
+      usedBytes: 111_628,
+      instructionsBytes: 37_429,
+      inputBytes: 66_533,
+      outputContractBytes: 7_666,
     });
     expect(developerPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
-      usedBytes: 262_035,
-      instructionsBytes: 57_320,
-      inputBytes: 182_980,
-      outputContractBytes: 21_735,
+      usedBytes: 265_394,
+      instructionsBytes: 59_963,
+      inputBytes: 183_067,
+      outputContractBytes: 22_364,
     });
     expect(developerPrompt.rendered.instructions).toContain(
       'openQuestions.length > 0 OR qualquer assumptions[].requiresValidation === true',
@@ -350,6 +350,11 @@ describe('AI Factory host Prompt Builder budget', () => {
     expect(developerPrompt.rendered.instructions).toContain(
       'Confirme que o campo readiness é exatamente igual ao resultado derivado',
     );
+    expect(developerPrompt.rendered.instructions).toContain('deliveryIntent.mode === "GREENFIELD"');
+    expect(developerPrompt.rendered.instructions).toContain(
+      'qualquer saída GREENFIELD que contenha changeType diferente de "CREATE" é inválida',
+    );
+    expect(developerPrompt.rendered.instructions).toContain('deliveryIntent.mode === "CHANGE"');
     expect(qaPrompt.budget).toEqual({
       maxBytes: AI_FACTORY_PROMPT_BUILDER_MAX_BYTES,
       usedBytes: 426_475,
@@ -403,10 +408,6 @@ describe('AI Factory host Prompt Builder budget', () => {
             model: 'gpt-5-mini',
           }),
         },
-        {
-          type: 'success',
-          response: createQAAIResponse(createQASpecification(), { model: 'gpt-5-mini' }),
-        },
       ]);
       const { logger, records } = capturedLogger();
       const engine = await createApplicationRuntime({
@@ -419,6 +420,7 @@ describe('AI Factory host Prompt Builder budget', () => {
       const request = executionRequestSchema.parse({
         ...executionBody(),
         requestId: FIXED_REQUEST_ID,
+        deliveryIntent: GREENFIELD_DELIVERY_INTENT,
       });
 
       const result = await engine.execute(request);
@@ -426,16 +428,16 @@ describe('AI Factory host Prompt Builder budget', () => {
 
       expect(result.status).toBe('SUCCESS');
       expect(provider.provider).toBe('fake');
-      expect(provider.calls).toHaveLength(3);
+      expect(provider.calls).toHaveLength(2);
       expect(promptRecords.map((record) => record.agent)).toEqual([
         'PRODUCT_OWNER',
         'DEVELOPER',
         'QA',
       ]);
       expect(promptRecords.find((record) => record.agent === 'PRODUCT_OWNER')?.version).toBe(
-        '1.0.1',
+        '1.0.2',
       );
-      expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.3');
+      expect(promptRecords.find((record) => record.agent === 'DEVELOPER')?.version).toBe('1.0.4');
       expect(promptRecords.find((record) => record.agent === 'QA')?.version).toBe('1.0.4');
       expect(promptRecords.every((record) => record.maxBytes === 512 * 1024)).toBe(true);
       expect(

@@ -20,11 +20,39 @@ function profileFile(root: string, relativePath: string): Promise<string> {
 }
 
 interface FactoryWebPreviewHelper {
+  readonly NODE_TYPES: string;
+  assertNoDiagnostics(
+    typescript: { getPreEmitDiagnostics(program: unknown): readonly { readonly code: number }[] },
+    program: unknown,
+  ): void;
+  compilerOptions(typescript: {
+    readonly ScriptTarget: Readonly<Record<string, number>>;
+    readonly ModuleKind: Readonly<Record<string, number>>;
+    readonly ModuleResolutionKind: Readonly<Record<string, number>>;
+  }): Readonly<Record<string, unknown>>;
+  compilerRootNames(manifest: {
+    readonly files: readonly { readonly path: string }[];
+  }): Promise<readonly string[]>;
+  formatTypeScriptDiagnosticMarker(
+    name: string,
+    summary: {
+      readonly diagnosticCount: number;
+      readonly diagnosticCodes: readonly number[];
+      readonly truncated: boolean;
+    } | null,
+  ): string | null;
   mediaTypeFor(filePath: string): string;
   sourcePathsFromManifest(manifest: {
     readonly files: readonly { readonly path: string }[];
   }): readonly string[];
   testPathsFromSources(sources: readonly string[]): readonly string[];
+  typeScriptDiagnosticSummary(
+    diagnostics: readonly { readonly code: number; readonly messageText?: string }[],
+  ): {
+    readonly diagnosticCount: number;
+    readonly diagnosticCodes: readonly number[];
+    readonly truncated: boolean;
+  };
   validateExecutionProfileFiles(
     files: readonly {
       readonly path: string;
@@ -309,6 +337,89 @@ describe('NODE_WEB_PREVIEW_24_V1 Docker assets', () => {
     expect(profile.mediaTypeFor('src/config.json')).toBe('application/json');
     expect(profile.mediaTypeFor('src/message.txt')).toBe('text/plain');
     expect(profile.mediaTypeFor('src/data.xml')).toBe('text/xml');
+  });
+
+  it('derives the exact TypeScript surface and Bundler mapping from the profile snapshot', async () => {
+    const profile = await loadFactoryWebPreviewHelper();
+    const options = profile.compilerOptions({
+      ScriptTarget: { ES2022: 9 },
+      ModuleKind: { ES2022: 7 },
+      ModuleResolutionKind: { Bundler: 100 },
+    });
+
+    expect(options).toMatchObject({
+      target: 9,
+      module: 7,
+      moduleResolution: 100,
+      strict: true,
+      allowJs: true,
+      checkJs: true,
+      esModuleInterop: true,
+      noEmitOnError: true,
+      skipLibCheck: false,
+      types: [],
+    });
+    await profile.compilerRootNames({ files: [{ path: 'src/app.ts' }] });
+    const declarations = await readFile(profile.NODE_TYPES, 'utf8');
+    const expectedDeclarations = Object.entries(
+      EXECUTION_PROFILE.buildSemantics.typeCheck.testModuleDeclarations,
+    )
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(
+        ([moduleName, declaration]) =>
+          `declare module ${JSON.stringify(moduleName)} { ${declaration} }`,
+      )
+      .join('\n');
+    expect(declarations).toBe(`${expectedDeclarations}\n`);
+    expect(await profileFile(FACTORY_PROFILE_ROOT, 'runner/common.mjs')).not.toContain(
+      'interface Assert { ok',
+    );
+  });
+
+  it('produces bounded diagnostic metadata without messages, paths or source', async () => {
+    const profile = await loadFactoryWebPreviewHelper();
+    const diagnostics = [
+      { code: 7006, messageText: '/workspace/project/private.ts: secret source' },
+      { code: 2304, messageText: 'Cannot find privateName' },
+      { code: 7006, messageText: 'duplicate' },
+    ];
+    const summary = profile.typeScriptDiagnosticSummary(diagnostics);
+    const marker = profile.formatTypeScriptDiagnosticMarker('TYPECHECK', summary);
+
+    expect(summary).toEqual({
+      diagnosticCount: 3,
+      diagnosticCodes: [2304, 7006],
+      truncated: false,
+    });
+    expect(marker).toBe('BRQ_TYPECHECK_DIAGNOSTICS count=3 codes=2304,7006 truncated=false');
+    expect(
+      profile.formatTypeScriptDiagnosticMarker('TYPECHECK', {
+        diagnosticCount: 1,
+        diagnosticCodes: [2304, 7006],
+        truncated: false,
+      }),
+    ).toBeNull();
+    expect(`${JSON.stringify(summary)}${marker}`).not.toMatch(/workspace|private|secret|source/u);
+
+    const manyCodes = Array.from({ length: 33 }, (_, index) => ({ code: 1000 + index }));
+    expect(profile.typeScriptDiagnosticSummary(manyCodes)).toMatchObject({
+      diagnosticCount: 33,
+      diagnosticCodes: Array.from({ length: 32 }, (_, index) => 1000 + index),
+      truncated: true,
+    });
+    const manyDiagnostics = Array.from({ length: 10_001 }, () => ({ code: 7006 }));
+    expect(profile.typeScriptDiagnosticSummary(manyDiagnostics)).toEqual({
+      diagnosticCount: 10_000,
+      diagnosticCodes: [7006],
+      truncated: true,
+    });
+
+    expect(() =>
+      profile.assertNoDiagnostics({ getPreEmitDiagnostics: () => diagnostics }, Object.freeze({})),
+    ).toThrowError('TYPESCRIPT_DIAGNOSTICS');
+    expect(() =>
+      profile.assertNoDiagnostics({ getPreEmitDiagnostics: () => [] }, Object.freeze({})),
+    ).not.toThrow();
   });
 
   it('keeps every host-forbidden module extension rejected by the active helper', async () => {

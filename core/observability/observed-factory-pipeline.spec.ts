@@ -28,6 +28,20 @@ function recorder(): FactoryExecutionHistoryRecorder {
 }
 
 describe('Observed Factory Pipeline', () => {
+  it('encaminha o preflight sem iniciar observabilidade de execução', async () => {
+    const preflight = vi.fn(async () => undefined);
+    const history = recorder();
+    const observed = createObservedFactoryPipeline({
+      pipeline: { preflight, execute: async () => result() },
+      history,
+    });
+
+    await expect(observed.preflight?.()).resolves.toBeUndefined();
+
+    expect(preflight).toHaveBeenCalledOnce();
+    expect(history.beginFactory).not.toHaveBeenCalled();
+  });
+
   it('preserva resultado, identidade e AbortSignal', async () => {
     const request = createObservabilityRequest();
     const terminal = { ...result(), workflowId: request.workflowId } as FactoryExecutionResult;

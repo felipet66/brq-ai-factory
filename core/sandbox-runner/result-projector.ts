@@ -118,6 +118,7 @@ export function finalizeSandboxRunResult(input: FinalizeSandboxRunInput): Sandbo
             stage: input.failure.stage,
             sourceCode: input.failure.sourceCode,
             reasonCode: input.failure.reasonCode,
+            diagnosticSummary: input.failure.diagnosticSummary,
           },
     policyHash,
     commandPolicyHash,

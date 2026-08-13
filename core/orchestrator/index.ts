@@ -7,3 +7,4 @@ export {
 } from './errors';
 export { createOrchestrator } from './orchestrator';
 export * from './schemas';
+export { ORCHESTRATOR_CONTRACT_VERSION } from './version';

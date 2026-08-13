@@ -9,6 +9,7 @@ import type {
   apiErrorSchema,
   errorResponseSchema,
   executionAcceptedResponseSchema,
+  executionRerunAcceptedResponseSchema,
   executionHttpRequestSchema,
   executionHistoryDetailResponseSchema,
   executionHistoryPageResponseSchema,
@@ -26,6 +27,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ExecutionAcceptedResponse = z.infer<typeof executionAcceptedResponseSchema>;
+export type ExecutionRerunAcceptedResponse = z.infer<typeof executionRerunAcceptedResponseSchema>;
 export type ExecutionListQueryHttp = z.infer<typeof executionListQueryHttpSchema>;
 export type ExecutionHistoryPageResponse = z.infer<typeof executionHistoryPageResponseSchema>;
 export type ExecutionHistoryDetailResponse = z.infer<typeof executionHistoryDetailResponseSchema>;

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createProductOwnerBusinessStructureRejection,
   deriveProductOwnerReadiness,
+  explainProductOwnerReadiness,
   PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES,
   type ProductOwnerBusinessValidationInput,
   validateProductOwnerBusinessRules,
@@ -52,6 +53,22 @@ describe('Product Owner Business Validation', () => {
         [{ id: 'ASM-001', requiresValidation: true }],
       ),
     ).toBe('REQUIRES_CLARIFICATION');
+  });
+
+  it('explains only the decisive tier with safe, deterministic factors', () => {
+    expect(
+      explainProductOwnerReadiness(
+        [
+          { id: 'Q-private-1', impact: 'NON_BLOCKING' },
+          { id: 'Q-private-2', impact: 'BLOCKING' },
+        ],
+        [{ id: 'ASM-private', requiresValidation: true }],
+      ),
+    ).toEqual({
+      version: '1.0.0',
+      readiness: 'REQUIRES_CLARIFICATION',
+      decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'BLOCKING_QUESTION_PRESENT' }],
+    });
   });
 
   it('accepts and deeply freezes a complete READY specification report', () => {

@@ -39,6 +39,8 @@ export type AgentRunResult = DeepReadonly<z.infer<typeof agentRunResultSchema>>;
 
 export interface AgentRunOptions {
   readonly signal?: AbortSignal;
+  readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
+  readonly sourceExecutionId?: string;
 }
 
 export interface CreateAgentRunnerOptions {

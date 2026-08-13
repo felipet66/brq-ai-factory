@@ -1,4 +1,5 @@
 import { calculateCanonicalJsonHash } from '@brq/prompt-builder';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -96,6 +97,7 @@ function request(overrides: Record<string, unknown> = {}) {
       targetUsers: [],
       constraints: [],
     },
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     additionalContext: 'Contexto adicional não confiável.',
     model: 'configured-model',
     limits: {
@@ -171,6 +173,7 @@ function resultMetadata() {
         usedBytes: 100,
       },
     },
+    sourcePromptContextHash: requestContext.contentHash,
     run: {
       prompt: {
         metadata: {
@@ -371,6 +374,7 @@ function generatedResult() {
       assets: metadata.assets,
       knowledge: metadata.knowledge,
       run: metadata.run,
+      sourcePromptContextHash: metadata.sourcePromptContextHash,
       generation: {
         specificationId: 'artifacts:product-owner',
         specificationVersion: '1.0.0',
@@ -507,6 +511,12 @@ describe('Product Owner schemas', () => {
           ...result.metadata,
           generation: { ...result.metadata.generation, artifactCount: 2 },
         },
+      }).success,
+    ).toBe(false);
+    expect(
+      productOwnerAgentResultSchema.safeParse({
+        ...result,
+        metadata: { ...result.metadata, sourcePromptContextHash: SOURCE_HASH },
       }).success,
     ).toBe(false);
     expect(

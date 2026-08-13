@@ -8,6 +8,7 @@ import {
   executionObservabilitySnapshotSchema,
   type ExecutionObservabilitySnapshot,
 } from '@brq/observability';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 
 import type { ExecutionRecord } from '../contracts';
 import {
@@ -27,6 +28,7 @@ export function createExecutionRequestFixture(
     workflowId: EXECUTION_RECORD_FIXTURE_WORKFLOW_ID,
     requestId: 'request-001',
     traceId: 'trace-001',
+    deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     demand: {
       title: 'Order tracking',
       description: 'Allow customers to inspect order delivery status.',
@@ -62,7 +64,7 @@ export function createExecutionResultFixture(
     status: 'FAILED',
     startedAt: '2026-08-07T12:00:00.010Z',
     finishedAt: '2026-08-07T12:00:00.040Z',
-    metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    metadata: { engineVersion: '1.0.0', contractVersion: '1.1.0', attempt: 1 },
     workflowResult: null,
     timeline: [
       {
@@ -205,7 +207,7 @@ export function createExecutionRecordFixture(): ExecutionRecord {
     traceId: 'trace-001',
     projectName: 'Order tracking',
     createdAt: '2026-08-07T12:00:00.000Z',
-    metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    metadata: { engineVersion: '1.0.0', contractVersion: '1.1.0', attempt: 1 },
   });
   const running = projectRunningExecutionRecord(created, '2026-08-07T12:00:00.010Z');
   return projectTerminalExecutionRecord(

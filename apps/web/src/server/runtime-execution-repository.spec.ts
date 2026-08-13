@@ -6,6 +6,7 @@ import { createInMemoryExecutionRecordRepository } from '@brq/execution-reposito
 import { FakeKnowledgeSource } from '@brq/knowledge-loader/testing';
 import { createInMemoryExecutionHistory } from '@brq/observability';
 import { createLogger } from '@brq/shared/logger/logger';
+import { GREENFIELD_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 import { describe, expect, it } from 'vitest';
 
 import { executionBody, FIXED_REQUEST_ID } from '../test/api-fixtures';
@@ -28,6 +29,7 @@ describe('application execution repository integration', () => {
     const request = executionRequestSchema.parse({
       ...executionBody(),
       requestId: FIXED_REQUEST_ID,
+      deliveryIntent: GREENFIELD_DELIVERY_INTENT,
     });
     const controller = new AbortController();
     controller.abort();

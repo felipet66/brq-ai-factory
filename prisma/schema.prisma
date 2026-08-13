@@ -128,17 +128,18 @@ model Log {
 }
 
 model User {
-  id               String            @id
-  email            String            @unique
-  name             String
-  emailVerified    Boolean           @default(false)
-  image            String?
-  role             String            @default("USER")
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  sessions         Session[]
-  accounts         Account[]
-  executionRecords ExecutionRecord[]
+  id                        String                     @id
+  email                     String                     @unique
+  name                      String
+  emailVerified             Boolean                    @default(false)
+  image                     String?
+  role                      String                     @default("USER")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  sessions                  Session[]
+  accounts                  Account[]
+  executionRecords          ExecutionRecord[]
+  executionRequestSnapshots ExecutionRequestSnapshot[]
 }
 
 model Session {
@@ -385,6 +386,7 @@ model ExecutionProvenanceStage {
   agentVersion         String
   outcome              String
   readiness            String?
+  readinessDecision    Json?
   assetBundleHash      String
   knowledgeContextHash String
   promptHash           String
@@ -410,38 +412,42 @@ model ExecutionProvenanceArtifactHash {
 }
 
 model ExecutionFactoryResult {
-  executionRecordId      String                             @id
-  factoryVersion         String
-  contractVersion        String
-  status                 String
-  startedAt              DateTime
-  finishedAt             DateTime
-  durationMs             Int
-  readiness              String?
-  terminalStage          String
-  factoryResultHash      String
-  lineageHash            String
-  provenanceHash         String
-  generationStatus       String
-  generatedFileCount     Int?
-  generatedTotalBytes    Int?
-  workspaceId            String?
-  workspaceFileCount     Int?
-  workspaceTotalBytes    Int?
-  workspaceReleaseStatus String
-  sandboxStatus          String
-  sandboxRunId           String?
-  sandboxResourceOutcome String
-  failureKind            String?
-  failureCode            String?
-  failureSourceCode      String?
-  failureReasonCode      String?
-  failureStageId         String?
-  executionRecord        ExecutionRecord                    @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
-  stages                 ExecutionFactoryStageResult[]
-  lineage                ExecutionFactoryLineage?
-  provenance             ExecutionFactoryProvenance?
-  toolchainVersions      ExecutionFactoryToolchainVersion[]
+  executionRecordId          String                             @id
+  factoryVersion             String
+  contractVersion            String
+  status                     String
+  startedAt                  DateTime
+  finishedAt                 DateTime
+  durationMs                 Int
+  readiness                  String?
+  terminalStage              String
+  factoryResultHash          String
+  lineageHash                String
+  provenanceHash             String
+  generationStatus           String
+  generatedFileCount         Int?
+  generatedTotalBytes        Int?
+  workspaceId                String?
+  workspaceFileCount         Int?
+  workspaceTotalBytes        Int?
+  workspaceReleaseStatus     String
+  sandboxStatus              String
+  sandboxRunId               String?
+  sandboxResourceOutcome     String
+  failureKind                String?
+  failureCode                String?
+  failureSourceCode          String?
+  failureReasonCode          String?
+  failureProfileRuleId       String?
+  failureDiagnosticCount     Int?
+  failureDiagnosticCodes     Json?
+  failureDiagnosticTruncated Boolean?
+  failureStageId             String?
+  executionRecord            ExecutionRecord                    @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  stages                     ExecutionFactoryStageResult[]
+  lineage                    ExecutionFactoryLineage?
+  provenance                 ExecutionFactoryProvenance?
+  toolchainVersions          ExecutionFactoryToolchainVersion[]
 
   @@index([status, finishedAt])
   @@index([factoryResultHash])
@@ -459,6 +465,10 @@ model ExecutionFactoryStageResult {
   outputHash               String?
   failureCode              String?
   reasonCode               String?
+  profileRuleId            String?
+  diagnosticCount          Int?
+  diagnosticCodes          Json?
+  diagnosticTruncated      Boolean?
   resourceOutcome          String?
   executionFactoryResult   ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
 
@@ -489,37 +499,37 @@ model ExecutionFactoryLineage {
 }
 
 model ExecutionFactoryProvenance {
-  executionFactoryResultId      String                 @id
-  codeGeneratorAgentVersion     String?
-  codeGeneratorContractVersion  String?
-  codeGeneratorAssetBundleHash  String?
-  executionProfileId            String?
-  executionProfileVersion       String?
+  executionFactoryResultId        String                 @id
+  codeGeneratorAgentVersion       String?
+  codeGeneratorContractVersion    String?
+  codeGeneratorAssetBundleHash    String?
+  executionProfileId              String?
+  executionProfileVersion         String?
   executionProfileContractVersion String?
-  executionProfileHash          String?
-  generationProjectionHash      String?
-  profileValidationHash         String?
-  workspaceVersion              String?
-  workspaceContractVersion      String?
-  workspacePolicyHash           String?
-  workspaceConfigurationHash    String?
-  sandboxRunnerVersion          String?
-  sandboxContractVersion        String?
-  sandboxSanitizerVersion       String?
-  sandboxHelperAbiVersion       String?
-  sandboxDependencySnapshotHash String?
-  sandboxPolicyId               String?
-  sandboxPolicyVersion          String?
-  sandboxPolicyHash             String?
-  sandboxCommandPolicyHash      String?
-  sandboxLimitsHash             String?
-  sandboxAdapter                String?
-  sandboxImageDigest            String?
-  sandboxImageId                String?
-  sandboxPlatform               String?
-  sandboxRuntimeName            String?
-  sandboxRuntimeVersion         String?
-  executionFactoryResult        ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
+  executionProfileHash            String?
+  generationProjectionHash        String?
+  profileValidationHash           String?
+  workspaceVersion                String?
+  workspaceContractVersion        String?
+  workspacePolicyHash             String?
+  workspaceConfigurationHash      String?
+  sandboxRunnerVersion            String?
+  sandboxContractVersion          String?
+  sandboxSanitizerVersion         String?
+  sandboxHelperAbiVersion         String?
+  sandboxDependencySnapshotHash   String?
+  sandboxPolicyId                 String?
+  sandboxPolicyVersion            String?
+  sandboxPolicyHash               String?
+  sandboxCommandPolicyHash        String?
+  sandboxLimitsHash               String?
+  sandboxAdapter                  String?
+  sandboxImageDigest              String?
+  sandboxImageId                  String?
+  sandboxPlatform                 String?
+  sandboxRuntimeName              String?
+  sandboxRuntimeVersion           String?
+  executionFactoryResult          ExecutionFactoryResult @relation(fields: [executionFactoryResultId], references: [executionRecordId], onDelete: Restrict)
 }
 
 model ExecutionFactoryToolchainVersion {
@@ -683,4 +693,42 @@ model PreviewAccessTicket {
   previewSession   PreviewSession @relation(fields: [previewSessionId], references: [previewId], onDelete: Restrict)
 
   @@index([expiresAt])
+}
+
+model AiResponseCacheEntry {
+  executionId  String
+  agent        String
+  provider     String
+  requestHash  String
+  state        String
+  claimToken   String?
+  responseHash String?
+  response     Json?
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  @@id([executionId, agent])
+  @@index([executionId, state])
+  @@index([provider, requestHash])
+  @@index([executionId, createdAt])
+  @@index([createdAt])
+  @@index([responseHash])
+}
+
+model ExecutionRequestSnapshot {
+  executionId             String   @id
+  ownerId                 String
+  requestHash             String
+  version                 String
+  request                 Json
+  replaySourceExecutionId String?
+  replayCacheExecutionId  String?
+  replayMode              String?
+  createdAt               DateTime
+  owner                   User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([ownerId, createdAt])
+  @@index([requestHash])
+  @@index([replaySourceExecutionId])
+  @@index([replayCacheExecutionId])
 }

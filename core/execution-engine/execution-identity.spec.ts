@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHANGE_DELIVERY_INTENT } from '@brq/shared/constants/delivery-intent';
 
 import { deriveExecutionIdentity } from './execution-engine';
 import { ExecutionEngineError } from './errors';
@@ -14,6 +15,7 @@ describe('Execution identity reservation', () => {
     expect(first).toEqual(second);
     expect(first.executionId).toMatch(/^execution-[a-f0-9]{32}$/);
     expect(first.executionRequestHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.workflowRequestHash).toMatch(/^[a-f0-9]{64}$/);
     expect(Object.isFrozen(first)).toBe(true);
   });
 
@@ -25,6 +27,18 @@ describe('Execution identity reservation', () => {
     };
 
     expect(deriveExecutionIdentity(changed)).not.toEqual(deriveExecutionIdentity(request));
+  });
+
+  it('inclui a intenção imutável de entrega na identidade da execução', () => {
+    const request = createExecutionRequestFixture();
+    const changeRequest = createExecutionRequestFixture({
+      deliveryIntent: CHANGE_DELIVERY_INTENT,
+    });
+
+    expect(deriveExecutionIdentity(structuredClone(request))).toEqual(
+      deriveExecutionIdentity(request),
+    );
+    expect(deriveExecutionIdentity(changeRequest)).not.toEqual(deriveExecutionIdentity(request));
   });
 
   it('rejeita uma requisição inválida antes de reservar identidade', () => {

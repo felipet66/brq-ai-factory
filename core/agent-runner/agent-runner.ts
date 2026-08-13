@@ -158,6 +158,18 @@ function throwIfAborted(
   });
 }
 
+function assertRequiredCacheCapability(
+  cacheMode: AIGenerateOptions['cacheMode'],
+  provider: CreateAgentRunnerOptions['aiProvider'],
+): void {
+  if (cacheMode !== 'REQUIRE_HIT' || provider.capabilities?.exactResponseCache === true) return;
+
+  throw new AIProviderError('O AI Provider não declara suporte a cache exato.', {
+    code: AI_PROVIDER_ERROR_CODES.CACHE_MISS,
+    provider: provider.provider,
+  });
+}
+
 function failureEvent(error: AgentRunError) {
   if (error.code === AGENT_RUN_ERROR_CODES.CANCELLED) return 'agent.run.cancelled' as const;
   if (error.code === AGENT_RUN_ERROR_CODES.TIMEOUT) return 'agent.run.timed_out' as const;
@@ -186,6 +198,7 @@ export function createAgentRunner(options: CreateAgentRunnerOptions): AgentRunne
         const request = parseAgentRunRequest(rawRequest);
         context = request.context;
         throwIfAborted(signal, request.context, stage, startedAt, now);
+        assertRequiredCacheCapability(validRunOptions.cacheMode, options.aiProvider);
 
         logger.info('agent.run.started', {
           ...correlationLogContext(request.context),
@@ -237,9 +250,19 @@ export function createAgentRunner(options: CreateAgentRunnerOptions): AgentRunne
             ? {}
             : { requestId: request.context.requestId }),
           ...(request.context.traceId === undefined ? {} : { traceId: request.context.traceId }),
+          ...(validRunOptions.cacheMode === undefined
+            ? {}
+            : { cacheMode: validRunOptions.cacheMode }),
+          executionId: request.context.execution.executionId,
+          agent: request.context.execution.agent,
+          ...(validRunOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: validRunOptions.sourceExecutionId }),
         };
         const rawResponse = await options.aiProvider.generate(aiRequest, generateOptions);
-        const providerDurationMs = elapsed(now, providerStartedAt);
+        const measuredProviderDurationMs = elapsed(now, providerStartedAt);
+        const cacheOnlyReplay = validRunOptions.cacheMode === 'REQUIRE_HIT';
+        const providerDurationMs = cacheOnlyReplay ? 0 : measuredProviderDurationMs;
 
         stage = 'PROVIDER_RESPONSE_VALIDATION';
         const response = parseProviderResponse(rawResponse, options.aiProvider.provider);
@@ -250,6 +273,17 @@ export function createAgentRunner(options: CreateAgentRunnerOptions): AgentRunne
           responseModel: response.model,
           responseId: response.metadata.responseId,
         };
+        const reportedMetrics = cacheOnlyReplay
+          ? {
+              durationMs: 0,
+              attempts: response.metadata.attempts,
+              usage: { inputTokens: 0, outputTokens: 0 },
+            }
+          : {
+              durationMs: response.metadata.durationMs,
+              attempts: response.metadata.attempts,
+              usage: response.usage,
+            };
 
         logger.info('agent.run.provider.completed', {
           ...correlationLogContext(request.context),
@@ -257,10 +291,10 @@ export function createAgentRunner(options: CreateAgentRunnerOptions): AgentRunne
           responseHash: envelope.responseHash,
           finishReason: response.finishReason,
           providerDurationMs,
-          providerReportedDurationMs: response.metadata.durationMs,
-          providerAttempts: response.metadata.attempts,
-          usageInputCount: response.usage.inputTokens,
-          usageOutputCount: response.usage.outputTokens,
+          providerReportedDurationMs: reportedMetrics.durationMs,
+          providerAttempts: reportedMetrics.attempts,
+          usageInputCount: reportedMetrics.usage.inputTokens,
+          usageOutputCount: reportedMetrics.usage.outputTokens,
         });
 
         stage = 'FINALIZATION';
@@ -272,11 +306,7 @@ export function createAgentRunner(options: CreateAgentRunnerOptions): AgentRunne
             bytesSent,
             bytesReceived: envelope.sizeBytes,
           }),
-          reported: {
-            durationMs: response.metadata.durationMs,
-            attempts: response.metadata.attempts,
-            usage: response.usage,
-          },
+          reported: reportedMetrics,
         };
         const result = deepFreeze(
           parseAgentRunResult({

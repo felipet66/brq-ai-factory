@@ -15,15 +15,21 @@ request + source validation
   -> QAAgentResult
 ```
 
-O Agent Runner encapsula Prompt Builder e AI Provider. O pacote não chama outros agentes, não acessa persistência e não executa testes.
+O modo generativo mantém o Agent Runner com Prompt Builder e AI Provider. O modo determinístico
+usa o mesmo Prompt Builder e compila a saída localmente, sem AI Provider. O pacote não chama
+outros agentes, não acessa persistência e não executa testes.
 
 ## Entrada
 
 - contexto técnico da tentativa;
 - `ProductOwnerSpecification` válida;
 - `TechnicalSpecification` válida e compatível;
+- `deliveryIntent` host-owned válido e compatível com a especificação técnica;
 - modelo e limites opcionais;
 - `AbortSignal` opcional.
+
+O `deliveryIntent` é usado exclusivamente no preflight host-side da source. Ele não é projetado nos
+três contextos nem enviado ao prompt do QA.
 
 ## Saída
 
@@ -57,3 +63,8 @@ Consulte [ADR-021](../../knowledge/ADR/ADR-021-QA-AGENT-BOUNDARY.md) e [fluxo vi
 ## API pública
 
 O entrypoint também expõe a função pura `projectQAPromptContexts` como seam mínimo do Prompt Inspector. Ela reutiliza a transformação canônica de conhecimento e specifications sem executar o QA Agent. Logging, montagem de requests do runner e montagem de resultado permanecem internos.
+
+Para execução sem modelo, `createDeterministicQAAgent` preserva a fachada e os validadores atuais,
+substituindo apenas o runner. `compileCanonicalQASpecification` oferece a compilação pura das
+specifications PO e Developer; `createDeterministicQAAgentRunner` é o seam compatível com
+`AgentRunner`. Nesse modo, a resposta registra zero tokens e `providerDurationMs` igual a zero.

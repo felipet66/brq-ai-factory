@@ -10,6 +10,7 @@ import type {
   TechnicalSpecification,
 } from './contracts';
 import { deepFreeze } from './immutability';
+import { calculateDeveloperSourcePromptContextHash } from './knowledge-projection';
 import { sourceSpecificationHash } from './logging';
 import type { DeveloperPromptAssets } from './prompt-assets';
 import { developerAgentResultSchema } from './schemas';
@@ -98,6 +99,7 @@ function commonMetadata(context: DeveloperResultContext) {
     knowledge: projectKnowledge(context.knowledge),
     run: projectRun(context.run),
     sourceSpecificationHash: sourceSpecificationHash(context.request),
+    sourcePromptContextHash: calculateDeveloperSourcePromptContextHash(context.request),
     sourceReadiness: context.request.productOwnerSpecification.readiness,
   };
 }

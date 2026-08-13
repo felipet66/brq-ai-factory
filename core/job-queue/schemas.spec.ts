@@ -112,6 +112,31 @@ describe('job queue schemas', () => {
     ).toBe(false);
   });
 
+  it('keeps cache-only dispatch context private and requires a source execution', () => {
+    const input = createJobInputFixture();
+    expect(
+      enqueueJobInputSchema.safeParse({
+        ...input,
+        executionOptions: {
+          cacheMode: 'REQUIRE_HIT',
+          sourceExecutionId: input.executionId,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      enqueueJobInputSchema.safeParse({
+        ...input,
+        executionOptions: { cacheMode: 'REQUIRE_HIT', sourceExecutionId: null },
+      }).success,
+    ).toBe(false);
+    expect(
+      enqueueJobInputSchema.safeParse({
+        ...input,
+        executionOptions: { cacheMode: 'READ_WRITE', sourceExecutionId: input.executionId },
+      }).success,
+    ).toBe(false);
+  });
+
   it('rejects non-monotonic events, temporal inversions and incoherent terminal data', () => {
     const running = runningRecord();
     expect(

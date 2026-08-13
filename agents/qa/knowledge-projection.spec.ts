@@ -60,6 +60,9 @@ describe('QA knowledge projection', () => {
     expect(contexts[2]?.contentHash).toBe(
       `sha256:${calculateCanonicalJsonHash(request.technicalSpecification as unknown as JsonValue)}`,
     );
+    expect(contexts[1]?.content).toEqual(request.productOwnerSpecification);
+    expect(contexts[2]?.content).toEqual(request.technicalSpecification);
+    expect(JSON.stringify(contexts)).not.toContain('deliveryIntent');
     expect(Object.isFrozen(contexts)).toBe(true);
     expect(Object.isFrozen(contexts[2]?.content)).toBe(true);
     expect(request).toEqual(snapshot);

@@ -2,6 +2,7 @@ import {
   DEVELOPER_AGENT_ERROR_CODES,
   DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES,
   DEVELOPER_READINESS_VALUES,
+  calculateDeveloperSourcePromptContextHash,
   createDeveloperAgent,
   deriveDeveloperReadiness,
   developerAgentRequestSchema,
@@ -31,6 +32,7 @@ describe('@brq/developer-agent package exports', () => {
     expect(resultTypeCheck).toBeUndefined();
     expect(loadDeveloperPromptAssets().manifest.agent).toBe('DEVELOPER');
     expect(projectDeveloperPromptContexts).toBeTypeOf('function');
+    expect(calculateDeveloperSourcePromptContextHash(request)).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(DEVELOPER_READINESS_VALUES).toEqual([
       'READY',
       'PARTIALLY_READY',
@@ -38,7 +40,11 @@ describe('@brq/developer-agent package exports', () => {
     ]);
     expect(deriveDeveloperReadiness('READY', [], [])).toBe('READY');
     expect(
-      validateDeveloperBusinessRules(specification, request.productOwnerSpecification),
+      validateDeveloperBusinessRules(
+        specification,
+        request.productOwnerSpecification,
+        request.deliveryIntent,
+      ),
     ).toMatchObject({ valid: true, expectedReadiness: 'READY' });
     expect(DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.READINESS_MISMATCH).toContain(
       'READINESS_MISMATCH',
@@ -51,6 +57,7 @@ describe('@brq/developer-agent package exports', () => {
 
     expect(publicApi).not.toHaveProperty('deepFreeze');
     expect(publicApi).toHaveProperty('projectDeveloperPromptContexts');
+    expect(publicApi).toHaveProperty('calculateDeveloperSourcePromptContextHash');
     expect(publicApi).not.toHaveProperty('createDeveloperAgentRunRequest');
     expect(publicApi).not.toHaveProperty('createGeneratedResult');
     expect(publicApi).not.toHaveProperty('requestLogContext');

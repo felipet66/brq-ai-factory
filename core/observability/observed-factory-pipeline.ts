@@ -28,6 +28,11 @@ export function createObservedFactoryPipeline(
   };
 
   return Object.freeze({
+    ...(options.pipeline.preflight === undefined
+      ? {}
+      : {
+          preflight: options.pipeline.preflight.bind(options.pipeline),
+        }),
     async execute(
       request: ExecutionRequest,
       runOptions?: FactoryPipelineRunOptions,

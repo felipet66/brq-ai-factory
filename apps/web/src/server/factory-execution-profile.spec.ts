@@ -1,9 +1,12 @@
 import {
+  FACTORY_EXECUTION_PROFILE_RULE_IDS,
   NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE,
   projectGenerationProfileConstraints,
   projectSandboxExecutionProfileSnapshot,
 } from '@brq/factory-execution-profile';
 import { describe, expect, it } from 'vitest';
+
+import { PUBLIC_FACTORY_PROFILE_RULE_IDS } from '@/api/factory-profile-rule-contracts';
 
 import {
   FACTORY_PIPELINE_CONFIGURATION,
@@ -28,5 +31,11 @@ describe('Factory Execution Profile composition', () => {
     expect(Object.isFrozen(profile)).toBe(true);
     expect(Object.isFrozen(generation)).toBe(true);
     expect(Object.isFrozen(sandbox)).toBe(true);
+  });
+
+  it('keeps the browser-safe profile rule allowlist equal to the authoritative profile rules', () => {
+    expect([...PUBLIC_FACTORY_PROFILE_RULE_IDS].sort()).toEqual(
+      Object.values(FACTORY_EXECUTION_PROFILE_RULE_IDS).sort(),
+    );
   });
 });

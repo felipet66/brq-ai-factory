@@ -50,6 +50,9 @@ function elapsed(now: () => number, startedAt: number): number {
 
 function safeSourceCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  if (error instanceof AgentRunError && error.sourceCode === 'AI_PROVIDER_CACHE_MISS') {
+    return sanitizeQASourceCode(error.sourceCode);
+  }
   return sanitizeQASourceCode(error.code);
 }
 
@@ -284,6 +287,7 @@ export function createQAAgent(options: CreateQAAgentOptions): QAAgent {
         const sourceValidation = validateDeveloperBusinessRules(
           request.technicalSpecification,
           request.productOwnerSpecification,
+          request.deliveryIntent,
         );
         if (!sourceValidation.valid) {
           throw qaError('As especificações de origem são incompatíveis.', {
@@ -318,6 +322,10 @@ export function createQAAgent(options: CreateQAAgentOptions): QAAgent {
         stage = 'RUNNER_EXECUTION';
         const run = await options.agentRunner.run(runRequest, {
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+          ...(runOptions.cacheMode === undefined ? {} : { cacheMode: runOptions.cacheMode }),
+          ...(runOptions.sourceExecutionId === undefined
+            ? {}
+            : { sourceExecutionId: runOptions.sourceExecutionId }),
         });
         logger.info('qa.run.completed', {
           ...requestLogContext(request, assets),

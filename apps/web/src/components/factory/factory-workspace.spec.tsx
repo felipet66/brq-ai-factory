@@ -15,6 +15,10 @@ vi.mock('./preview-control', () => ({
     <section aria-label="preview control">{factoryApproved ? 'APPROVED' : 'UNAVAILABLE'}</section>
   ),
 }));
+vi.mock('./execution-rerun-control', () => ({
+  ExecutionRerunControl: ({ eligible }: { readonly eligible: boolean }) =>
+    eligible ? <section aria-label="cache-only rerun">ELIGIBLE</section> : null,
+}));
 
 afterEach(cleanup);
 
@@ -87,6 +91,60 @@ describe('FactoryWorkspace', () => {
     expect(container).not.toHaveTextContent('console.log');
   });
 
+  it('offers cache-only rerun after Code Generator succeeded and a downstream stage failed', () => {
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({ status: 'FAILED' }),
+      }),
+      timeline: factoryTimelineV2Fixture({ status: 'FAILED' }),
+    });
+
+    render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: 'cache-only rerun' })).toHaveTextContent('ELIGIBLE');
+  });
+
+  it('does not offer rerun when Code Generator did not succeed', () => {
+    const successful = factoryResultFixture();
+    const timeline = factoryTimelineV2Fixture();
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          stages: successful.stages.map((stage) =>
+            stage.stageId === 'CODE_GENERATOR' ? { ...stage, status: 'FAILED' } : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineV2Fixture({
+        status: 'FAILED',
+        stages: timeline.stages.map((stage) =>
+          stage.stageId === 'CODE_GENERATOR' ? { ...stage, status: 'FAILED' } : stage,
+        ),
+      }),
+    });
+
+    render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('region', { name: 'cache-only rerun' })).not.toBeInTheDocument();
+  });
+
   it('renders a safe Sandbox reason separately from its stable failure code', () => {
     const successful = factoryResultFixture();
     const factoryResult = factoryResultFixture({
@@ -98,6 +156,8 @@ describe('FactoryWorkspace', () => {
         code: 'SANDBOX_STEP_FAILED',
         sourceCode: null,
         reasonCode: 'INLINE_ACTIVE_CONTENT',
+        profileRuleId: null,
+        diagnosticSummary: null,
         stageId: 'SANDBOX_PREPARE',
       },
       stages: successful.stages.map((stage) =>
@@ -131,6 +191,270 @@ describe('FactoryWorkspace', () => {
     expect(within(pipeline).getByText('INLINE_ACTIVE_CONTENT')).toBeVisible();
     expect(container).not.toHaveTextContent('EXIT_1');
     expect(container).not.toHaveTextContent('stderr');
+  });
+
+  it('renders only the safe TypeScript diagnostic count and codes', () => {
+    const successful = factoryResultFixture();
+    const diagnosticSummary = {
+      diagnosticCount: 3,
+      diagnosticCodes: [2307, 2322],
+      truncated: true,
+    } as const;
+    const factoryResult = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'SANDBOX_TYPECHECK',
+      sandboxStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'SANDBOX_STEP_FAILED',
+        sourceCode: null,
+        reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+        profileRuleId: null,
+        diagnosticSummary,
+        stageId: 'SANDBOX_TYPECHECK',
+      },
+      stages: successful.stages.map((stage) =>
+        stage.stageId === 'SANDBOX_TYPECHECK'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'SANDBOX_STEP_FAILED',
+              reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+              diagnosticSummary,
+            }
+          : stage,
+      ),
+    });
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ status: 'FAILED', factoryResult }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    const { container } = render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+    const pipeline = screen.getByRole('list', { name: 'Factory technical pipeline' });
+
+    expect(within(pipeline).getByText('TypeScript diagnostics')).toBeVisible();
+    expect(within(pipeline).getByText('3 (truncated)')).toBeVisible();
+    expect(within(pipeline).getByText('TS2307, TS2322')).toBeVisible();
+    expect(container).not.toHaveTextContent('/private/workspace');
+    expect(container).not.toHaveTextContent('private source');
+  });
+
+  it('shows only the allowlisted rule recorded by failed Profile Validation', () => {
+    const successful = factoryResultFixture();
+    const profileFailure = {
+      kind: 'FACTORY_PIPELINE' as const,
+      code: 'FACTORY_PIPELINE_CODE_PROFILE_VALIDATION_FAILED',
+      sourceCode: null,
+      reasonCode: 'EXTERNAL_OR_UNSAFE_REFERENCE',
+      profileRuleId: 'content.javascript.relative-references' as const,
+      diagnosticSummary: null,
+      stageId: 'CODE_PROFILE_VALIDATION' as const,
+    };
+    const failedStages = successful.stages.map((stage) =>
+      stage.stageId === 'CODE_PROFILE_VALIDATION'
+        ? {
+            ...stage,
+            status: 'FAILED' as const,
+            failureCode: profileFailure.code,
+            reasonCode: profileFailure.reasonCode,
+            profileRuleId: profileFailure.profileRuleId,
+          }
+        : stage,
+    );
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_PROFILE_VALIDATION',
+          failure: profileFailure,
+          stages: failedStages,
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    const view = render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+    const pipeline = screen.getByRole('list', { name: 'Factory technical pipeline' });
+
+    expect(within(pipeline).getByText('Profile rule')).toBeVisible();
+    expect(within(pipeline).getByText('content.javascript.relative-references')).toBeVisible();
+
+    const unknownModel = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          terminalStage: 'CODE_PROFILE_VALIDATION',
+          failure: { ...profileFailure, profileRuleId: 'internal.customer.rule' as never },
+          stages: failedStages.map((stage) =>
+            stage.stageId === 'CODE_PROFILE_VALIDATION'
+              ? { ...stage, profileRuleId: 'internal.customer.rule' as never }
+              : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    view.rerender(
+      <FactoryWorkspace
+        model={unknownModel}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Profile rule')).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent('internal.customer.rule');
+  });
+
+  it('shows the real readiness origin and safe Code Generator source reason', () => {
+    const source = factoryExecutionFixture();
+    const successfulFactory = factoryResultFixture();
+    const qaBlockedFactory = factoryResultFixture({
+      status: 'FAILED',
+      terminalStage: 'CODE_GENERATOR',
+      readiness: 'PARTIALLY_READY',
+      generationStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_QA_NOT_READY',
+        sourceCode: null,
+        reasonCode: 'SOURCE_QA_READINESS_NOT_READY',
+        profileRuleId: null,
+        diagnosticSummary: null,
+        stageId: 'CODE_GENERATOR',
+      },
+      stages: successfulFactory.stages.map((stage) =>
+        stage.stageId === 'CODE_GENERATOR'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_QA_NOT_READY',
+              reasonCode: 'SOURCE_QA_READINESS_NOT_READY',
+            }
+          : stage,
+      ),
+    });
+    const partialModel = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        readiness: 'PARTIALLY_READY',
+        provenance: {
+          stages: source.provenance!.stages.map((stage) => ({
+            ...stage,
+            readiness: 'PARTIALLY_READY',
+            readinessDecision: {
+              version: '1.0.0',
+              readiness: 'PARTIALLY_READY',
+              decisiveFactors:
+                stage.stage === 'PRODUCT_OWNER'
+                  ? [
+                      {
+                        sourceStage: 'PRODUCT_OWNER' as const,
+                        code: 'NON_BLOCKING_QUESTION_PRESENT' as const,
+                      },
+                    ]
+                  : stage.stage === 'DEVELOPER'
+                    ? [
+                        {
+                          sourceStage: 'PRODUCT_OWNER' as const,
+                          code: 'SOURCE_PARTIALLY_READY' as const,
+                        },
+                      ]
+                    : [
+                        {
+                          sourceStage: 'DEVELOPER' as const,
+                          code: 'SOURCE_PARTIALLY_READY' as const,
+                        },
+                      ],
+            },
+          })),
+        },
+        factoryResult: qaBlockedFactory,
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    const view = render(
+      <FactoryWorkspace
+        model={partialModel}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+    const readinessPath = screen.getByRole('region', { name: 'Readiness path' });
+
+    expect(
+      within(readinessPath).getByText('PRODUCT_OWNER · NON_BLOCKING_QUESTION_PRESENT'),
+    ).toBeVisible();
+    expect(within(readinessPath).getByText('PRODUCT_OWNER · SOURCE_PARTIALLY_READY')).toBeVisible();
+    expect(within(readinessPath).getByText('DEVELOPER · SOURCE_PARTIALLY_READY')).toBeVisible();
+    expect(within(readinessPath).getByText('Factory blocked before Code Generation')).toBeVisible();
+    expect(within(readinessPath).getByText('SOURCE_QA_READINESS_NOT_READY')).toBeVisible();
+
+    const sourceRejectedFactory = factoryResultFixture({
+      ...successfulFactory,
+      status: 'FAILED',
+      terminalStage: 'CODE_GENERATOR',
+      generationStatus: 'FAILED',
+      failure: {
+        kind: 'FACTORY_PIPELINE',
+        code: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+        sourceCode: null,
+        reasonCode: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+        profileRuleId: null,
+        diagnosticSummary: null,
+        stageId: 'CODE_GENERATOR',
+      },
+      stages: successfulFactory.stages.map((stage) =>
+        stage.stageId === 'CODE_GENERATOR'
+          ? {
+              ...stage,
+              status: 'FAILED',
+              failureCode: 'FACTORY_PIPELINE_CODE_GENERATION_FAILED',
+              reasonCode: 'SOURCE_CHANGE_TYPE_NOT_CREATE',
+            }
+          : stage,
+      ),
+    });
+    const sourceRejectedModel = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: sourceRejectedFactory,
+      }),
+      timeline: factoryTimelineFixture({ status: 'FAILED' }),
+    });
+    view.rerender(
+      <FactoryWorkspace
+        model={sourceRejectedModel}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Code Generator rejected source')).toBeVisible();
+    expect(
+      within(screen.getByRole('region', { name: 'Readiness path' })).getByText(
+        'SOURCE_CHANGE_TYPE_NOT_CREATE',
+      ),
+    ).toBeVisible();
+    expect(view.container).not.toHaveTextContent('private source diagnostics');
   });
 
   it('selects stations with pointer and arrow-key navigation', () => {

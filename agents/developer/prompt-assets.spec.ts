@@ -24,13 +24,20 @@ import release102Manifest from '../../prompts/developer/1.0.2/manifest.json' wit
 import release102OutputContract from '../../prompts/developer/1.0.2/output-contract.json' with { type: 'json' };
 import release102SecurityRules from '../../prompts/developer/1.0.2/security-rules.json' with { type: 'json' };
 import release102Template from '../../prompts/developer/1.0.2/template.json' with { type: 'json' };
-import rawArtifactSpecification from '../../prompts/developer/1.0.3/artifact-specification.json' with { type: 'json' };
-import rawDeveloperRules from '../../prompts/developer/1.0.3/developer-rules.json' with { type: 'json' };
-import rawGlobalRules from '../../prompts/developer/1.0.3/global-rules.json' with { type: 'json' };
-import rawManifest from '../../prompts/developer/1.0.3/manifest.json' with { type: 'json' };
-import rawOutputContract from '../../prompts/developer/1.0.3/output-contract.json' with { type: 'json' };
-import rawSecurityRules from '../../prompts/developer/1.0.3/security-rules.json' with { type: 'json' };
-import rawTemplate from '../../prompts/developer/1.0.3/template.json' with { type: 'json' };
+import release103ArtifactSpecification from '../../prompts/developer/1.0.3/artifact-specification.json' with { type: 'json' };
+import release103DeveloperRules from '../../prompts/developer/1.0.3/developer-rules.json' with { type: 'json' };
+import release103GlobalRules from '../../prompts/developer/1.0.3/global-rules.json' with { type: 'json' };
+import release103Manifest from '../../prompts/developer/1.0.3/manifest.json' with { type: 'json' };
+import release103OutputContract from '../../prompts/developer/1.0.3/output-contract.json' with { type: 'json' };
+import release103SecurityRules from '../../prompts/developer/1.0.3/security-rules.json' with { type: 'json' };
+import release103Template from '../../prompts/developer/1.0.3/template.json' with { type: 'json' };
+import rawArtifactSpecification from '../../prompts/developer/1.0.4/artifact-specification.json' with { type: 'json' };
+import rawDeveloperRules from '../../prompts/developer/1.0.4/developer-rules.json' with { type: 'json' };
+import rawGlobalRules from '../../prompts/developer/1.0.4/global-rules.json' with { type: 'json' };
+import rawManifest from '../../prompts/developer/1.0.4/manifest.json' with { type: 'json' };
+import rawOutputContract from '../../prompts/developer/1.0.4/output-contract.json' with { type: 'json' };
+import rawSecurityRules from '../../prompts/developer/1.0.4/security-rules.json' with { type: 'json' };
+import rawTemplate from '../../prompts/developer/1.0.4/template.json' with { type: 'json' };
 
 import {
   DeveloperPromptAssetsError,
@@ -42,8 +49,8 @@ import {
 } from './prompt-assets';
 
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/;
-const DEVELOPER_BUNDLE_1_0_3_HASH =
-  '0bd8155f3d81a382ea1ee673c1ff31e64adb3d93be5c753ad873412a139daea7';
+const DEVELOPER_BUNDLE_1_0_4_HASH =
+  '90cc14824bdb1abf6879692a8a0924171434f30ec956caa25ef03463ba611a9a';
 const HISTORICAL_DEVELOPER_1_0_0_HASHES = {
   manifest: '2f3721696e349efa96a3504733fc6721b5c3a4ba9089826a25a7a3ef6a8d0661',
   template: '07234b11593e36dc4045006d34402918574edccc7cacde1de03f8393a1901940',
@@ -70,6 +77,15 @@ const HISTORICAL_DEVELOPER_1_0_2_HASHES = {
   developerRules: '87c2d51489564780ca74775c4022da239bb97c0c19e1a4e8422ca8c0935fe11b',
   outputContract: 'f082f87132f390005e8b631d57926513b5722d528783b54cb388359d7a687d49',
   artifactSpecification: '17cdec48313ec16aa3364885f5359b3c33bda6beef7af04cc2d743a50625887b',
+} as const;
+const HISTORICAL_DEVELOPER_1_0_3_HASHES = {
+  manifest: '4677246385a8c3cf6254460f501ce31327618a1b4b2b5de724cf61f94de2da5e',
+  template: '615b6a009984fa34defc44cfe366b42a92ec6031cd2e27dae18f66d08f49b5f4',
+  globalRules: 'eaa5d555158cdba2cb5229d81a7917d5e0d8d0591b309c9229195fbdbf8f2715',
+  securityRules: '0177cbe77feaa7ef6a46b414c0ea6fc025fabc3aa84e9ece98c7cf126478fbbc',
+  developerRules: '25be9b9deda2ce471aacc1a205c0ea234d6d2c7870e7c2bd72737a76abec15ff',
+  outputContract: '231f356bc8b6cf450328c59b59457eed633110803005b9b6b1039d0a21deadad',
+  artifactSpecification: '95b5c8e8b842c166f50211554d788f40629188264d4bb177fae5e134451b219b',
 } as const;
 const CANONICAL_ARTIFACT_IDENTITIES = [
   {
@@ -205,7 +221,7 @@ describe('Developer prompt assets', () => {
 
     expect(bundle.manifest).toMatchObject({
       id: 'assets:developer',
-      version: '1.0.3',
+      version: '1.0.4',
       schemaVersion: '1.0.0',
       agent: 'DEVELOPER',
       contexts: {
@@ -215,7 +231,7 @@ describe('Developer prompt assets', () => {
     });
     expect(bundle.template).toMatchObject({
       id: 'prompt:developer',
-      version: '1.0.3',
+      version: '1.0.4',
       agent: 'DEVELOPER',
     });
     expect(
@@ -223,11 +239,11 @@ describe('Developer prompt assets', () => {
     ).toEqual([
       { id: 'rules:global-baseline', version: '1.0.0', scope: 'GLOBAL', agent: null },
       { id: 'rules:security-baseline', version: '1.0.0', scope: 'SECURITY', agent: null },
-      { id: 'rules:developer', version: '1.0.3', scope: 'AGENT', agent: 'DEVELOPER' },
+      { id: 'rules:developer', version: '1.0.4', scope: 'AGENT', agent: 'DEVELOPER' },
     ]);
     expect(bundle.outputContract).toMatchObject({
       id: 'contract:developer-technical-specification',
-      version: '1.0.3',
+      version: '1.0.4',
       format: 'JSON_SCHEMA',
     });
     expect(bundle.validationContract).toMatchObject({
@@ -238,14 +254,14 @@ describe('Developer prompt assets', () => {
       expectedOutputContractHash: bundle.hashes.outputContractHash,
     });
     expect(bundle.artifactSpecification.templates).toHaveLength(3);
-    expect(bundle.artifactSpecification.version).toBe('1.0.3');
+    expect(bundle.artifactSpecification.version).toBe('1.0.4');
     expect(loadDeveloperPromptAssets()).toBe(bundle);
     expect(Object.isFrozen(bundle)).toBe(true);
     expect(Object.isFrozen(bundle.template.sections)).toBe(true);
     expect(Object.isFrozen(bundle.artifactSpecification.templates)).toBe(true);
   });
 
-  it('preserves immutable Developer 1.0.0, 1.0.1 and 1.0.2 assets while activating 1.0.3', () => {
+  it('preserves immutable Developer 1.0.0 through 1.0.3 assets while activating 1.0.4', () => {
     const historicalHashes = {
       manifest: calculateCanonicalJsonHash(historicalManifest as unknown as JsonValue),
       template: calculateCanonicalJsonHash(historicalTemplate as unknown as JsonValue),
@@ -279,6 +295,17 @@ describe('Developer prompt assets', () => {
         release102ArtifactSpecification as unknown as JsonValue,
       ),
     };
+    const release103Hashes = {
+      manifest: calculateCanonicalJsonHash(release103Manifest as unknown as JsonValue),
+      template: calculateCanonicalJsonHash(release103Template as unknown as JsonValue),
+      globalRules: calculateCanonicalJsonHash(release103GlobalRules as unknown as JsonValue),
+      securityRules: calculateCanonicalJsonHash(release103SecurityRules as unknown as JsonValue),
+      developerRules: calculateCanonicalJsonHash(release103DeveloperRules as unknown as JsonValue),
+      outputContract: calculateCanonicalJsonHash(release103OutputContract as unknown as JsonValue),
+      artifactSpecification: calculateCanonicalJsonHash(
+        release103ArtifactSpecification as unknown as JsonValue,
+      ),
+    };
 
     expect(historicalManifest.version).toBe('1.0.0');
     expect(historicalHashes).toEqual(HISTORICAL_DEVELOPER_1_0_0_HASHES);
@@ -286,7 +313,9 @@ describe('Developer prompt assets', () => {
     expect(release101Hashes).toEqual(HISTORICAL_DEVELOPER_1_0_1_HASHES);
     expect(release102Manifest.version).toBe('1.0.2');
     expect(release102Hashes).toEqual(HISTORICAL_DEVELOPER_1_0_2_HASHES);
-    expect(loadDeveloperPromptAssets().manifest.version).toBe('1.0.3');
+    expect(release103Manifest.version).toBe('1.0.3');
+    expect(release103Hashes).toEqual(HISTORICAL_DEVELOPER_1_0_3_HASHES);
+    expect(loadDeveloperPromptAssets().manifest.version).toBe('1.0.4');
   });
 
   it('produces deterministic canonical hashes and preserves asset order', () => {
@@ -303,7 +332,7 @@ describe('Developer prompt assets', () => {
     ];
 
     expect(first.hashes).toEqual(second.hashes);
-    expect(first.hashes.bundleHash).toBe(DEVELOPER_BUNDLE_1_0_3_HASH);
+    expect(first.hashes.bundleHash).toBe(DEVELOPER_BUNDLE_1_0_4_HASH);
     expect(hashes).toHaveLength(9);
     expect(hashes.every((hash) => SHA_256_HEX_PATTERN.test(hash))).toBe(true);
     expect(first.hashes.outputContractHash).toBe(
@@ -403,10 +432,46 @@ describe('Developer prompt assets', () => {
       expect(source).toContain('requiresValidation === false');
       expect(source).toContain('campo readiness');
     }
-    expect(rawOutputContract.schema).toEqual(release102OutputContract.schema);
+    expect(rawOutputContract.schema).toEqual(release103OutputContract.schema);
     expect(calculateCanonicalJsonHash(rawOutputContract.schema as unknown as JsonValue)).toBe(
       '55d9a9d971d4ba4d1c04abbbc9aaf2d0f7abc97e981089465419be428189f0e7',
     );
+  });
+
+  it('states the host-owned delivery intent and changeType preflight at every trusted boundary', () => {
+    const sources = [
+      developerRuleContent('developer:delivery-intent-change-type'),
+      rawOutputContract.instructions.join('\n'),
+      finalInstructionContent(),
+    ];
+
+    for (const source of sources) {
+      expect(source).toContain('deliveryIntent.mode');
+      expect(source).toContain('deliveryIntent.mode === "GREENFIELD"');
+      expect(source).toContain('components[]');
+      expect(source).toContain('modules[]');
+      expect(source).toContain('changeType');
+      expect(source).toContain('"CREATE"');
+      expect(source).toMatch(/inválid[ao]/u);
+      expect(source).toContain('MUST NOT ser emitid');
+      expect(source).toContain('deliveryIntent.mode === "CHANGE"');
+      expect(source).toMatch(/(?:não force|MUST NOT forçar).*CREATE/u);
+      expect(source).toContain('MODIFY');
+      expect(source).toContain('DELETE');
+      expect(source).toMatch(/(?:não|MUST NOT|sem) inventar alteração/u);
+    }
+
+    expect(rawOutputContract.schema).toEqual(release103OutputContract.schema);
+    expect(rawOutputContract.schema.$defs.component.properties.changeType.enum).toEqual([
+      'CREATE',
+      'MODIFY',
+      'DELETE',
+    ]);
+    expect(rawOutputContract.schema.$defs.module.properties.changeType.enum).toEqual([
+      'CREATE',
+      'MODIFY',
+      'DELETE',
+    ]);
   });
 
   it('states bidirectional Component and Module ownership normatively', () => {
@@ -496,7 +561,7 @@ describe('Developer prompt assets', () => {
     expect(strictObjectSchemaViolations(rawOutputContract.schema)).toEqual([]);
   });
 
-  it('pins the complete Artifact Specification and bundle content to release 1.0.3', () => {
+  it('pins the complete Artifact Specification and bundle content to release 1.0.4', () => {
     const valid = parseDeveloperPromptAssets(createSources());
     const tamperedSpecification = structuredClone(rawArtifactSpecification);
     const firstTemplate = tamperedSpecification.templates.at(0);
@@ -507,11 +572,11 @@ describe('Developer prompt assets', () => {
     if (firstFragment?.kind === 'LITERAL') firstFragment.value = '# Arquitetura alterada — ';
 
     expect(valid.hashes.artifactSpecificationHash).toBe(
-      '95b5c8e8b842c166f50211554d788f40629188264d4bb177fae5e134451b219b',
+      'b112a1772fc7465e2977f7ebefb09ba9578031cff5d5964deee1d681a644198a',
     );
     expect(() =>
       parseDeveloperPromptAssets(replaceSource({ artifactSpecification: tamperedSpecification })),
-    ).toThrowError('release Developer 1.0.3');
+    ).toThrowError('release Developer 1.0.4');
   });
 
   it.each(['../template.json', '/tmp/template.json', 'nested/template.json', ' template.json'])(

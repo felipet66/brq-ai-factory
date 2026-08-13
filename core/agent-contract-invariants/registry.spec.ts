@@ -13,10 +13,10 @@ import { describe, expect, it } from 'vitest';
 
 import codeGeneratorRules from '../../prompts/code-generator/1.0.4/code-generator-rules.json' with { type: 'json' };
 import codeGeneratorManifest from '../../prompts/code-generator/1.0.4/manifest.json' with { type: 'json' };
-import developerRules from '../../prompts/developer/1.0.3/developer-rules.json' with { type: 'json' };
-import developerManifest from '../../prompts/developer/1.0.3/manifest.json' with { type: 'json' };
-import productOwnerRules from '../../prompts/product-owner/1.0.1/product-owner-rules.json' with { type: 'json' };
-import productOwnerManifest from '../../prompts/product-owner/1.0.1/manifest.json' with { type: 'json' };
+import developerRules from '../../prompts/developer/1.0.4/developer-rules.json' with { type: 'json' };
+import developerManifest from '../../prompts/developer/1.0.4/manifest.json' with { type: 'json' };
+import productOwnerRules from '../../prompts/product-owner/1.0.2/product-owner-rules.json' with { type: 'json' };
+import productOwnerManifest from '../../prompts/product-owner/1.0.2/manifest.json' with { type: 'json' };
 import qaRules from '../../prompts/qa/1.0.4/qa-rules.json' with { type: 'json' };
 import qaManifest from '../../prompts/qa/1.0.4/manifest.json' with { type: 'json' };
 import {
@@ -104,6 +104,15 @@ describe('Agent Contract Invariant Catalog', () => {
       ),
     ).toMatchObject({
       classifications: ['CROSS_REFERENCE'],
+      authoritativeOwner: 'BUSINESS_VALIDATION',
+    });
+    expect(
+      findAgentContractInvariant(
+        'DEVELOPER',
+        DEVELOPER_BUSINESS_VALIDATION_ISSUE_CODES.CHANGE_TYPE_NOT_ALLOWED,
+      ),
+    ).toMatchObject({
+      classifications: ['AI_AUTHORED', 'REDUNDANT'],
       authoritativeOwner: 'BUSINESS_VALIDATION',
     });
     expect(

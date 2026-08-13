@@ -95,7 +95,7 @@ class FakeDockerExecutor implements DockerCommandExecutor {
             Os: 'linux',
             Config: {
               Labels: {
-                'org.brq.sandbox.helper-abi': '1.0.0',
+                'org.brq.sandbox.helper-abi': '1.1.0',
                 'org.brq.sandbox.dependency-snapshot': 'none',
                 'org.brq.sandbox.runtime-node': '24.19.0',
                 'org.brq.sandbox.toolchain.node': '24.19.0',
@@ -253,6 +253,53 @@ afterEach(async () => {
 });
 
 describe('DockerSandboxRunner', () => {
+  it('preflights only the Docker runtime and pinned image without reading or creating a workspace', async () => {
+    const { runner, request, executor } = await createHarness();
+
+    await expect(runner.preflight?.({ policyId: request.policyId })).resolves.toBeUndefined();
+
+    expect(executor.requests.map((call) => call.args.slice(0, 2))).toEqual([
+      ['version', '--format'],
+      ['image', 'inspect'],
+    ]);
+    expect(executor.requests.some((call) => call.args.includes('create'))).toBe(false);
+  });
+
+  it('fails preflight with a specific safe mismatch and never creates a container', async () => {
+    const executor = new FakeDockerExecutor();
+    executor.imageOverride = { Id: `sha256:${'f'.repeat(64)}` };
+    const { runner, request } = await createHarness({ executor });
+
+    await expect(runner.preflight?.({ policyId: request.policyId })).rejects.toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.IMAGE_ERROR,
+      sourceCode: 'DOCKER_IMAGE_ID_MISMATCH',
+    });
+    expect(executor.requests.some((call) => call.args.includes('create'))).toBe(false);
+  });
+
+  it('rejects an unknown preflight policy without invoking Docker', async () => {
+    const { runner, executor } = await createHarness();
+
+    await expect(runner.preflight?.({ policyId: 'UNKNOWN_POLICY' })).rejects.toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.CONFIGURATION_ERROR,
+    });
+    expect(executor.requests).toEqual([]);
+  });
+
+  it('revalidates the image during run after a successful preflight', async () => {
+    const { runner, request, executor } = await createHarness();
+
+    await runner.preflight?.({ policyId: request.policyId });
+    executor.imageOverride = { Id: `sha256:${'f'.repeat(64)}` };
+
+    await expect(runner.run(request)).rejects.toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.IMAGE_ERROR,
+      sourceCode: 'DOCKER_IMAGE_ID_MISMATCH',
+    });
+    expect(executor.requests.filter((call) => call.args[0] === 'image')).toHaveLength(2);
+    expect(executor.requests.some((call) => call.args.includes('create'))).toBe(false);
+  });
+
   it('captures an opt-in canonical artifact after TEST and before cleanup', async () => {
     const captured: Parameters<DockerSandboxArtifactSink['captured']>[0][] = [];
     const unavailable: Parameters<DockerSandboxArtifactSink['unavailable']>[0][] = [];
@@ -625,7 +672,47 @@ describe('DockerSandboxRunner', () => {
       code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
       sourceCode: 'EXIT_1',
       reasonCode: 'INLINE_ACTIVE_CONTENT',
+      diagnosticSummary: null,
     });
+  });
+
+  it('projects only safe bounded TypeScript metadata from the TYPECHECK helper', async () => {
+    const executor = new FakeDockerExecutor();
+    executor.stepResults.push(
+      commandResult(),
+      commandResult({
+        exitCode: 1,
+        stderr: capture(
+          [
+            'generated source detail must not enter metadata',
+            'BRQ_TYPECHECK_DIAGNOSTICS count=3 codes=2304,7006 truncated=false',
+            'BRQ_TYPECHECK_FAILED code=TYPESCRIPT_DIAGNOSTICS',
+            '',
+          ].join('\n'),
+        ),
+      }),
+    );
+    const policy = {
+      ...createSandboxExecutionPolicyFixture(),
+      policyId: 'NODE_WEB_PREVIEW_24_V1',
+    } as const;
+    const { runner, request } = await createHarness({ executor, policy });
+
+    const result = await runner.run(request);
+
+    expect(result.failure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+      stage: 'TYPECHECK',
+      sourceCode: 'EXIT_1',
+      reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+      diagnosticSummary: {
+        diagnosticCount: 3,
+        diagnosticCodes: [2304, 7006],
+        truncated: false,
+      },
+    });
+    expect(result.steps[1]?.failure?.diagnosticSummary).toEqual(result.failure?.diagnosticSummary);
+    expect(JSON.stringify(result.failure?.diagnosticSummary)).not.toContain('generated source');
   });
 
   it('fails a successful pipeline when cleanup absence cannot be confirmed', async () => {

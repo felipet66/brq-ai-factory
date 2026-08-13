@@ -86,21 +86,47 @@ describe('Agent Runner', () => {
     const request = createAgentRunRequest();
     const snapshot = structuredClone(request);
     const controller = new AbortController();
-    const provider = new FakeAIProvider();
+    const provider = Object.assign(new FakeAIProvider(), {
+      capabilities: Object.freeze({ exactResponseCache: true as const }),
+    });
     const builder = createPromptBuilder({ logger: quietLogger() });
     const expectedPrompt = builder.build(request.prompt);
     const runner = createAgentRunner(
       runnerDependencies(provider, { promptBuilder: builder, now: deterministicNow() }),
     );
 
-    await runner.run(request, { signal: controller.signal });
+    await runner.run(request, {
+      signal: controller.signal,
+      cacheMode: 'REQUIRE_HIT',
+      sourceExecutionId: request.context.execution.executionId,
+    });
 
     expect(provider.calls[0]?.request.instructions).toBe(expectedPrompt.rendered.instructions);
     expect(provider.calls[0]?.request.input).toBe(expectedPrompt.rendered.input);
     expect(provider.calls[0]?.request.model).toBe('test-model');
     expect(provider.calls[0]?.request.maxOutputTokens).toBe(512);
     expect(provider.calls[0]?.options.signal).toBe(controller.signal);
+    expect(provider.calls[0]?.options.cacheMode).toBe('REQUIRE_HIT');
     expect(request).toEqual(snapshot);
+  });
+
+  it('fails closed before prompt construction when REQUIRE_HIT lacks exact-cache capability', async () => {
+    const promptBuilder: PromptBuilder = { build: vi.fn() };
+    const provider = new FakeAIProvider();
+    const runner = createAgentRunner(runnerDependencies(provider, { promptBuilder }));
+
+    await expect(
+      runner.run(createAgentRunRequest(), {
+        cacheMode: 'REQUIRE_HIT',
+        sourceExecutionId: createAgentRunRequest().context.execution.executionId,
+      }),
+    ).rejects.toMatchObject({
+      code: AGENT_RUN_ERROR_CODES.PROVIDER_FAILED,
+      sourceCode: AI_PROVIDER_ERROR_CODES.CACHE_MISS,
+      stage: 'REQUEST_VALIDATION',
+    });
+    expect(promptBuilder.build).not.toHaveBeenCalled();
+    expect(provider.calls).toHaveLength(0);
   });
 
   it.each<FakeAIProviderOutcome['type']>(['malformed_json', 'incompatible_structured_output'])(

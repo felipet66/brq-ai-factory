@@ -18,6 +18,13 @@ describe('QA schemas', () => {
     );
   });
 
+  it('exige deliveryIntent host-owned no request', () => {
+    const { deliveryIntent, ...withoutDeliveryIntent } = createQARequest();
+
+    expect(deliveryIntent).toBeDefined();
+    expect(qaAgentRequestSchema.safeParse(withoutDeliveryIntent).success).toBe(false);
+  });
+
   it('rejeita propriedades adicionais no request e na specification', () => {
     expect(
       qaAgentRequestSchema.safeParse({ ...createQARequest(), orchestrator: true }).success,

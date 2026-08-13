@@ -5,6 +5,8 @@ export {
   type ExecutionRepositoryErrorCode,
 } from './errors';
 export { createInMemoryExecutionRecordRepository } from './adapters/in-memory-execution-record-repository';
+export { createInMemoryExecutionRequestSnapshotRepository } from './adapters/in-memory-execution-request-snapshot-repository';
+export { PrismaExecutionRequestSnapshotRepository } from './adapters/prisma-execution-request-snapshot-repository';
 export {
   createInMemoryPreviewRepositoryDatabase,
   type InMemoryPreviewExecutionMetadata,
@@ -34,3 +36,17 @@ export {
   previewAccessTicketRevokeInputSchema,
 } from './preview-persistence-schemas';
 export * from './schemas';
+export type {
+  ExecutionRequestSnapshot,
+  ExecutionRequestSnapshotLookup,
+  ExecutionRequestSnapshotRepository,
+  ExecutionRequestSnapshotSaveInput,
+} from './request-snapshot-contracts';
+export {
+  EXECUTION_REQUEST_SNAPSHOT_VERSION,
+  executionRequestSnapshotLookupSchema,
+  executionRequestSnapshotOwnerIdSchema,
+  executionRequestSnapshotReplayModeSchema,
+  executionRequestSnapshotSaveInputSchema,
+  executionRequestSnapshotSchema,
+} from './request-snapshot-schemas';

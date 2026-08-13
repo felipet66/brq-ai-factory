@@ -5,6 +5,7 @@ import type {
   CreateInMemoryJobQueueOptions,
   EnqueueJobInput,
   JobFailure,
+  JobExecutionOptions,
   JobQueue,
   JobRecord,
   JobStatus,
@@ -21,6 +22,7 @@ import { enqueueJobInputSchema, jobFailureSchema, jobIdSchema, jobRecordSchema }
 interface StoredJob {
   record: JobRecord;
   request: ExecutionRequest | null;
+  executionOptions: JobExecutionOptions | null;
 }
 
 const CANCELLED_FAILURE: JobFailure = Object.freeze({
@@ -111,13 +113,18 @@ export function createInMemoryJobQueue(options: CreateInMemoryJobQueueOptions = 
     }
   };
 
-  const store = (record: JobRecord, request: ExecutionRequest | null): JobRecord => {
+  const store = (
+    record: JobRecord,
+    request: ExecutionRequest | null,
+    executionOptions: JobExecutionOptions | null,
+  ): JobRecord => {
     const parsed = jobRecordSchema.safeParse(record);
     if (!parsed.success) throw invalidInput('Estado interno do job inválido.', parsed.error);
     const immutableRecord = immutableClone(parsed.data);
     jobs.set(record.jobId, {
       record: immutableRecord,
       request: request === null ? null : immutableClone(request),
+      executionOptions: executionOptions === null ? null : immutableClone(executionOptions),
     });
     return immutableClone(immutableRecord);
   };
@@ -154,6 +161,7 @@ export function createInMemoryJobQueue(options: CreateInMemoryJobQueueOptions = 
         events: [...stored.record.events, event],
       },
       terminal ? null : stored.request,
+      terminal ? null : stored.executionOptions,
     );
     publish(event);
     return record;
@@ -216,6 +224,7 @@ export function createInMemoryJobQueue(options: CreateInMemoryJobQueueOptions = 
           events: [event],
         },
         input.request,
+        input.executionOptions,
       );
       workflowIds.add(input.request.workflowId);
       executionIds.add(input.executionId);
@@ -229,13 +238,17 @@ export function createInMemoryJobQueue(options: CreateInMemoryJobQueueOptions = 
         const jobId = pending.shift()!;
         const stored = jobs.get(jobId);
         if (stored === undefined || stored.record.status !== 'QUEUED') continue;
-        if (stored.request === null) {
+        if (stored.request === null || stored.executionOptions === null) {
           throw new JobQueueError('Payload de dispatch ausente para job QUEUED.', {
             code: JOB_QUEUE_ERROR_CODES.INVALID_CONFIGURATION,
           });
         }
         const record = transition(stored, 'RUNNING', 'job.started', null);
-        return immutableClone({ record, request: stored.request });
+        return immutableClone({
+          record,
+          request: stored.request,
+          executionOptions: stored.executionOptions,
+        });
       }
       return null;
     },

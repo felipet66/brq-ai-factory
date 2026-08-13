@@ -11,6 +11,8 @@ import { resolveSandboxLimits } from './configuration';
 import { SANDBOX_RUNNER_ERROR_CODES } from './errors';
 import { finalizeSandboxRunResult } from './result-projector';
 import {
+  sandboxDiagnosticSummarySchema,
+  sandboxFailureSchema,
   sandboxOutputSummarySchema,
   sandboxRunRequestSchema,
   sandboxRunResultSchema,
@@ -177,6 +179,7 @@ describe('sandbox public schemas and result projection', () => {
       message: 'A remoção da sandbox não pôde ser confirmada.',
       sourceCode: 'CONTAINER_REMAINS',
       reasonCode: null,
+      diagnosticSummary: null,
     };
     const result = finalizeSandboxRunResult({
       request,
@@ -203,6 +206,7 @@ describe('sandbox public schemas and result projection', () => {
       message: 'A remoção da sandbox não pôde ser confirmada.',
       sourceCode: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
       reasonCode: null,
+      diagnosticSummary: null,
     };
     const cancelledFailure: SandboxFailure = {
       code: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
@@ -210,6 +214,7 @@ describe('sandbox public schemas and result projection', () => {
       message: 'A etapa foi cancelada.',
       sourceCode: null,
       reasonCode: null,
+      diagnosticSummary: null,
     };
     const steps: readonly SandboxStepResult[] = [
       {
@@ -354,6 +359,101 @@ describe('sandbox public schemas and result projection', () => {
     ).toBe(false);
   });
 
+  it('accepts only bounded canonical TypeScript diagnostics on failed TYPECHECK', async () => {
+    const successful = createSandboxStepResultsFixture();
+    const diagnosticSummary = {
+      diagnosticCount: 3,
+      diagnosticCodes: [2304, 7006],
+      truncated: false,
+    } as const;
+    expect(sandboxDiagnosticSummarySchema.safeParse(diagnosticSummary).success).toBe(true);
+    for (const forged of [
+      { ...diagnosticSummary, diagnosticCodes: [7006, 2304] },
+      { ...diagnosticSummary, diagnosticCodes: [2304, 2304] },
+      { ...diagnosticSummary, diagnosticCodes: [] },
+      { ...diagnosticSummary, diagnosticCount: 0 },
+      { ...diagnosticSummary, diagnosticCount: 10_001, truncated: true },
+    ]) {
+      expect(sandboxDiagnosticSummarySchema.safeParse(forged).success).toBe(false);
+    }
+    const failure: SandboxFailure = {
+      code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+      stage: 'TYPECHECK',
+      message: 'O typecheck encontrou diagnósticos.',
+      sourceCode: 'EXIT_1',
+      reasonCode: 'TYPESCRIPT_DIAGNOSTICS',
+      diagnosticSummary,
+    };
+    expect(sandboxFailureSchema.safeParse(failure).success).toBe(true);
+    expect(
+      sandboxFailureSchema.safeParse({
+        ...failure,
+        stage: 'BUILD',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxFailureSchema.safeParse({
+        ...failure,
+        reasonCode: 'BUILD_DIAGNOSTICS',
+      }).success,
+    ).toBe(false);
+    const failedTypecheck: SandboxStepResult = {
+      ...successful[1]!,
+      status: 'FAILED',
+      exitCode: 1,
+      failure,
+    };
+    expect(sandboxStepResultSchema.safeParse(failedTypecheck).success).toBe(true);
+    for (const stepId of ['PREPARE', 'BUILD'] as const) {
+      const source = stepId === 'PREPARE' ? successful[0]! : successful[2]!;
+      expect(
+        sandboxStepResultSchema.safeParse({
+          ...source,
+          status: 'FAILED',
+          exitCode: 1,
+          failure: { ...failure, stage: stepId },
+        }).success,
+      ).toBe(false);
+    }
+
+    const request = await requestFixture();
+    const skipped = successful.slice(2).map((step) => ({
+      ...step,
+      status: 'SKIPPED' as const,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      exitCode: null,
+      stdout: null,
+      stderr: null,
+      resourceOutcome: 'NONE' as const,
+      failure: null,
+    }));
+    const result = finalizeSandboxRunResult({
+      request,
+      policy: createSandboxExecutionPolicyFixture(),
+      effectiveLimits: resolveSandboxLimits(),
+      runtime,
+      status: 'FAILED',
+      startedAt: '2026-08-10T00:00:00.000Z',
+      finishedAt: '2026-08-10T00:00:02.000Z',
+      durationMs: 2_000,
+      steps: [successful[0]!, failedTypecheck, ...skipped],
+      resourceOutcome: 'NONE',
+      failure,
+    });
+    expect(result.failure?.diagnosticSummary).toEqual(diagnosticSummary);
+    expect(
+      sandboxRunResultSchema.safeParse({
+        ...result,
+        failure: {
+          ...result.failure!,
+          diagnosticSummary: { ...diagnosticSummary, diagnosticCodes: [2322] },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it('allows lifecycle cancellation projected onto PREPARE while keeping executed stages strict', () => {
     const prepare = createSandboxStepResultsFixture()[0]!;
     expect(
@@ -470,6 +570,7 @@ function failedBuild(): { readonly failure: SandboxFailure; readonly step: Sandb
     message: 'A etapa BUILD terminou com falha.',
     sourceCode: 'EXIT_NONZERO',
     reasonCode: 'BUILD_EMIT',
+    diagnosticSummary: null,
   };
   return {
     failure,

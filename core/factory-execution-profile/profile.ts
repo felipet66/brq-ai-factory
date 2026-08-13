@@ -77,8 +77,8 @@ const PREPARE_REASON_CODES = Object.freeze([
 export const NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE = createFactoryExecutionProfile({
   identity: {
     profileId: 'NODE_WEB_PREVIEW_24_V1',
-    version: '1.0.0',
-    contractVersion: '1.0.0',
+    version: '1.1.0',
+    contractVersion: '1.1.0',
   },
   files: {
     pathPolicy: 'ASCII_PORTABLE',
@@ -191,6 +191,24 @@ export const NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE = createFactoryExecutionPr
     allowJavaScript: true,
     checkJavaScript: true,
     packageManager: 'NONE',
+    typeCheck: {
+      requiredDiagnosticCount: 0,
+      moduleResolution: 'BUNDLER',
+      esModuleInterop: true,
+      noEmitOnError: true,
+      skipLibCheck: false,
+      ambientTypePackages: [],
+      javaScriptParameterTyping: 'INFERENCE_OR_JSDOC_REQUIRED',
+      nullableDomAccess: 'EXPLICIT_NARROWING_REQUIRED',
+      testModuleDeclarations: {
+        'node:test':
+          'type TestBody = () => void | Promise<void>; export function test(name: string, body: TestBody): void; export default test;',
+        'node:assert':
+          'interface Assert { ok(value: unknown, message?: string): asserts value; equal(actual: unknown, expected: unknown, message?: string): void; deepEqual(actual: unknown, expected: unknown, message?: string): void; strictEqual(actual: unknown, expected: unknown, message?: string): void; throws(body: () => unknown): void; } const assert: Assert; export = assert;',
+        'node:assert/strict': "import assert = require('node:assert'); export = assert;",
+      },
+      unlistedTestApis: 'FORBIDDEN',
+    },
   },
   previewProjection: {
     requiredEntrypoint: 'index.html',
@@ -198,7 +216,7 @@ export const NODE_WEB_PREVIEW_24_V1_EXECUTION_PROFILE = createFactoryExecutionPr
     testVisibility: 'TEST',
     applicationVisibility: 'PREVIEW',
   },
-  sandbox: { policyId: 'NODE_WEB_PREVIEW_24_V1', policyVersion: '1.0.0' },
+  sandbox: { policyId: 'NODE_WEB_PREVIEW_24_V1', policyVersion: '1.1.0' },
   publicReasonCodes: {
     PREPARE: [...PREPARE_REASON_CODES],
     TYPECHECK: [

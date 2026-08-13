@@ -13,7 +13,11 @@ const FIXED_UUID = '123e4567-e89b-42d3-a456-426614174000';
 const EXECUTION_ID = `execution-${'a'.repeat(32)}`;
 const JOB_ID = `job-${'b'.repeat(32)}`;
 const REQUEST_ID = 'request-123e4567-e89b-12d3-a456-426614174000';
-const INPUT = { projectName: 'Portal', objective: 'Consultar pedidos.' };
+const INPUT = {
+  deliveryMode: 'GREENFIELD',
+  projectName: 'Portal',
+  objective: 'Consultar pedidos.',
+} as const;
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -132,6 +136,23 @@ describe('asynchronous execution HTTP client', () => {
     expect(Object.isFrozen(job)).toBe(true);
   });
 
+  it.each(['GREENFIELD', 'CHANGE'] as const)(
+    'posts the explicit %s delivery mode without projecting a raw delivery intent',
+    async (deliveryMode) => {
+      const fetchImplementation = vi.fn<FetchImplementation>(async () =>
+        jsonResponse(acceptedEnvelope(), 202),
+      );
+
+      await enqueueExecution({ ...INPUT, deliveryMode }, options(fetchImplementation));
+
+      const requestBody = JSON.parse(
+        String(fetchImplementation.mock.calls[0]?.[1]?.body),
+      ) as Record<string, unknown>;
+      expect(requestBody.deliveryMode).toBe(deliveryMode);
+      expect(requestBody).not.toHaveProperty('deliveryIntent');
+    },
+  );
+
   it('rejects an invalid job identifier before issuing a lookup request', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>();
 
@@ -151,7 +172,11 @@ describe('asynchronous execution HTTP client', () => {
     const updates: unknown[] = [];
 
     const result = await executeWorkflow(
-      { projectName: '  Portal de pedidos  ', objective: '  Consultar pedidos.  ' },
+      {
+        deliveryMode: 'GREENFIELD',
+        projectName: '  Portal de pedidos  ',
+        objective: '  Consultar pedidos.  ',
+      },
       options(fetchImplementation, { onJobUpdate: (job: unknown) => updates.push(job) }),
     );
 
@@ -167,6 +192,7 @@ describe('asynchronous execution HTTP client', () => {
       },
     ]);
     expect(JSON.parse(String(posts[0]?.[1]?.body))).toEqual({
+      deliveryMode: 'GREENFIELD',
       workflowId: `workflow-${FIXED_UUID}`,
       demand: { title: 'Portal de pedidos', description: 'Consultar pedidos.' },
       agents: {
@@ -321,7 +347,16 @@ describe('asynchronous execution HTTP client', () => {
     const fetchImplementation = vi.fn<FetchImplementation>();
 
     await expect(
-      executeWorkflow({ projectName: ' ', objective: 'valid' }, options(fetchImplementation)),
+      executeWorkflow(
+        { deliveryMode: 'GREENFIELD', projectName: ' ', objective: 'valid' },
+        options(fetchImplementation),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(
+      executeWorkflow(
+        { ...INPUT, deliveryMode: 'AUTOMATIC' as never },
+        options(fetchImplementation),
+      ),
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(
       executeWorkflow(INPUT, options(fetchImplementation, { idFactory: () => 'unsafe-id' })),

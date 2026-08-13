@@ -7,6 +7,13 @@ import {
 import { executionObservabilitySnapshotSchema } from '@brq/observability';
 import { jobIdSchema, jobStatusSchema } from '@brq/job-queue';
 import { semanticVersionSchema } from '@brq/shared/schemas/common.schema';
+import {
+  readinessDecisionFactorMatchesStage,
+  readinessDecisionMatchesStageState,
+  readinessDecisionSchema,
+  readinessDecisionSourceMatchesStages,
+  readinessEvidenceStagesAreCanonical,
+} from '@brq/shared/schemas/readiness-decision.schema';
 import { z } from 'zod';
 
 import { authenticatedUserSchema, loginCredentialsSchema } from '@/api/auth-contracts';
@@ -15,6 +22,7 @@ import { API_ERROR_CODES } from './constants';
 
 export const executionHttpRequestSchema = z
   .object({
+    deliveryMode: z.enum(['GREENFIELD', 'CHANGE']),
     workflowId: executionRequestSchema.shape.workflowId,
     traceId: executionRequestSchema.shape.traceId,
     demand: executionRequestSchema.shape.demand,
@@ -103,6 +111,26 @@ export const executionAcceptedResponseSchema = z
   .object({
     success: z.literal(true),
     data: executionAcceptedDataSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const executionRerunAcceptedDataSchema = z
+  .object({
+    sourceExecutionId: executionIdPathSchema,
+    executionId: executionIdPathSchema,
+    jobId: jobIdSchema,
+    status: z.literal('QUEUED'),
+    replayMode: z.literal('REQUIRE_CACHE_HIT'),
+    usesOpenAI: z.literal(false),
+  })
+  .strict();
+
+export const executionRerunAcceptedResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: executionRerunAcceptedDataSchema,
     metadata: apiResponseMetadataSchema,
     errors: z.tuple([]),
   })
@@ -254,6 +282,7 @@ const executionHistoryProvenanceSchema = z
             agentVersion: z.string().min(1).max(128),
             outcome: z.enum(['GENERATED', 'VALIDATION_REJECTED']),
             readiness: z.string().min(1).max(64).nullable(),
+            readinessDecision: readinessDecisionSchema.nullable().default(null),
             hashes: z
               .object({
                 assetBundleHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -266,11 +295,49 @@ const executionHistoryProvenanceSchema = z
               })
               .strict(),
           })
-          .strict(),
+          .strict()
+          .superRefine((stage, context) => {
+            if (!readinessDecisionMatchesStageState(stage)) {
+              context.addIssue({
+                code: 'custom',
+                path: ['readinessDecision'],
+                message: 'Readiness evidence must match the stage outcome and readiness.',
+              });
+            }
+            stage.readinessDecision?.decisiveFactors.forEach((factor, index) => {
+              if (!readinessDecisionFactorMatchesStage(stage.stage, factor)) {
+                context.addIssue({
+                  code: 'custom',
+                  path: ['readinessDecision', 'decisiveFactors', index],
+                  message: 'Readiness evidence must identify a real source stage.',
+                });
+              }
+            });
+          }),
       )
       .max(3),
   })
-  .strict();
+  .strict()
+  .superRefine((provenance, context) => {
+    if (!readinessEvidenceStagesAreCanonical(provenance.stages)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stages'],
+        message: 'Readiness stages must be a unique canonical workflow prefix.',
+      });
+    }
+    provenance.stages.forEach((stage, stageIndex) => {
+      stage.readinessDecision?.decisiveFactors.forEach((factor, factorIndex) => {
+        if (!readinessDecisionSourceMatchesStages(factor, provenance.stages)) {
+          context.addIssue({
+            code: 'custom',
+            path: ['stages', stageIndex, 'readinessDecision', 'decisiveFactors', factorIndex],
+            message: 'SOURCE evidence must match the recorded upstream stage.',
+          });
+        }
+      });
+    });
+  });
 
 const executionHistoryJobSchema = z
   .object({

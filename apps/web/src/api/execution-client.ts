@@ -14,6 +14,7 @@ const REQUEST_ID_PATTERN = /^request-[0-9a-f-]{36}$/;
 
 const executionInputSchema = z
   .object({
+    deliveryMode: z.enum(['GREENFIELD', 'CHANGE']),
     projectName: z.string().trim().min(1).max(200),
     objective: z.string().trim().min(1).max(16_000),
   })
@@ -185,6 +186,7 @@ function createHttpRequest(
 ) {
   const ids = buildTechnicalIdentifiers(idFactory);
   return {
+    deliveryMode: input.deliveryMode,
     workflowId: ids.workflowId,
     demand: {
       title: input.projectName,

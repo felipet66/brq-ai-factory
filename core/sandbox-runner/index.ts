@@ -1,11 +1,13 @@
 export type {
   DeepReadonly,
   SandboxContext,
+  SandboxDiagnosticSummary,
   SandboxFailure,
   SandboxHashes,
   SandboxLimitReductions,
   SandboxLineage,
   SandboxOutputSummary,
+  SandboxPreflightOptions,
   SandboxProvenance,
   SandboxResourceOutcome,
   SandboxRunOptions,
@@ -54,7 +56,10 @@ export {
 export { DEFAULT_SANDBOX_LIMITS, SANDBOX_ABSOLUTE_LIMITS, type SandboxLimits } from './limits';
 export { logSandboxEvent, sandboxLogContext } from './logging';
 export { sanitizeSandboxOutput, type SandboxOutputSanitizationOptions } from './output-sanitizer';
-export { extractSandboxHelperReasonCode } from './reason-codes';
+export {
+  extractSandboxHelperDiagnosticSummary,
+  extractSandboxHelperReasonCode,
+} from './reason-codes';
 export {
   resolveSandboxPolicy,
   sandboxCommandPolicySchema,
@@ -72,6 +77,7 @@ export {
 } from './result-projector';
 export {
   sandboxContextSchema,
+  sandboxDiagnosticSummarySchema,
   sandboxEffectiveLimitsSchema,
   sandboxFailureSchema,
   sandboxHashesSchema,
@@ -90,6 +96,9 @@ export {
   sandboxStepStatusSchema,
   sandboxTechnicalContextIdSchema,
   sandboxWorkspaceProjectionSchema,
+  SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_LIMIT,
+  SANDBOX_TYPESCRIPT_DIAGNOSTIC_CODE_MAX,
+  SANDBOX_TYPESCRIPT_DIAGNOSTIC_COUNT_LIMIT,
 } from './schemas';
 export {
   SANDBOX_OUTPUT_SANITIZER_VERSION,

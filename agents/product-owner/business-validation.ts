@@ -1,3 +1,6 @@
+import { READINESS_DECISION_VERSION } from '@brq/shared/schemas/readiness-decision.schema';
+import type { ReadinessDecision } from '@brq/shared/types/readiness-decision';
+
 import { deepFreeze } from './immutability';
 
 export const PRODUCT_OWNER_BUSINESS_VALIDATION_ISSUE_CODES = {
@@ -165,17 +168,52 @@ function validateReferences(
   });
 }
 
+export function explainProductOwnerReadiness(
+  openQuestions: ProductOwnerBusinessValidationInput['openQuestions'],
+  assumptions: ProductOwnerBusinessValidationInput['assumptions'] = [],
+): ReadinessDecision {
+  if (openQuestions.some((question) => question.impact === 'BLOCKING')) {
+    return deepFreeze({
+      version: READINESS_DECISION_VERSION,
+      readiness: 'REQUIRES_CLARIFICATION',
+      decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'BLOCKING_QUESTION_PRESENT' }],
+    });
+  }
+
+  const decisiveFactors: ReadinessDecision['decisiveFactors'][number][] = [];
+  if (openQuestions.length > 0) {
+    decisiveFactors.push({
+      sourceStage: 'PRODUCT_OWNER',
+      code: 'NON_BLOCKING_QUESTION_PRESENT',
+    });
+  }
+  if (assumptions.some((assumption) => assumption.requiresValidation)) {
+    decisiveFactors.push({
+      sourceStage: 'PRODUCT_OWNER',
+      code: 'VALIDATION_REQUIRED_ASSUMPTION_PRESENT',
+    });
+  }
+
+  return deepFreeze(
+    decisiveFactors.length > 0
+      ? {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'PARTIALLY_READY',
+          decisiveFactors,
+        }
+      : {
+          version: READINESS_DECISION_VERSION,
+          readiness: 'READY',
+          decisiveFactors: [{ sourceStage: 'PRODUCT_OWNER', code: 'NO_LOCAL_READINESS_CONCERNS' }],
+        },
+  );
+}
+
 export function deriveProductOwnerReadiness(
   openQuestions: ProductOwnerBusinessValidationInput['openQuestions'],
   assumptions: ProductOwnerBusinessValidationInput['assumptions'] = [],
 ): ProductOwnerReadiness {
-  if (openQuestions.some((question) => question.impact === 'BLOCKING')) {
-    return 'REQUIRES_CLARIFICATION';
-  }
-
-  return openQuestions.length > 0 || assumptions.some((assumption) => assumption.requiresValidation)
-    ? 'PARTIALLY_READY'
-    : 'READY';
+  return explainProductOwnerReadiness(openQuestions, assumptions).readiness;
 }
 
 function validateCompleteness(
