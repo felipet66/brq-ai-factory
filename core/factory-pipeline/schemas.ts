@@ -406,7 +406,7 @@ export const factoryWorkspaceSummarySchema = z
     if (materialized !== hasMaterialization) {
       context.addIssue({ code: 'custom', message: 'Metadados de materialização inconsistentes.' });
     }
-    if (!materialized && summary.releaseStatus !== 'NOT_REQUIRED') {
+    if (summary.materializationStatus === 'SKIPPED' && summary.releaseStatus !== 'NOT_REQUIRED') {
       context.addIssue({
         code: 'custom',
         path: ['releaseStatus'],
@@ -467,6 +467,17 @@ export const factorySandboxStepSummarySchema = z
     }
   });
 
+const factorySandboxCleanupFailureSchema = z
+  .object({
+    code: z.literal('SANDBOX_CLEANUP_FAILED'),
+    stage: z.literal('CLEANUP'),
+    sourceCode: z.string().trim().min(1).max(128).nullable(),
+    reasonCode: z.null(),
+    diagnosticSummary: z.null(),
+    message: z.string().trim().min(1).max(300),
+  })
+  .strict();
+
 export const factorySandboxSummarySchema = z
   .object({
     status: z.enum(['SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED', 'SKIPPED']),
@@ -476,6 +487,7 @@ export const factorySandboxSummarySchema = z
       .nullable(),
     resourceOutcome: z.enum(['NONE', 'OOM', 'PID_LIMIT', 'DISK_LIMIT', 'OUTPUT_LIMIT', 'UNKNOWN']),
     steps: z.array(factorySandboxStepSummarySchema).length(4),
+    cleanupFailure: factorySandboxCleanupFailureSchema.nullable().default(null),
     hashes: z
       .object({
         policyHash: factoryPipelineHashSchema,

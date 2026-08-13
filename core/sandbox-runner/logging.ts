@@ -1,7 +1,35 @@
 import type { LogContext, Logger } from '@brq/shared/logger/logger';
 
 import type { SandboxFailure, SandboxHashes, SandboxResourceOutcome } from './contracts';
-import type { SandboxStepId, SandboxTerminalStatus } from './lifecycle';
+import type { SandboxDockerOperationId, SandboxStepId, SandboxTerminalStatus } from './lifecycle';
+
+export function sandboxDockerOperationLogContext(input: {
+  readonly phase: 'PREFLIGHT' | 'RUN';
+  readonly policyId: string;
+  readonly operation: SandboxDockerOperationId;
+  readonly durationMs: number;
+  readonly timeoutMs: number;
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+  readonly cancelled: boolean;
+  readonly sandboxRunId?: string;
+  readonly executionId?: string;
+  readonly workspaceId?: string;
+}): LogContext {
+  return {
+    phase: input.phase,
+    policyId: input.policyId,
+    operation: input.operation,
+    durationMs: input.durationMs,
+    timeoutMs: input.timeoutMs,
+    exitCode: input.exitCode,
+    timedOut: input.timedOut,
+    cancelled: input.cancelled,
+    ...(input.sandboxRunId === undefined ? {} : { sandboxRunId: input.sandboxRunId }),
+    ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
+    ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+  };
+}
 
 export function sandboxLogContext(input: {
   readonly sandboxRunId: string;

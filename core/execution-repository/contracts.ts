@@ -3,6 +3,8 @@ import type {
   FactoryExecutionResult,
   FactoryPipelineCoordinator,
   FactoryPipelineRunOptions,
+  FactoryTechnicalCheckpoint,
+  FactoryTechnicalResumeResult,
 } from '@brq/factory-pipeline';
 import type {
   FactoryExecutionHistoryRecorder,
@@ -17,6 +19,7 @@ import type { z } from 'zod';
 
 import type {
   executionRecordCreatedInputSchema,
+  executionRecordInfrastructureFailureInputSchema,
   executionRecordLifecycleEventSchema,
   executionRecordJobRunningInputSchema,
   executionRecordJobTerminalInputSchema,
@@ -33,6 +36,20 @@ import type {
   persistedLineageSchema,
   persistedProvenanceSchema,
 } from './schemas';
+import type {
+  factoryTechnicalCheckpointLookupSchema,
+  factoryTechnicalCheckpointRecordSchema,
+  factoryTechnicalCheckpointSaveInputSchema,
+  factoryTechnicalResumeAttemptCompleteInputSchema,
+  factoryTechnicalResumeAttemptCreateInputSchema,
+  factoryTechnicalResumeAttemptFailInputSchema,
+  factoryTechnicalResumeAttemptHeartbeatInputSchema,
+  factoryTechnicalResumeAttemptLookupSchema,
+  factoryTechnicalResumeAttemptReconcileInputSchema,
+  factoryTechnicalResumeAttemptRecordSchema,
+  factoryTechnicalResumeAttemptStageResultInputSchema,
+  factoryTechnicalResumeReconciliationSchema,
+} from './technical-resume-schemas';
 
 type DeepReadonly<T> = T extends (...arguments_: never[]) => unknown
   ? T
@@ -70,14 +87,84 @@ export type ExecutionRecordJobRunningInput = DeepReadonly<
 export type ExecutionRecordJobTerminalInput = DeepReadonly<
   z.infer<typeof executionRecordJobTerminalInputSchema>
 >;
+export type ExecutionRecordInfrastructureFailureInput = DeepReadonly<
+  z.infer<typeof executionRecordInfrastructureFailureInputSchema>
+>;
 export type ExecutionRecordListQuery = DeepReadonly<z.input<typeof executionRecordListQuerySchema>>;
 export type ExecutionRecordPage = DeepReadonly<z.infer<typeof executionRecordPageSchema>>;
+export type FactoryTechnicalCheckpointSaveInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalCheckpointSaveInputSchema>
+>;
+export type FactoryTechnicalCheckpointLookup = DeepReadonly<
+  z.infer<typeof factoryTechnicalCheckpointLookupSchema>
+>;
+export type FactoryTechnicalCheckpointRecord = DeepReadonly<
+  z.infer<typeof factoryTechnicalCheckpointRecordSchema>
+>;
+export type FactoryTechnicalResumeAttemptCreateInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptCreateInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptCompleteInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptCompleteInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptHeartbeatInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptHeartbeatInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptStageResultInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptStageResultInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptReconcileInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptReconcileInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptFailInput = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptFailInputSchema>
+>;
+export type FactoryTechnicalResumeAttemptRecord = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptRecordSchema>
+>;
+export type FactoryTechnicalResumeAttemptLookup = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeAttemptLookupSchema>
+>;
+export type FactoryTechnicalResumeReconciliation = DeepReadonly<
+  z.infer<typeof factoryTechnicalResumeReconciliationSchema>
+>;
+
+export interface FactoryTechnicalCheckpointRepository {
+  saveTechnicalCheckpoint(
+    input: FactoryTechnicalCheckpointSaveInput,
+  ): Promise<FactoryTechnicalCheckpointRecord>;
+  findTechnicalCheckpointOwned(
+    lookup: FactoryTechnicalCheckpointLookup,
+  ): Promise<FactoryTechnicalCheckpointRecord | null>;
+  createTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptCreateInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord>;
+  renewTechnicalResumeAttemptLease(
+    input: FactoryTechnicalResumeAttemptHeartbeatInput,
+  ): Promise<boolean>;
+  stageTechnicalResumeAttemptResult(
+    input: FactoryTechnicalResumeAttemptStageResultInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord>;
+  completeTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptCompleteInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord>;
+  failTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptFailInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord>;
+  findLatestTechnicalResumeAttemptOwned(
+    lookup: FactoryTechnicalResumeAttemptLookup,
+  ): Promise<FactoryTechnicalResumeAttemptRecord | null>;
+  reconcileTechnicalResumeAttemptOwned(
+    input: FactoryTechnicalResumeAttemptReconcileInput,
+  ): Promise<FactoryTechnicalResumeReconciliation>;
+}
 
 export interface ExecutionRecordRepository {
   create(input: ExecutionRecordCreatedInput): Promise<ExecutionRecord>;
   createQueued(input: ExecutionRecordQueuedInput): Promise<ExecutionRecord>;
   markJobRunning(input: ExecutionRecordJobRunningInput): Promise<ExecutionRecord>;
   markJobTerminal(input: ExecutionRecordJobTerminalInput): Promise<ExecutionRecord>;
+  failInfrastructure(input: ExecutionRecordInfrastructureFailureInput): Promise<ExecutionRecord>;
   markRunning(input: ExecutionRecordRunningInput): Promise<ExecutionRecord>;
   saveObservation(
     workflowId: string,
@@ -94,7 +181,8 @@ export interface ExecutionRecordRepository {
   list(query?: ExecutionRecordListQuery): Promise<ExecutionRecordPage>;
 }
 
-export interface FactoryExecutionRecordRepository extends ExecutionRecordRepository {
+export interface FactoryExecutionRecordRepository
+  extends ExecutionRecordRepository, FactoryTechnicalCheckpointRepository {
   completeFactory(
     workflowId: string,
     result: FactoryExecutionResult,
@@ -138,6 +226,9 @@ export interface PersistentFactoryPipeline {
     options?: FactoryPipelineRunOptions,
   ): Promise<FactoryExecutionResult>;
 }
+
+// Keep the content-bearing contracts explicit and out of ExecutionRecord projections.
+export type { FactoryTechnicalCheckpoint, FactoryTechnicalResumeResult };
 
 export interface ExecutionRecordProjection {
   readonly request: ExecutionRequest;

@@ -219,6 +219,30 @@ export function createFactoryPreviewArtifactIntegration(
           : {
               preflight: pipeline.preflight.bind(pipeline),
             }),
+        ...(pipeline.resumeTechnical === undefined
+          ? {}
+          : {
+              async resumeTechnical(checkpoint, resumeOptions) {
+                return executionScope.run(new Set<string>(), async () => {
+                  const scopedExecutionIds = executionScope.getStore()!;
+                  try {
+                    const result = await pipeline.resumeTechnical!(checkpoint, resumeOptions);
+                    // Technical attempts have their own immutable authority. Until Preview
+                    // consumes that authority directly, never promote their artifact with the
+                    // failed source FactoryResult and never leave a candidate orphaned.
+                    await Promise.allSettled(
+                      [...scopedExecutionIds].map((executionId) => removeCandidate(executionId)),
+                    );
+                    return result;
+                  } catch (error) {
+                    await Promise.allSettled(
+                      [...scopedExecutionIds].map((executionId) => removeCandidate(executionId)),
+                    );
+                    throw error;
+                  }
+                });
+              },
+            }),
         async execute(request, runOptions) {
           return executionScope.run(new Set<string>(), async () => {
             const scopedExecutionIds = executionScope.getStore()!;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { SandboxFailure } from './contracts';
 import { SANDBOX_RUNNER_ERROR_CODES } from './errors';
-import { logSandboxEvent, sandboxLogContext } from './logging';
+import { logSandboxEvent, sandboxDockerOperationLogContext, sandboxLogContext } from './logging';
 
 describe('sandbox logging', () => {
   it('projects only allowlisted metadata and a sanitized failure code', () => {
@@ -89,5 +89,30 @@ describe('sandbox logging', () => {
         {},
       ),
     ).not.toThrow();
+  });
+
+  it('projects only safe bounded Docker operation telemetry', () => {
+    const context = sandboxDockerOperationLogContext({
+      phase: 'PREFLIGHT',
+      policyId: 'NODE_WEB_PREVIEW_24_V1',
+      operation: 'READINESS',
+      durationMs: 47,
+      timeoutMs: 15_000,
+      exitCode: null,
+      timedOut: true,
+      cancelled: false,
+    });
+
+    expect(context).toEqual({
+      phase: 'PREFLIGHT',
+      policyId: 'NODE_WEB_PREVIEW_24_V1',
+      operation: 'READINESS',
+      durationMs: 47,
+      timeoutMs: 15_000,
+      exitCode: null,
+      timedOut: true,
+      cancelled: false,
+    });
+    expect(JSON.stringify(context)).not.toMatch(/args|output|containerId|ownership/u);
   });
 });

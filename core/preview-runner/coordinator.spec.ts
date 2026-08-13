@@ -239,6 +239,19 @@ describe('PreviewSessionCoordinator', () => {
     });
     const running = await coordinator.start(createPreviewStartRequestFixture());
     expect(await coordinator.reconcile(running.previewId)).toEqual(running);
+    expect(fake.inspectRequests[0]).toMatchObject({
+      previewId: running.previewId,
+      executionId: running.executionId,
+      expected: {
+        artifactId: running.artifactId,
+        expiresAt: running.expiresAt,
+        sessionRevision: running.revision,
+        previewSessionHash: running.hashes.previewSessionHash,
+        policy: NODE_WEB_PREVIEW_24_V1_POLICY,
+        limits: running.limits,
+        runtime: running.provenance.runtime,
+      },
+    });
     fake.setInspection({
       previewId: running.previewId,
       executionId: running.executionId,
@@ -252,6 +265,33 @@ describe('PreviewSessionCoordinator', () => {
     expect(failed.failure?.code).toBe(PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST);
     expect(fake.stopReasons).toEqual(['RECONCILIATION']);
     expect(createPreviewRuntimeObservationFixture().adapter).toBe('FAKE');
+  });
+
+  it('rejects persisted session policy drift before inspecting the runtime', async () => {
+    const fake = createFakePreviewRunner();
+    const store = createInMemoryPreviewSessionStore();
+    const coordinator = createPreviewSessionCoordinator({
+      runner: fake.runner,
+      store,
+      policies: [NODE_WEB_PREVIEW_24_V1_POLICY],
+      now: incrementalPreviewClock(),
+      logger: SILENT_LOGGER,
+    });
+    const running = await coordinator.start(createPreviewStartRequestFixture());
+    const driftedCoordinator = createPreviewSessionCoordinator({
+      runner: fake.runner,
+      store,
+      policies: [{ ...NODE_WEB_PREVIEW_24_V1_POLICY, version: '1.0.1' }],
+      now: incrementalPreviewClock(),
+      logger: SILENT_LOGGER,
+    });
+
+    await expect(driftedCoordinator.reconcile(running.previewId)).rejects.toMatchObject({
+      code: PREVIEW_RUNNER_ERROR_CODES.ARTIFACT_INTEGRITY_MISMATCH,
+      stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+      sourceCode: 'PERSISTED_SESSION_POLICY_MISMATCH',
+    });
+    expect(fake.inspectRequests).toHaveLength(0);
   });
 
   it('rejects runtime inspection correlated to another PreviewSession and cleans the current one', async () => {

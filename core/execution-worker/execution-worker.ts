@@ -20,7 +20,8 @@ function assertOptions(options: CreateExecutionWorkerOptions): void {
     typeof options.queue?.isShutdown !== 'function' ||
     typeof executor?.execute !== 'function' ||
     typeof options.repository?.markJobRunning !== 'function' ||
-    typeof options.repository?.markJobTerminal !== 'function'
+    typeof options.repository?.markJobTerminal !== 'function' ||
+    typeof options.repository?.failInfrastructure !== 'function'
   ) {
     throw new ExecutionWorkerError('Configuração do Execution Worker inválida.', {
       code: EXECUTION_WORKER_ERROR_CODES.INVALID_CONFIGURATION,
@@ -44,8 +45,14 @@ function resultFailure(result: TerminalExecutionResult): JobFailure {
 }
 
 function infrastructureFailureCode(error: unknown): string {
+  const safeCode = (value: string | null | undefined): string | null =>
+    value !== undefined && value !== null && /^[A-Z][A-Z0-9_]{0,127}$/u.test(value) ? value : null;
   if (error instanceof ExecutionEngineError || error instanceof FactoryPipelineError) {
-    return error.sourceCode ?? error.code;
+    return (
+      safeCode(error.sourceCode) ??
+      safeCode(error.code) ??
+      EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED
+    );
   }
   return EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED;
 }
@@ -66,13 +73,26 @@ export function createExecutionWorker(options: CreateExecutionWorkerOptions): Ex
     errorCode: string,
     finishedAt: string,
   ): Promise<void> => {
-    await options.repository
-      .markJobTerminal({
+    try {
+      await options.repository.failInfrastructure({
         jobId: job.record.jobId,
-        status: 'FAILED',
+        code: errorCode,
         finishedAt,
-      })
-      .catch(() => undefined);
+      });
+    } catch {
+      logWorkerEvent(
+        options.logger,
+        'error',
+        'execution.worker.infrastructure.persistence.failed',
+        {
+          jobId: job.record.jobId,
+          executionId: job.record.executionId,
+          workflowId: job.record.workflowId,
+          status: 'FAILED',
+          errorCode: EXECUTION_WORKER_ERROR_CODES.PERSISTENCE_FAILED,
+        },
+      );
+    }
     logWorkerEvent(options.logger, 'error', 'execution.worker.failed', {
       jobId: job.record.jobId,
       executionId: job.record.executionId,

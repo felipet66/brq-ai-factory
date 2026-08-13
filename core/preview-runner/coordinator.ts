@@ -19,8 +19,10 @@ import {
   type PreviewRunnerErrorCode,
   type PreviewRunnerErrorStage,
 } from './errors';
+import { calculatePreviewLimitsHash, calculatePreviewPolicyHash } from './hashing';
 import { isPreviewTerminalStatus } from './lifecycle';
 import { logPreviewEvent, previewSessionLogContext } from './logging';
+import { resolvePreviewPolicy } from './policies';
 import {
   createPreviewSessionEvent,
   resolvePreviewStart,
@@ -102,6 +104,40 @@ function assertRunnerCorrelation(
       sourceCode: 'RUNTIME_CORRELATION_MISMATCH',
     });
   }
+}
+
+function inspectionExpectation(
+  session: PreviewSession,
+  policies: CreatePreviewSessionCoordinatorOptions['policies'],
+) {
+  const policy = resolvePreviewPolicy(policies, session.policy.id);
+  const policyHash = calculatePreviewPolicyHash(policy);
+  const limitsHash = calculatePreviewLimitsHash(session.limits);
+  if (
+    policy.policyId !== session.provenance.policyId ||
+    policy.version !== session.policy.version ||
+    policy.version !== session.provenance.policyVersion ||
+    policyHash !== session.hashes.policyHash ||
+    policyHash !== session.provenance.policyHash ||
+    limitsHash !== session.hashes.limitsHash ||
+    limitsHash !== session.provenance.limitsHash
+  ) {
+    throw new PreviewRunnerError('A sessão persistida diverge da policy ativa de Preview.', {
+      code: PREVIEW_RUNNER_ERROR_CODES.ARTIFACT_INTEGRITY_MISMATCH,
+      stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+      previewId: session.previewId,
+      sourceCode: 'PERSISTED_SESSION_POLICY_MISMATCH',
+    });
+  }
+  return Object.freeze({
+    artifactId: session.artifactId,
+    expiresAt: session.expiresAt,
+    sessionRevision: session.revision,
+    previewSessionHash: session.hashes.previewSessionHash,
+    policy,
+    limits: session.limits,
+    runtime: session.provenance.runtime,
+  });
 }
 
 export function createPreviewSessionCoordinator(
@@ -451,6 +487,7 @@ export function createPreviewSessionCoordinator(
         await options.runner.inspect({
           previewId: session.previewId,
           executionId: session.executionId,
+          expected: inspectionExpectation(session, options.policies),
         }),
       );
       if (
@@ -477,7 +514,7 @@ export function createPreviewSessionCoordinator(
       return failAfterReconciliationCleanup(session, {
         code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST,
         stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
-        sourceCode: null,
+        sourceCode: inspection.status === 'MISSING' ? 'RUNTIME_MISSING' : 'RUNTIME_UNHEALTHY',
         message: 'O runtime da sessão de Preview não está mais disponível.',
       });
     },

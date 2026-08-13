@@ -33,11 +33,18 @@ export const SANDBOX_RUNNER_ERROR_STAGES = Object.freeze({
 export type SandboxRunnerErrorStage =
   (typeof SANDBOX_RUNNER_ERROR_STAGES)[keyof typeof SANDBOX_RUNNER_ERROR_STAGES];
 
+export interface SandboxRunnerCleanupFailure {
+  readonly code: typeof SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED;
+  readonly stage: typeof SANDBOX_RUNNER_ERROR_STAGES.CLEANUP;
+  readonly sourceCode: string | null;
+}
+
 export class SandboxRunnerError extends Error {
   readonly code: SandboxRunnerErrorCode;
   readonly stage: SandboxRunnerErrorStage;
   readonly sandboxRunId: string | undefined;
   readonly sourceCode: string | undefined;
+  readonly cleanupFailure: SandboxRunnerCleanupFailure | undefined;
 
   constructor(
     message: string,
@@ -46,6 +53,7 @@ export class SandboxRunnerError extends Error {
       readonly stage: SandboxRunnerErrorStage;
       readonly sandboxRunId?: string;
       readonly sourceCode?: string;
+      readonly cleanupFailure?: SandboxRunnerCleanupFailure;
       readonly cause?: unknown;
     },
   ) {
@@ -55,5 +63,6 @@ export class SandboxRunnerError extends Error {
     this.stage = options.stage;
     this.sandboxRunId = options.sandboxRunId;
     this.sourceCode = options.sourceCode;
+    this.cleanupFailure = options.cleanupFailure;
   }
 }

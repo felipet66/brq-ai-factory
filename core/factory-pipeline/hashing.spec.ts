@@ -69,4 +69,27 @@ describe('Factory Pipeline hashing', () => {
       calculateFactoryPipelineResultHash(structuredClone(observed)),
     );
   });
+
+  it('preserves the v2 identity without cleanup evidence and binds new cleanup evidence in v3', () => {
+    const result = createFactoryExecutionResultFixture();
+    const { factoryResultHash, ...hashes } = result.hashes;
+    const observed = structuredClone({ ...result, hashes }) as Mutable<
+      Omit<typeof result, 'hashes'> & { hashes: typeof hashes }
+    >;
+
+    expect(calculateFactoryPipelineResultHash(observed)).toBe(factoryResultHash);
+    observed.sandbox.cleanupFailure = {
+      code: 'SANDBOX_CLEANUP_FAILED',
+      stage: 'CLEANUP',
+      sourceCode: 'REMOVAL_NOT_CONFIRMED',
+      reasonCode: null,
+      diagnosticSummary: null,
+      message: 'Cleanup failure A.',
+    };
+    const first = calculateFactoryPipelineResultHash(observed);
+    observed.sandbox.cleanupFailure.message = 'Cleanup failure B.';
+    expect(calculateFactoryPipelineResultHash(observed)).toBe(first);
+    observed.sandbox.cleanupFailure.sourceCode = 'OWNERSHIP_NOT_CONFIRMED';
+    expect(calculateFactoryPipelineResultHash(observed)).not.toBe(first);
+  });
 });

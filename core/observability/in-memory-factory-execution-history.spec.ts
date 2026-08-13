@@ -222,6 +222,20 @@ describe('In-memory Factory execution history', () => {
     history.capture('info', 'execution.completed', { ...base, durationMs: 80 });
     expect(history.get(result.executionId)?.status).toBe('RUNNING');
 
+    const codeGeneratorUsage = {
+      ...base,
+      agent: 'CODE_GENERATOR',
+      usageInputCount: 100,
+      usageOutputCount: 50,
+      providerDurationMs: 30,
+    } as const;
+    history.capture('info', 'agent.run.provider.completed', codeGeneratorUsage);
+    history.capture('info', 'agent.run.completed', {
+      ...codeGeneratorUsage,
+      promptBytes: 1_000,
+      bytesReceived: 250,
+    });
+
     for (const stage of [
       'CODE_GENERATOR',
       'WORKSPACE_PLAN',
@@ -240,7 +254,7 @@ describe('In-memory Factory execution history', () => {
 
     history.completeFactory(result);
     const snapshot = history.get(result.executionId)!;
-    expect(snapshot.observabilityVersion).toBe('2.0.0');
+    expect(snapshot.observabilityVersion).toBe('3.0.0');
     expect(snapshot.status).toBe('SUCCESS');
     expect(snapshot.stages.map(({ stageId, status }) => [stageId, status])).toEqual([
       ['KNOWLEDGE', 'SUCCESS'],
@@ -262,7 +276,16 @@ describe('In-memory Factory execution history', () => {
       executedStages: snapshot.stages.map((stage) => stage.stageId),
       skippedStages: [],
     });
-    expect(snapshot.summary?.totalTokens).toBe(15);
+    expect(snapshot.stageMetrics).toHaveLength(4);
+    expect(snapshot.stageMetrics[3]).toMatchObject({
+      stageId: 'CODE_GENERATOR',
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+      promptBytes: 1_000,
+      completionBytes: 250,
+    });
+    expect(snapshot.summary?.totalTokens).toBe(165);
     for (const step of result.sandbox.steps) {
       const stage = snapshot.stages.find(
         (candidate) => candidate.stageId === `SANDBOX_${step.stepId}`,
@@ -282,6 +305,37 @@ describe('In-memory Factory execution history', () => {
     expect(snapshot.events.length).toBeLessThanOrEqual(64);
     expect(history.get(request.workflowId)).toBeNull();
     expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('preserva usage pago do Code Generator quando a finalização posterior falha', () => {
+    const request = createObservabilityRequest();
+    const result = createTerminalFactoryResult('CODE_GENERATOR', 'FAILED', request.workflowId);
+    const history = createInMemoryFactoryExecutionHistory({ now: fixedClock() });
+    const base = { workflowId: request.workflowId, executionId: result.executionId };
+    history.beginFactory(request);
+    history.capture('info', 'agent.run.provider.completed', {
+      ...base,
+      agent: 'CODE_GENERATOR',
+      usageInputCount: 80,
+      usageOutputCount: 20,
+      providerDurationMs: 25,
+      responseHash: 'a'.repeat(64),
+    });
+
+    history.completeFactory(result);
+
+    const snapshot = history.get(result.executionId)!;
+    expect(snapshot.observabilityVersion).toBe('3.0.0');
+    expect(snapshot.stageMetrics[3]).toMatchObject({
+      stageId: 'CODE_GENERATOR',
+      inputTokens: 80,
+      outputTokens: 20,
+      totalTokens: 100,
+      providerLatencyMs: 25,
+      promptBytes: null,
+      completionBytes: null,
+    });
+    expect(snapshot.summary?.totalTokens).toBe(100);
   });
 
   it('encerra WORKSPACE na materialização e não o reabre durante release', () => {

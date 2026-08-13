@@ -56,6 +56,9 @@ const ADMIN_OUTPUT_BYTES = 1024 * 1024;
 const ARTIFACT_CHANNEL_BYTES = 1536 * 1024;
 const SAFE_CONTAINER_ID = /^[a-f0-9]{12,64}$/u;
 const SAFE_ACCESS_TOKEN = /^[A-Za-z0-9_-]{43}$/u;
+const SAFE_OWNERSHIP_TOKEN = /^[A-Za-z0-9_-]{16,128}$/u;
+const INSPECTION_HEALTH_ATTEMPTS = 3;
+const INSPECTION_HEALTH_BUDGET_MS = 5_000;
 
 type DockerResourceKind = 'container' | 'network';
 type DockerInspectionState = 'PRESENT' | 'ABSENT' | 'INDETERMINATE';
@@ -90,6 +93,13 @@ interface ActiveRuntime {
   readonly runtime: PreviewRuntimeObservation;
   readonly stopTimeoutMs: number;
 }
+
+interface RediscoveredRuntime {
+  readonly runtime: ActiveRuntime;
+  readonly healthy: boolean;
+}
+
+type PreviewRediscoveryExpectation = NonNullable<PreviewInspectRequest['expected']>;
 
 type CleanupRuntime = Pick<
   ActiveRuntime,
@@ -288,7 +298,8 @@ function resourceLabels(value: Record<string, unknown>, nested: boolean): Record
 async function observeRuntime(input: {
   readonly executor: DockerCommandExecutor;
   readonly options: ResolvedDockerPreviewRunnerOptions;
-  readonly request: ApprovedPreviewStartRequest;
+  readonly previewId: string;
+  readonly policy: ApprovedPreviewStartRequest['policy'];
   readonly deadline: number;
   readonly signal?: AbortSignal;
 }): Promise<PreviewRuntimeObservation> {
@@ -296,7 +307,7 @@ async function observeRuntime(input: {
     executor: input.executor,
     args: ['version', '--format', '{{json .}}'],
     timeoutMs: remaining(input.deadline),
-    previewId: input.request.previewId,
+    previewId: input.previewId,
     code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_UNAVAILABLE,
     stage: PREVIEW_RUNNER_ERROR_STAGES.IMAGE,
     ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -305,7 +316,7 @@ async function observeRuntime(input: {
     executor: input.executor,
     args: ['image', 'inspect', '--format', '{{json .}}', input.options.image.reference],
     timeoutMs: remaining(input.deadline),
-    previewId: input.request.previewId,
+    previewId: input.previewId,
     code: PREVIEW_RUNNER_ERROR_CODES.IMAGE_VERIFICATION_FAILED,
     stage: PREVIEW_RUNNER_ERROR_STAGES.IMAGE,
     ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -315,14 +326,14 @@ async function observeRuntime(input: {
       versionJson: version.stdout,
       imageJson: image.stdout,
       image: input.options.image,
-      policy: input.request.policy,
+      policy: input.policy,
     });
   } catch (error) {
     throw runnerError({
       message: 'A identidade da imagem Docker de Preview não foi confirmada.',
       code: PREVIEW_RUNNER_ERROR_CODES.IMAGE_VERIFICATION_FAILED,
       stage: PREVIEW_RUNNER_ERROR_STAGES.IMAGE,
-      previewId: input.request.previewId,
+      previewId: input.previewId,
       sourceCode: 'IMAGE_IDENTITY_MISMATCH',
       cause: error,
     });
@@ -456,6 +467,36 @@ export function createDockerPreviewRunnerWithDependencies(
   const active = new Map<string, ActiveRuntime>();
   const starting = new Set<string>();
   const cleanupPromises = new Map<string, Promise<boolean>>();
+  const rediscoveryPromises = new Map<string, Promise<RediscoveredRuntime | null>>();
+
+  const confirmHealth = async (input: {
+    readonly target: DockerPreviewGatewayTarget;
+    readonly path: string;
+    readonly expectedBody: string;
+    readonly budgetMs: number;
+  }): Promise<boolean> => {
+    const deadline = Date.now() + Math.min(input.budgetMs, INSPECTION_HEALTH_BUDGET_MS);
+    for (let attempt = 0; attempt < INSPECTION_HEALTH_ATTEMPTS; attempt += 1) {
+      const timeoutMs = Math.max(1, Math.min(1_000, deadline - Date.now()));
+      let healthy = false;
+      try {
+        healthy = await dependencies.healthProbe.check({
+          host: input.target.host,
+          port: input.target.port,
+          path: input.path,
+          expectedBody: input.expectedBody,
+          timeoutMs,
+          accessToken: input.target.accessToken,
+        });
+      } catch {
+        healthy = false;
+      }
+      if (healthy) return true;
+      if (attempt + 1 >= INSPECTION_HEALTH_ATTEMPTS || Date.now() >= deadline) break;
+      await sleep(Math.max(1, Math.min(100, deadline - Date.now())));
+    }
+    return false;
+  };
 
   const cleanup = (runtime: CleanupRuntime): Promise<boolean> => {
     const existing = cleanupPromises.get(runtime.previewId);
@@ -612,6 +653,224 @@ export function createDockerPreviewRunnerWithDependencies(
     }
   };
 
+  const rediscoverActiveRuntime = (
+    request: PreviewInspectRequest & { readonly expected: PreviewRediscoveryExpectation },
+  ): Promise<RediscoveredRuntime | null> => {
+    const rediscoveryKey = [
+      request.previewId,
+      request.executionId,
+      request.expected.previewSessionHash,
+      String(request.expected.sessionRevision),
+    ].join(':');
+    const pending = rediscoveryPromises.get(rediscoveryKey);
+    if (pending !== undefined) return pending;
+    const operation = (async (): Promise<RediscoveredRuntime | null> => {
+      const containerName = `brq-${request.previewId}`;
+      const networkName = `brq-net-${request.previewId}`;
+      const inspectResource = async (kind: DockerResourceKind, identifier: string) => {
+        try {
+          return await dependencies.executor.execute({
+            args: [kind, 'inspect', '--format', '{{json .}}', identifier],
+            timeoutMs: request.expected.limits.stopTimeoutMs,
+            outputLimitBytes: ADMIN_OUTPUT_BYTES,
+          });
+        } catch (error) {
+          throw runnerError({
+            message: 'A redescoberta do runtime de Preview falhou.',
+            code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST,
+            stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+            previewId: request.previewId,
+            sourceCode: 'RUNTIME_REDISCOVERY_INSPECTION_FAILED',
+            cause: error,
+          });
+        }
+      };
+      const [containerResult, networkResult] = await Promise.all([
+        inspectResource('container', containerName),
+        inspectResource('network', networkName),
+      ]);
+      const containerState = classifyResourceInspection(
+        containerResult,
+        'container',
+        containerName,
+      );
+      const networkState = classifyResourceInspection(networkResult, 'network', networkName);
+      if (containerState === 'ABSENT' && networkState === 'ABSENT') return null;
+      if (containerState === 'INDETERMINATE' || networkState === 'INDETERMINATE') {
+        throw runnerError({
+          message: 'A existência do runtime de Preview não pôde ser confirmada.',
+          code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST,
+          stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+          previewId: request.previewId,
+          sourceCode: 'RUNTIME_REDISCOVERY_INDETERMINATE',
+        });
+      }
+      if (containerState !== 'PRESENT' || networkState !== 'PRESENT') {
+        throw runnerError({
+          message: 'Os recursos do runtime de Preview estão incompletos.',
+          code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST,
+          stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+          previewId: request.previewId,
+          sourceCode: 'RUNTIME_REDISCOVERY_PARTIAL',
+        });
+      }
+
+      let container: Record<string, unknown>;
+      let ownershipToken: string;
+      try {
+        container = parseObject(JSON.parse(containerResult.stdout));
+        const network = parseObject(JSON.parse(networkResult.stdout));
+        const containerLabels = resourceLabels(container, true);
+        const networkLabels = resourceLabels(network, false);
+        const expectedExpires = String(Math.floor(Date.parse(request.expected.expiresAt) / 1_000));
+        const containerOwnership = containerLabels['org.brq.preview.ownership'];
+        const networkOwnership = networkLabels['org.brq.preview.ownership'];
+        for (const labels of [containerLabels, networkLabels]) {
+          if (
+            labels['org.brq.preview.managed'] !== '1' ||
+            labels['org.brq.preview.id'] !== request.previewId ||
+            labels['org.brq.preview.execution'] !== request.executionId ||
+            labels['org.brq.preview.artifact'] !== request.expected.artifactId
+          ) {
+            throw new Error('RUNTIME_REDISCOVERY_LABEL_MISMATCH');
+          }
+        }
+        if (
+          typeof containerOwnership !== 'string' ||
+          typeof networkOwnership !== 'string' ||
+          !SAFE_OWNERSHIP_TOKEN.test(containerOwnership) ||
+          containerOwnership !== networkOwnership ||
+          containerLabels['org.brq.preview.expires'] !== expectedExpires
+        ) {
+          throw new Error('RUNTIME_REDISCOVERY_OWNERSHIP_MISMATCH');
+        }
+        ownershipToken = containerOwnership;
+        verifyPreviewNetwork({
+          inspectionJson: networkResult.stdout,
+          ownershipToken,
+          previewId: request.previewId,
+          executionId: request.executionId,
+          artifactId: request.expected.artifactId,
+        });
+        const containerId = String(container.Id);
+        const config = parseObject(container.Config);
+        if (
+          !SAFE_CONTAINER_ID.test(containerId) ||
+          container.Image !== options.image.expectedImageId ||
+          config.Image !== options.image.reference
+        ) {
+          throw new Error('RUNTIME_REDISCOVERY_IMAGE_MISMATCH');
+        }
+        verifyCreatedPreviewContainer({
+          inspectionJson: containerResult.stdout,
+          networkName,
+          ownershipToken,
+          previewId: request.previewId,
+          executionId: request.executionId,
+          artifactId: request.expected.artifactId,
+          limits: request.expected.limits,
+        });
+        verifyRunningPreviewContainer(containerResult.stdout, networkName);
+      } catch (error) {
+        throw runnerError({
+          message: 'O runtime redescoberto não corresponde à sessão persistida.',
+          code: PREVIEW_RUNNER_ERROR_CODES.ARTIFACT_INTEGRITY_MISMATCH,
+          stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+          previewId: request.previewId,
+          sourceCode: 'RUNTIME_REDISCOVERY_MISMATCH',
+          cause: error,
+        });
+      }
+
+      const runtimeDeadline = Date.now() + request.expected.limits.stopTimeoutMs;
+      const runtime = await observeRuntime({
+        executor: dependencies.executor,
+        options,
+        previewId: request.previewId,
+        policy: request.expected.policy,
+        deadline: runtimeDeadline,
+      });
+      if (
+        request.expected.runtime !== null &&
+        JSON.stringify(runtime) !== JSON.stringify(request.expected.runtime)
+      ) {
+        throw runnerError({
+          message: 'A identidade observada do runtime diverge da sessão persistida.',
+          code: PREVIEW_RUNNER_ERROR_CODES.ARTIFACT_INTEGRITY_MISMATCH,
+          stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+          previewId: request.previewId,
+          sourceCode: 'RUNTIME_REDISCOVERY_RUNTIME_MISMATCH',
+        });
+      }
+
+      let relay: PreviewLoopbackRelay;
+      try {
+        relay = await dependencies.createRelay({
+          executor: dependencies.executor,
+          containerId: String(container.Id),
+          responseBytes: request.expected.limits.responseBytes,
+          responseTimeoutMs: request.expected.limits.responseTimeoutMs,
+        });
+      } catch (error) {
+        throw runnerError({
+          message: 'O canal privado do runtime redescoberto não pôde ser recriado.',
+          code: PREVIEW_RUNNER_ERROR_CODES.RUNTIME_LOST,
+          stage: PREVIEW_RUNNER_ERROR_STAGES.RECONCILIATION,
+          previewId: request.previewId,
+          sourceCode: 'RUNTIME_REDISCOVERY_RELAY_FAILED',
+          cause: error,
+        });
+      }
+      let accepted = false;
+      try {
+        const target = safeTarget(relay.port, relay.accessToken, request.expected.expiresAt);
+        const healthy = await confirmHealth({
+          target,
+          path: request.expected.policy.protocol.healthPath,
+          expectedBody: request.expected.policy.protocol.healthExpectedBody,
+          budgetMs: request.expected.limits.healthTimeoutMs,
+        });
+        if (!healthy)
+          return Object.freeze({
+            runtime: Object.freeze({
+              previewId: request.previewId,
+              executionId: request.executionId,
+              artifactId: request.expected.artifactId,
+              containerId: String(container.Id),
+              containerName,
+              networkName,
+              ownershipToken,
+              relay,
+              target,
+              runtime,
+              stopTimeoutMs: request.expected.limits.stopTimeoutMs,
+            }),
+            healthy: false,
+          });
+        const rediscovered = Object.freeze({
+          previewId: request.previewId,
+          executionId: request.executionId,
+          artifactId: request.expected.artifactId,
+          containerId: String(container.Id),
+          containerName,
+          networkName,
+          ownershipToken,
+          relay,
+          target,
+          runtime,
+          stopTimeoutMs: request.expected.limits.stopTimeoutMs,
+        });
+        active.set(request.previewId, rediscovered);
+        accepted = true;
+        return Object.freeze({ runtime: rediscovered, healthy: true });
+      } finally {
+        if (!accepted) await relay.close().catch(() => false);
+      }
+    })().finally(() => rediscoveryPromises.delete(rediscoveryKey));
+    rediscoveryPromises.set(rediscoveryKey, operation);
+    return operation;
+  };
+
   const runner: DockerPreviewRunner = {
     async start(rawRequest, runOptions = {}) {
       const parsed = approvedPreviewStartRequestSchema.safeParse(rawRequest);
@@ -696,7 +955,8 @@ export function createDockerPreviewRunnerWithDependencies(
         runtimeObservation = await observeRuntime({
           executor: dependencies.executor,
           options,
-          request,
+          previewId: request.previewId,
+          policy: request.policy,
           deadline,
           ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
         });
@@ -948,9 +1208,9 @@ export function createDockerPreviewRunnerWithDependencies(
 
     async inspect(rawRequest) {
       const request = previewInspectRequestSchema.parse(rawRequest);
-      const runtime = active.get(request.previewId);
       const observedAt = isoTime(now());
-      if (runtime === undefined || runtime.executionId !== request.executionId) {
+      const runtime = active.get(request.previewId);
+      if (runtime !== undefined && runtime.executionId !== request.executionId) {
         return previewRuntimeInspectionSchema.parse({
           previewId: request.previewId,
           executionId: request.executionId,
@@ -960,13 +1220,55 @@ export function createDockerPreviewRunnerWithDependencies(
           runtime: null,
         });
       }
-      const healthy = await dependencies.healthProbe.check({
-        host: runtime.target.host,
-        port: runtime.target.port,
-        path: '/__brq/health',
-        expectedBody: 'BRQ_PREVIEW_HEALTHY',
-        timeoutMs: 5_000,
-        accessToken: runtime.target.accessToken,
+      if (runtime === undefined && request.expected !== undefined) {
+        const rediscovered = await rediscoverActiveRuntime({
+          ...request,
+          expected: request.expected,
+        });
+        if (rediscovered === null) {
+          return previewRuntimeInspectionSchema.parse({
+            previewId: request.previewId,
+            executionId: request.executionId,
+            status: 'MISSING',
+            health: 'NOT_APPLICABLE',
+            observedAt,
+            runtime: null,
+          });
+        }
+        if (!rediscovered.healthy) {
+          return previewRuntimeInspectionSchema.parse({
+            previewId: request.previewId,
+            executionId: request.executionId,
+            status: 'UNHEALTHY',
+            health: 'UNHEALTHY',
+            observedAt,
+            runtime: rediscovered.runtime.runtime,
+          });
+        }
+        return previewRuntimeInspectionSchema.parse({
+          previewId: request.previewId,
+          executionId: request.executionId,
+          status: 'RUNNING',
+          health: 'HEALTHY',
+          observedAt,
+          runtime: rediscovered.runtime.runtime,
+        });
+      }
+      if (runtime === undefined) {
+        return previewRuntimeInspectionSchema.parse({
+          previewId: request.previewId,
+          executionId: request.executionId,
+          status: 'MISSING',
+          health: 'NOT_APPLICABLE',
+          observedAt,
+          runtime: null,
+        });
+      }
+      const healthy = await confirmHealth({
+        target: runtime.target,
+        path: request.expected?.policy.protocol.healthPath ?? '/__brq/health',
+        expectedBody: request.expected?.policy.protocol.healthExpectedBody ?? 'BRQ_PREVIEW_HEALTHY',
+        budgetMs: request.expected?.limits.healthTimeoutMs ?? INSPECTION_HEALTH_BUDGET_MS,
       });
       return previewRuntimeInspectionSchema.parse({
         previewId: request.previewId,

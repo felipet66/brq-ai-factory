@@ -16,6 +16,8 @@ import { jsonResponse } from './response-foundation';
 import {
   executionAcceptedResponseSchema,
   executionRerunAcceptedResponseSchema,
+  executionTechnicalResumeLatestResponseSchema,
+  executionTechnicalResumeResponseSchema,
   executionHistoryDetailResponseSchema,
   executionHistoryDetailSchema,
   executionHistoryPageResponseSchema,
@@ -86,6 +88,77 @@ export function executionRerunAcceptedResponse(
     errors: [],
   });
   return jsonResponse(body, { status: 202, requestId });
+}
+
+export function executionTechnicalResumeResponse(
+  result: {
+    readonly attemptId: string;
+    readonly sourceExecutionId: string;
+    readonly checkpointHash: string;
+    readonly status: 'COMPLETION_PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+    readonly resultHash: string;
+    readonly usesOpenAI: false;
+  },
+  requestId: string,
+): Response {
+  const body = executionTechnicalResumeResponseSchema.parse({
+    success: true,
+    data: result,
+    metadata: {
+      requestId,
+      apiVersion: HTTP_API_VERSION,
+      executionId: result.sourceExecutionId,
+    },
+    errors: [],
+  });
+  return jsonResponse(body, {
+    status: result.status === 'COMPLETION_PENDING' ? 202 : 200,
+    requestId,
+  });
+}
+
+export function executionTechnicalResumeLatestResponse(
+  sourceExecutionId: string,
+  checkpointStatus: 'AVAILABLE' | 'NOT_FOUND' | 'CLEANUP_PENDING' | 'CLEANUP_FAILED',
+  attempt: {
+    readonly attemptId: string;
+    readonly checkpointHash: string;
+    readonly status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+    readonly activePhase: 'EXECUTING' | 'COMPLETION_PENDING' | 'RECOVERY_REQUIRED' | null;
+    readonly startedAt: string;
+    readonly finishedAt: string | null;
+    readonly result: { readonly resultHash: string } | null;
+    readonly cleanupConfirmed: boolean;
+    readonly failureReasonCode: string | null;
+    readonly recoveryReasonCode: string | null;
+  } | null,
+  requestId: string,
+): Response {
+  const body = executionTechnicalResumeLatestResponseSchema.parse({
+    success: true,
+    data: {
+      sourceExecutionId,
+      checkpointStatus,
+      attempt:
+        attempt === null
+          ? null
+          : {
+              attemptId: attempt.attemptId,
+              checkpointHash: attempt.checkpointHash,
+              status: attempt.status,
+              activePhase: attempt.activePhase,
+              startedAt: attempt.startedAt,
+              finishedAt: attempt.finishedAt,
+              resultHash: attempt.result?.resultHash ?? null,
+              reasonCode: attempt.failureReasonCode ?? attempt.recoveryReasonCode,
+              cleanupConfirmed: attempt.cleanupConfirmed,
+              usesOpenAI: false,
+            },
+    },
+    metadata: { requestId, apiVersion: HTTP_API_VERSION, executionId: sourceExecutionId },
+    errors: [],
+  });
+  return jsonResponse(body, { status: 200, requestId });
 }
 
 export function loginSuccessResponse(

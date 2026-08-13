@@ -27,6 +27,11 @@ import type {
   factorySourceExecutionSummarySchema,
   factoryWorkspaceSummarySchema,
 } from './schemas';
+import type { FactoryTechnicalCheckpoint } from './technical-checkpoint';
+import type {
+  FactoryTechnicalResumeOptions,
+  FactoryTechnicalResumeResult,
+} from './technical-resume';
 
 type DeepReadonly<T> = T extends (...arguments_: never[]) => unknown
   ? T
@@ -66,6 +71,8 @@ export interface FactoryPipelineRunOptions {
   readonly cacheMode?: 'READ_WRITE' | 'REQUIRE_HIT';
   /** Execution whose immutable AI checkpoints are the source of a cache-only replay. */
   readonly sourceExecutionId?: string;
+  /** Opt-in durable handoff after Code Generator and profile validation both pass. */
+  readonly onTechnicalCheckpoint?: (checkpoint: FactoryTechnicalCheckpoint) => void | Promise<void>;
 }
 
 export interface FactoryPipelinePreflightOptions {
@@ -82,12 +89,37 @@ export interface FactoryWorkspacePort {
   release(result: WorkspaceMaterializationResult): Promise<WorkspaceReleaseResult>;
 }
 
+export interface FactoryTechnicalBoundaryIdentity {
+  readonly codeGeneratorAssetBundleHash: string;
+  readonly workspace: {
+    readonly version: string;
+    readonly contractVersion: string;
+    readonly policyHash: string;
+    readonly configurationHash: string;
+  };
+  readonly sandbox: {
+    readonly runnerVersion: string;
+    readonly contractVersion: string;
+    readonly policyHash: string;
+    readonly commandPolicyHash: string;
+    readonly limitsHash: string;
+    readonly imageDigest: string;
+    readonly imageId: string;
+    readonly platform: string;
+  };
+}
+
 export interface CreateFactoryPipelineCoordinatorOptions {
   readonly executionEngine: ExecutionEngine;
   readonly codeGeneratorAgent: CodeGeneratorAgent;
   readonly workspace: FactoryWorkspacePort;
   readonly sandboxRunner: SandboxRunner;
   readonly configuration: FactoryPipelineConfiguration;
+  /**
+   * Immutable identities of the concrete host boundaries selected by composition.
+   * Required for durable technical checkpoints so resume can fail closed on runtime drift.
+   */
+  readonly technicalBoundaryIdentity?: FactoryTechnicalBoundaryIdentity;
   readonly logger?: Logger;
   readonly now?: () => number;
 }
@@ -98,6 +130,11 @@ export interface FactoryPipelineCoordinator {
     request: ExecutionRequest,
     options?: FactoryPipelineRunOptions,
   ): Promise<FactoryExecutionResult>;
+  /** Resumes only workspace and sandbox from an already approved immutable checkpoint. */
+  resumeTechnical?(
+    checkpoint: FactoryTechnicalCheckpoint,
+    options: FactoryTechnicalResumeOptions,
+  ): Promise<FactoryTechnicalResumeResult>;
 }
 
 export type { ExecutionRequest, ExecutionResult };

@@ -1,14 +1,19 @@
 import type { ExecutionResult } from '@brq/execution-engine';
-import type { FactoryExecutionResult } from '@brq/factory-pipeline';
+import {
+  factoryTechnicalCheckpointSchema,
+  factoryTechnicalResumeResultSchema,
+  type FactoryExecutionResult,
+} from '@brq/factory-pipeline';
 import type {
   ExecutionObservabilitySnapshot,
   FactoryExecutionObservabilitySnapshot,
 } from '@brq/observability';
-import type { DatabaseClient } from '@brq/prisma/client';
+import { Prisma, type DatabaseClient } from '@brq/prisma/client';
 
 import type {
   ExecutionRecord,
   ExecutionRecordCreatedInput,
+  ExecutionRecordInfrastructureFailureInput,
   ExecutionRecordJobRunningInput,
   ExecutionRecordJobTerminalInput,
   ExecutionRecordListQuery,
@@ -16,12 +21,25 @@ import type {
   ExecutionRecordQueuedInput,
   ExecutionRecordRunningInput,
   FactoryExecutionRecordRepository,
+  FactoryTechnicalCheckpointRecord,
+  FactoryTechnicalCheckpointLookup,
+  FactoryTechnicalCheckpointSaveInput,
+  FactoryTechnicalResumeAttemptCompleteInput,
+  FactoryTechnicalResumeAttemptCreateInput,
+  FactoryTechnicalResumeAttemptFailInput,
+  FactoryTechnicalResumeAttemptHeartbeatInput,
+  FactoryTechnicalResumeAttemptLookup,
+  FactoryTechnicalResumeAttemptReconcileInput,
+  FactoryTechnicalResumeAttemptRecord,
+  FactoryTechnicalResumeAttemptStageResultInput,
+  FactoryTechnicalResumeReconciliation,
 } from '../contracts';
 import { EXECUTION_REPOSITORY_ERROR_CODES, ExecutionRepositoryError } from '../errors';
 import { immutableClone } from '../immutability';
 import {
   createExecutionRecord,
   createQueuedExecutionRecord,
+  projectInfrastructureFailedExecutionRecord,
   projectJobRunningExecutionRecord,
   projectJobTerminalExecutionRecord,
   projectObservedExecutionRecord,
@@ -31,6 +49,7 @@ import {
 } from '../mapper';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordInfrastructureFailureInputSchema,
   executionRecordJobRunningInputSchema,
   executionRecordJobTerminalInputSchema,
   executionRecordListQuerySchema,
@@ -38,6 +57,21 @@ import {
   executionRecordRunningInputSchema,
   executionRecordSchema,
 } from '../schemas';
+import {
+  factoryTechnicalCheckpointLookupSchema,
+  factoryTechnicalCheckpointRecordSchema,
+  factoryTechnicalCheckpointSaveInputSchema,
+  factoryTechnicalResumeAttemptCompleteInputSchema,
+  factoryTechnicalResumeAttemptCreateInputSchema,
+  factoryTechnicalResumeAttemptFailInputSchema,
+  factoryTechnicalResumeAttemptHeartbeatInputSchema,
+  factoryTechnicalResumeAttemptLookupSchema,
+  factoryTechnicalResumeAttemptReconcileInputSchema,
+  factoryTechnicalResumeAttemptRecordSchema,
+  factoryTechnicalResumeAttemptStageResultInputSchema,
+  factoryTechnicalResumeReconciliationSchema,
+  isTechnicalResumeResultCleanupConfirmed,
+} from '../technical-resume-schemas';
 
 const EXECUTION_OWNER_ID_MAX_LENGTH = 128;
 
@@ -281,6 +315,8 @@ interface RawFactoryResult {
   sandboxStatus: string;
   sandboxRunId: string | null;
   sandboxResourceOutcome: string;
+  sandboxCleanupFailureCode: string | null;
+  sandboxCleanupSourceCode: string | null;
   failureKind: string | null;
   failureCode: string | null;
   failureSourceCode: string | null;
@@ -417,7 +453,7 @@ function mapObservation(raw: RawExecutionRecord): unknown {
   const summary =
     observation.summaryWorkflowStatus === null
       ? null
-      : observation.observabilityVersion === '2.0.0'
+      : observation.observabilityVersion === '2.0.0' || observation.observabilityVersion === '3.0.0'
         ? {
             executionId: observation.executionId,
             workflowStatus: observation.summaryWorkflowStatus,
@@ -526,6 +562,8 @@ function mapFactoryResult(raw: RawFactoryResult | null): unknown {
     sandboxStatus: raw.sandboxStatus,
     sandboxRunId: raw.sandboxRunId,
     sandboxResourceOutcome: raw.sandboxResourceOutcome,
+    sandboxCleanupFailureCode: raw.sandboxCleanupFailureCode,
+    sandboxCleanupSourceCode: raw.sandboxCleanupSourceCode,
     hashes: {
       lineageHash: raw.lineageHash,
       provenanceHash: raw.provenanceHash,
@@ -708,6 +746,71 @@ function mapRecord(value: unknown): ExecutionRecord {
         durationMs: event.durationMs,
       })),
       revision: raw.revision,
+    }),
+  );
+}
+
+function mapTechnicalCheckpoint(value: unknown): FactoryTechnicalCheckpointRecord {
+  const raw = value as {
+    payload: unknown;
+    createdAt: Date;
+    cleanup: null | {
+      factoryResultHash: string;
+      releaseStatus: string;
+      completedAt: Date;
+    };
+  };
+  return immutableClone(
+    factoryTechnicalCheckpointRecordSchema.parse({
+      checkpoint: raw.payload,
+      createdAt: raw.createdAt.toISOString(),
+      cleanup:
+        raw.cleanup === null
+          ? null
+          : {
+              factoryResultHash: raw.cleanup.factoryResultHash,
+              releaseStatus: raw.cleanup.releaseStatus,
+              completedAt: raw.cleanup.completedAt.toISOString(),
+            },
+    }),
+  );
+}
+
+function mapTechnicalResumeAttempt(value: unknown): FactoryTechnicalResumeAttemptRecord {
+  const raw = value as {
+    attemptId: string;
+    checkpointHash: string;
+    ownerId: string;
+    requestId: string;
+    status: string;
+    activePhase: string | null;
+    startedAt: Date;
+    finishedAt: Date | null;
+    heartbeatAt: Date | null;
+    leaseExpiresAt: Date | null;
+    pendingRecordedAt: Date | null;
+    result: unknown | null;
+    cleanupConfirmed: boolean;
+    failureReasonCode: string | null;
+    recoveryReasonCode: string | null;
+  };
+  return immutableClone(
+    factoryTechnicalResumeAttemptRecordSchema.parse({
+      attemptId: raw.attemptId,
+      checkpointHash: raw.checkpointHash,
+      ownerId: raw.ownerId,
+      requestId: raw.requestId,
+      status: raw.status,
+      activePhase: raw.activePhase,
+      startedAt: raw.startedAt.toISOString(),
+      finishedAt: raw.finishedAt?.toISOString() ?? null,
+      heartbeatAt: raw.heartbeatAt?.toISOString() ?? null,
+      leaseExpiresAt: raw.leaseExpiresAt?.toISOString() ?? null,
+      completionRecordedAt: raw.pendingRecordedAt?.toISOString() ?? null,
+      result: raw.result,
+      cleanupConfirmed: raw.cleanupConfirmed,
+      failureReasonCode: raw.failureReasonCode,
+      recoveryReasonCode: raw.recoveryReasonCode,
     }),
   );
 }
@@ -924,6 +1027,8 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
         sandboxStatus: factory.sandboxStatus,
         sandboxRunId: factory.sandboxRunId,
         sandboxResourceOutcome: factory.sandboxResourceOutcome,
+        sandboxCleanupFailureCode: factory.sandboxCleanupFailureCode,
+        sandboxCleanupSourceCode: factory.sandboxCleanupSourceCode,
         failureKind: factory.failure?.kind ?? null,
         failureCode: factory.failure?.code ?? null,
         failureSourceCode: factory.failure?.sourceCode ?? null,
@@ -1157,6 +1262,72 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
           data: { revision: { increment: 1 } },
         }),
       ]);
+      return (await this.loadByJobIdForLifecycle(parsed.data.jobId))!;
+    });
+  }
+
+  async failInfrastructure(
+    input: ExecutionRecordInfrastructureFailureInput,
+  ): Promise<ExecutionRecord> {
+    this.assertLifecycleAccess();
+    const parsed = executionRecordInfrastructureFailureInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Entrada de falha infraestrutural inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.loadByJobIdForLifecycle(parsed.data.jobId);
+      if (current === null) {
+        throw new ExecutionRepositoryError('Job de execução não encontrado.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      if (
+        current.status === 'FAILED' &&
+        current.job?.status === 'FAILED' &&
+        current.finishedAt === parsed.data.finishedAt &&
+        current.job.finishedAt === parsed.data.finishedAt &&
+        current.failure?.kind === 'INFRASTRUCTURE' &&
+        current.failure.code === parsed.data.code
+      ) {
+        return current;
+      }
+      const projected = projectInfrastructureFailedExecutionRecord(current, parsed.data);
+      const terminalEvent = projected.lifecycle.at(-1)!;
+      await this.client.executionRecord.update({
+        where: {
+          storageId: current.storageId,
+          status: current.status,
+          revision: current.revision,
+        },
+        data: {
+          status: projected.status,
+          workflowStatus: projected.workflowStatus,
+          finishedAt: new Date(projected.finishedAt!),
+          durationMs: projected.durationMs,
+          failureKind: projected.failure!.kind,
+          failureCode: projected.failure!.code,
+          failureSourceCode: null,
+          revision: { increment: 1 },
+          job: {
+            update: {
+              status: projected.job!.status,
+              finishedAt: new Date(projected.job!.finishedAt!),
+            },
+          },
+          lifecycleEvents: {
+            create: {
+              sequence: terminalEvent.sequence,
+              event: terminalEvent.event,
+              state: terminalEvent.state,
+              occurredAt: new Date(terminalEvent.occurredAt),
+              durationMs: terminalEvent.durationMs,
+            },
+          },
+        },
+      });
       return (await this.loadByJobIdForLifecycle(parsed.data.jobId))!;
     });
   }
@@ -1550,6 +1721,27 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
           current.storageId,
           projected.factoryResult!,
         );
+        if (
+          result.workspace.releaseStatus === 'RELEASED' ||
+          result.workspace.releaseStatus === 'NOT_REQUIRED'
+        ) {
+          if (result.sandbox.cleanupFailure === null) {
+            const checkpoint = await transaction.factoryTechnicalCheckpoint.findUnique({
+              where: { executionRecordId: current.storageId },
+              select: { checkpointHash: true },
+            });
+            if (checkpoint !== null) {
+              await transaction.factoryTechnicalCheckpointCleanup.create({
+                data: {
+                  checkpointHash: checkpoint.checkpointHash,
+                  factoryResultHash: result.hashes.factoryResultHash,
+                  releaseStatus: result.workspace.releaseStatus,
+                  completedAt: new Date(result.finishedAt),
+                },
+              });
+            }
+          }
+        }
         if (snapshot !== null) {
           await this.replaceObservation(
             transaction as unknown as DatabaseClient,
@@ -1559,6 +1751,701 @@ export class PrismaExecutionRecordRepository implements FactoryExecutionRecordRe
         }
       });
       return (await this.loadByWorkflowIdForLifecycle(workflowId))!;
+    });
+  }
+
+  async saveTechnicalCheckpoint(
+    input: FactoryTechnicalCheckpointSaveInput,
+  ): Promise<FactoryTechnicalCheckpointRecord> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalCheckpointSaveInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Checkpoint técnico inválido.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const checkpoint = parsed.data.checkpoint;
+      const source = await this.client.executionRecord.findFirst({
+        where: {
+          ...this.lifecycleWhere(),
+          workflowId: checkpoint.source.workflowId,
+          status: 'RUNNING',
+        },
+        select: { storageId: true, executionId: true },
+      });
+      if (
+        source === null ||
+        (source.executionId !== null && source.executionId !== checkpoint.source.executionId)
+      ) {
+        throw new ExecutionRepositoryError(
+          'O checkpoint não pertence à execução RUNNING informada.',
+          { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+        );
+      }
+      const existing = await this.client.factoryTechnicalCheckpoint.findUnique({
+        where: { executionRecordId: source.storageId },
+        include: { cleanup: true },
+      });
+      if (existing !== null) {
+        if (existing.checkpointHash !== checkpoint.checkpointHash) {
+          throw new ExecutionRepositoryError(
+            'A execução já possui um checkpoint técnico imutável divergente.',
+            { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+          );
+        }
+        return mapTechnicalCheckpoint(existing);
+      }
+      const created = await this.client.factoryTechnicalCheckpoint.create({
+        data: {
+          checkpointHash: checkpoint.checkpointHash,
+          executionRecordId: source.storageId,
+          sourceExecutionId: checkpoint.source.executionId,
+          checkpointVersion: checkpoint.checkpointVersion,
+          bundleHash: checkpoint.bundle.hashes.bundleHash,
+          profileValidationHash: checkpoint.profileValidation.profileValidationHash,
+          payload: checkpoint,
+          createdAt: new Date(parsed.data.createdAt),
+        },
+        include: { cleanup: true },
+      });
+      return mapTechnicalCheckpoint(created);
+    });
+  }
+
+  async findTechnicalCheckpointOwned(
+    lookup: FactoryTechnicalCheckpointLookup,
+  ): Promise<FactoryTechnicalCheckpointRecord | null> {
+    const parsed = factoryTechnicalCheckpointLookupSchema.safeParse(lookup);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Consulta de checkpoint técnico inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    this.assertLifecycleAccess();
+    if (
+      this.repositoryAccess.access === 'OWNER' &&
+      this.repositoryAccess.userId !== parsed.data.ownerId
+    ) {
+      return null;
+    }
+    return run(async () => {
+      const checkpoint = await this.client.factoryTechnicalCheckpoint.findFirst({
+        where: {
+          sourceExecutionId: parsed.data.sourceExecutionId,
+          executionRecord: { is: { userId: parsed.data.ownerId } },
+        },
+        include: { cleanup: true },
+      });
+      return checkpoint === null ? null : mapTechnicalCheckpoint(checkpoint);
+    });
+  }
+
+  async createTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptCreateInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptCreateInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Tentativa técnica inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    if (
+      this.repositoryAccess.access === 'OWNER' &&
+      this.repositoryAccess.userId !== parsed.data.ownerId
+    ) {
+      throw new ExecutionRepositoryError('Checkpoint técnico não encontrado.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+      });
+    }
+    return run(async () =>
+      this.client.$transaction(async (transaction) => {
+        const eligible = await transaction.factoryTechnicalCheckpoint.findFirst({
+          where: {
+            checkpointHash: parsed.data.checkpointHash,
+            executionRecord: { is: { userId: parsed.data.ownerId, status: 'FAILED' } },
+            cleanup: { isNot: null },
+            resumeAttempts: {
+              none: {
+                OR: [
+                  { status: 'SUCCESS' },
+                  { status: { not: 'RUNNING' }, cleanupConfirmed: false },
+                ],
+              },
+            },
+          },
+          select: { checkpointHash: true },
+        });
+        if (eligible === null) {
+          throw new ExecutionRepositoryError(
+            'O checkpoint não está elegível para uma nova tentativa técnica.',
+            { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+          );
+        }
+        const created = await transaction.factoryTechnicalResumeAttempt.create({
+          data: {
+            attemptId: parsed.data.attemptId,
+            checkpointHash: parsed.data.checkpointHash,
+            activeCheckpointHash: parsed.data.checkpointHash,
+            ownerId: parsed.data.ownerId,
+            requestId: parsed.data.requestId,
+            status: 'RUNNING',
+            activePhase: 'EXECUTING',
+            startedAt: new Date(parsed.data.startedAt),
+            leaseId: parsed.data.leaseId,
+            leaseVersion: parsed.data.leaseVersion,
+            heartbeatAt: new Date(parsed.data.heartbeatAt),
+            leaseExpiresAt: new Date(parsed.data.leaseExpiresAt),
+            cleanupConfirmed: false,
+          },
+        });
+        return mapTechnicalResumeAttempt(created);
+      }),
+    );
+  }
+
+  async renewTechnicalResumeAttemptLease(
+    input: FactoryTechnicalResumeAttemptHeartbeatInput,
+  ): Promise<boolean> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptHeartbeatInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Heartbeat da tentativa técnica inválido.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const transition = await this.client.factoryTechnicalResumeAttempt.updateMany({
+        where: {
+          attemptId: parsed.data.attemptId,
+          status: 'RUNNING',
+          activePhase: 'EXECUTING',
+          leaseId: parsed.data.leaseId,
+          leaseVersion: parsed.data.leaseVersion,
+          heartbeatAt: { lte: new Date(parsed.data.heartbeatAt) },
+          leaseExpiresAt: { gte: new Date(parsed.data.heartbeatAt) },
+          AND: [{ leaseExpiresAt: { lte: new Date(parsed.data.leaseExpiresAt) } }],
+          activeCheckpointHash: { not: null },
+          ...(this.repositoryAccess.access === 'OWNER'
+            ? { ownerId: this.repositoryAccess.userId }
+            : {}),
+        },
+        data: {
+          heartbeatAt: new Date(parsed.data.heartbeatAt),
+          leaseExpiresAt: new Date(parsed.data.leaseExpiresAt),
+        },
+      });
+      return transition.count === 1;
+    });
+  }
+
+  async stageTechnicalResumeAttemptResult(
+    input: FactoryTechnicalResumeAttemptStageResultInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptStageResultInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Journal da tentativa técnica inválido.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.client.factoryTechnicalResumeAttempt.findFirst({
+        where: {
+          attemptId: parsed.data.attemptId,
+          ...(this.repositoryAccess.access === 'OWNER'
+            ? {
+                ownerId: this.repositoryAccess.userId,
+                checkpoint: {
+                  is: {
+                    executionRecord: { is: { userId: this.repositoryAccess.userId } },
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          checkpoint: {
+            include: {
+              executionRecord: { select: { userId: true, workflowId: true } },
+            },
+          },
+        },
+      });
+      if (current === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      if (current.status !== 'RUNNING') {
+        if (current.resultHash === parsed.data.result.resultHash) {
+          return mapTechnicalResumeAttempt(current);
+        }
+        throw new ExecutionRepositoryError('TECHNICAL_TERMINAL_RESULT_DIVERGENCE', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      if (
+        current.activePhase === 'COMPLETION_PENDING' &&
+        current.pendingResultHash === parsed.data.result.resultHash
+      ) {
+        return mapTechnicalResumeAttempt(current);
+      }
+      const checkpoint = factoryTechnicalCheckpointSchema.safeParse(current.checkpoint.payload);
+      if (
+        !checkpoint.success ||
+        current.ownerId !== current.checkpoint.executionRecord.userId ||
+        current.checkpointHash !== current.checkpoint.checkpointHash ||
+        current.checkpoint.checkpointHash !== checkpoint.data.checkpointHash ||
+        current.checkpoint.sourceExecutionId !== checkpoint.data.source.executionId ||
+        current.checkpoint.executionRecord.workflowId !== checkpoint.data.source.workflowId ||
+        current.attemptId !== parsed.data.result.attemptId ||
+        parsed.data.result.checkpointHash !== checkpoint.data.checkpointHash ||
+        parsed.data.result.sourceExecutionId !== checkpoint.data.source.executionId ||
+        parsed.data.result.sourceWorkflowId !== checkpoint.data.source.workflowId ||
+        Date.parse(parsed.data.result.startedAt) < current.startedAt.getTime() ||
+        Date.parse(parsed.data.result.finishedAt) < current.startedAt.getTime()
+      ) {
+        throw new ExecutionRepositoryError(
+          'A tentativa técnica não aceita este journal terminal.',
+          { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+        );
+      }
+      const transition = await this.client.factoryTechnicalResumeAttempt.updateMany({
+        where: {
+          attemptId: current.attemptId,
+          checkpointHash: current.checkpointHash,
+          activeCheckpointHash: current.checkpointHash,
+          ownerId: current.ownerId,
+          status: 'RUNNING',
+          activePhase: 'EXECUTING',
+          leaseId: parsed.data.leaseId,
+          leaseVersion: parsed.data.leaseVersion,
+          leaseExpiresAt: { gte: new Date(parsed.data.recordedAt) },
+        },
+        data: {
+          activePhase: 'COMPLETION_PENDING',
+          pendingResultHash: parsed.data.result.resultHash,
+          pendingResult: parsed.data.result,
+          pendingRecordedAt: new Date(parsed.data.recordedAt),
+        },
+      });
+      if (transition.count !== 1) {
+        throw new ExecutionRepositoryError('A lease da tentativa técnica não está ativa.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const updated = await this.client.factoryTechnicalResumeAttempt.findUnique({
+        where: { attemptId: current.attemptId },
+      });
+      if (updated === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada após o journal.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      return mapTechnicalResumeAttempt(updated);
+    });
+  }
+
+  async completeTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptCompleteInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptCompleteInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Resultado da tentativa técnica inválido.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.client.factoryTechnicalResumeAttempt.findFirst({
+        where: {
+          attemptId: parsed.data.attemptId,
+          ...(this.repositoryAccess.access === 'OWNER'
+            ? {
+                ownerId: this.repositoryAccess.userId,
+                checkpoint: {
+                  is: {
+                    executionRecord: { is: { userId: this.repositoryAccess.userId } },
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          checkpoint: {
+            include: {
+              executionRecord: { select: { userId: true, workflowId: true } },
+            },
+          },
+        },
+      });
+      if (current === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      if (current.status !== 'RUNNING') {
+        if (current.resultHash === parsed.data.pendingResultHash) {
+          return mapTechnicalResumeAttempt(current);
+        }
+        throw new ExecutionRepositoryError('TECHNICAL_TERMINAL_RESULT_DIVERGENCE', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const pendingResult = factoryTechnicalResumeResultSchema.safeParse(current.pendingResult);
+      if (
+        !pendingResult.success ||
+        current.ownerId !== current.checkpoint.executionRecord.userId ||
+        current.activePhase !== 'COMPLETION_PENDING' ||
+        current.pendingResultHash !== parsed.data.pendingResultHash ||
+        pendingResult.data.resultHash !== parsed.data.pendingResultHash
+      ) {
+        throw new ExecutionRepositoryError(
+          'A tentativa técnica não possui este journal terminal.',
+          {
+            code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+          },
+        );
+      }
+      const transition = await this.client.factoryTechnicalResumeAttempt.updateMany({
+        where: {
+          attemptId: current.attemptId,
+          checkpointHash: current.checkpointHash,
+          activeCheckpointHash: current.checkpointHash,
+          ownerId: current.ownerId,
+          status: 'RUNNING',
+          activePhase: 'COMPLETION_PENDING',
+          pendingResultHash: parsed.data.pendingResultHash,
+        },
+        data: {
+          status: pendingResult.data.status,
+          activePhase: null,
+          activeCheckpointHash: null,
+          finishedAt: new Date(pendingResult.data.finishedAt),
+          resultHash: pendingResult.data.resultHash,
+          result: pendingResult.data,
+          pendingResultHash: null,
+          pendingResult: Prisma.DbNull,
+          leaseId: null,
+          cleanupConfirmed: isTechnicalResumeResultCleanupConfirmed(pendingResult.data),
+          failureReasonCode: pendingResult.data.failure?.reasonCode ?? null,
+          recoveryReasonCode: null,
+        },
+      });
+      if (transition.count !== 1) {
+        throw new ExecutionRepositoryError('A tentativa técnica já está terminal.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const updated = await this.client.factoryTechnicalResumeAttempt.findUnique({
+        where: { attemptId: current.attemptId },
+      });
+      if (updated === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada após finalização.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      return mapTechnicalResumeAttempt(updated);
+    });
+  }
+
+  async failTechnicalResumeAttempt(
+    input: FactoryTechnicalResumeAttemptFailInput,
+  ): Promise<FactoryTechnicalResumeAttemptRecord> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptFailInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Falha da tentativa técnica inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    return run(async () => {
+      const current = await this.client.factoryTechnicalResumeAttempt.findFirst({
+        where: {
+          attemptId: parsed.data.attemptId,
+          ...(this.repositoryAccess.access === 'OWNER'
+            ? {
+                ownerId: this.repositoryAccess.userId,
+                checkpoint: {
+                  is: {
+                    executionRecord: { is: { userId: this.repositoryAccess.userId } },
+                  },
+                },
+              }
+            : {}),
+        },
+        include: {
+          checkpoint: {
+            include: { executionRecord: { select: { userId: true } } },
+          },
+        },
+      });
+      if (current === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      if (current.ownerId !== current.checkpoint.executionRecord.userId) {
+        throw new ExecutionRepositoryError(
+          'A tentativa técnica não pertence ao checkpoint informado.',
+          { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+        );
+      }
+      if (
+        current.status !== 'RUNNING' ||
+        current.activePhase !== 'EXECUTING' ||
+        current.leaseId !== parsed.data.leaseId ||
+        current.leaseVersion !== parsed.data.leaseVersion ||
+        Date.parse(parsed.data.finishedAt) < current.startedAt.getTime()
+      ) {
+        throw new ExecutionRepositoryError('A tentativa técnica já está terminal.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const transition = await this.client.factoryTechnicalResumeAttempt.updateMany({
+        where: {
+          attemptId: current.attemptId,
+          checkpointHash: current.checkpointHash,
+          activeCheckpointHash: current.checkpointHash,
+          ownerId: current.ownerId,
+          status: 'RUNNING',
+          activePhase: 'EXECUTING',
+          leaseId: parsed.data.leaseId,
+          leaseVersion: parsed.data.leaseVersion,
+          leaseExpiresAt: { gte: new Date(parsed.data.finishedAt) },
+        },
+        data: {
+          status: 'FAILED',
+          activePhase: null,
+          activeCheckpointHash: null,
+          leaseId: null,
+          finishedAt: new Date(parsed.data.finishedAt),
+          cleanupConfirmed: parsed.data.cleanupConfirmed,
+          failureReasonCode: parsed.data.reasonCode,
+          recoveryReasonCode: null,
+        },
+      });
+      if (transition.count !== 1) {
+        throw new ExecutionRepositoryError('A tentativa técnica já está terminal.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT,
+        });
+      }
+      const updated = await this.client.factoryTechnicalResumeAttempt.findUnique({
+        where: { attemptId: current.attemptId },
+      });
+      if (updated === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada após finalização.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      return mapTechnicalResumeAttempt(updated);
+    });
+  }
+
+  async findLatestTechnicalResumeAttemptOwned(
+    lookup: FactoryTechnicalResumeAttemptLookup,
+  ): Promise<FactoryTechnicalResumeAttemptRecord | null> {
+    const parsed = factoryTechnicalResumeAttemptLookupSchema.safeParse(lookup);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Consulta de tentativa técnica inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    if (
+      this.repositoryAccess.access === 'OWNER' &&
+      this.repositoryAccess.userId !== parsed.data.ownerId
+    ) {
+      return null;
+    }
+    return run(async () => {
+      const attemptWhere = {
+        ownerId: parsed.data.ownerId,
+        checkpoint: {
+          is: {
+            sourceExecutionId: parsed.data.sourceExecutionId,
+            executionRecord: { is: { userId: parsed.data.ownerId } },
+          },
+        },
+      } as const;
+      const attempt =
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: { ...attemptWhere, status: 'RUNNING' },
+          orderBy: [{ startedAt: 'desc' }, { attemptId: 'desc' }],
+        })) ??
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: { ...attemptWhere, status: 'SUCCESS' },
+          orderBy: [{ startedAt: 'desc' }, { attemptId: 'desc' }],
+        })) ??
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: attemptWhere,
+          orderBy: [{ startedAt: 'desc' }, { attemptId: 'desc' }],
+        }));
+      return attempt === null ? null : mapTechnicalResumeAttempt(attempt);
+    });
+  }
+
+  async reconcileTechnicalResumeAttemptOwned(
+    input: FactoryTechnicalResumeAttemptReconcileInput,
+  ): Promise<FactoryTechnicalResumeReconciliation> {
+    this.assertLifecycleAccess();
+    const parsed = factoryTechnicalResumeAttemptReconcileInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ExecutionRepositoryError('Reconciliação da tentativa técnica inválida.', {
+        code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT,
+        cause: parsed.error,
+      });
+    }
+    if (
+      this.repositoryAccess.access === 'OWNER' &&
+      this.repositoryAccess.userId !== parsed.data.ownerId
+    ) {
+      return factoryTechnicalResumeReconciliationSchema.parse({ outcome: 'NONE', attempt: null });
+    }
+    return run(async () => {
+      const attemptWhere = {
+        ownerId: parsed.data.ownerId,
+        checkpoint: {
+          is: {
+            sourceExecutionId: parsed.data.sourceExecutionId,
+            executionRecord: { is: { userId: parsed.data.ownerId } },
+          },
+        },
+      } as const;
+      const loadPreferred = async () =>
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: { ...attemptWhere, status: 'RUNNING' },
+          orderBy: [{ startedAt: 'desc' as const }, { attemptId: 'desc' as const }],
+        })) ??
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: { ...attemptWhere, status: 'SUCCESS' },
+          orderBy: [{ startedAt: 'desc' as const }, { attemptId: 'desc' as const }],
+        })) ??
+        (await this.client.factoryTechnicalResumeAttempt.findFirst({
+          where: attemptWhere,
+          orderBy: [{ startedAt: 'desc' as const }, { attemptId: 'desc' as const }],
+        }));
+      let attempt = await loadPreferred();
+      if (attempt === null) {
+        return factoryTechnicalResumeReconciliationSchema.parse({ outcome: 'NONE', attempt: null });
+      }
+      if (attempt.status !== 'RUNNING') {
+        return factoryTechnicalResumeReconciliationSchema.parse({
+          outcome: 'TERMINAL',
+          attempt: mapTechnicalResumeAttempt(attempt),
+        });
+      }
+      const pendingResult = factoryTechnicalResumeResultSchema.safeParse(attempt.pendingResult);
+      if (
+        attempt.activePhase === 'COMPLETION_PENDING' &&
+        attempt.pendingResultHash !== null &&
+        pendingResult.success &&
+        pendingResult.data.resultHash === attempt.pendingResultHash
+      ) {
+        const terminal = await this.completeTechnicalResumeAttempt({
+          attemptId: attempt.attemptId,
+          pendingResultHash: attempt.pendingResultHash,
+        });
+        return factoryTechnicalResumeReconciliationSchema.parse({
+          outcome: 'FINALIZED',
+          attempt: terminal,
+        });
+      }
+      if (
+        attempt.activePhase === 'EXECUTING' &&
+        attempt.leaseExpiresAt !== null &&
+        attempt.leaseExpiresAt.getTime() > Date.parse(parsed.data.observedAt)
+      ) {
+        return factoryTechnicalResumeReconciliationSchema.parse({
+          outcome: 'ACTIVE',
+          attempt: mapTechnicalResumeAttempt(attempt),
+        });
+      }
+      const reasonCode =
+        attempt.activePhase === 'COMPLETION_PENDING'
+          ? 'TECHNICAL_COMPLETION_JOURNAL_INVALID'
+          : (attempt.recoveryReasonCode ?? 'TECHNICAL_ATTEMPT_LEASE_EXPIRED');
+      if (attempt.activePhase !== 'RECOVERY_REQUIRED') {
+        const transition = await this.client.factoryTechnicalResumeAttempt.updateMany({
+          where: {
+            attemptId: attempt.attemptId,
+            checkpointHash: attempt.checkpointHash,
+            activeCheckpointHash: attempt.checkpointHash,
+            ownerId: attempt.ownerId,
+            status: 'RUNNING',
+            activePhase: attempt.activePhase,
+            ...(attempt.activePhase === 'EXECUTING' && attempt.leaseExpiresAt !== null
+              ? { leaseExpiresAt: { lte: new Date(parsed.data.observedAt) } }
+              : {}),
+          },
+          data: {
+            activePhase: 'RECOVERY_REQUIRED',
+            leaseId: null,
+            recoveryReasonCode: reasonCode,
+          },
+        });
+        if (transition.count !== 1) {
+          attempt = await loadPreferred();
+          if (attempt === null) {
+            return factoryTechnicalResumeReconciliationSchema.parse({
+              outcome: 'NONE',
+              attempt: null,
+            });
+          }
+          if (attempt.status !== 'RUNNING') {
+            return factoryTechnicalResumeReconciliationSchema.parse({
+              outcome: 'TERMINAL',
+              attempt: mapTechnicalResumeAttempt(attempt),
+            });
+          }
+          const reloadedPendingResult = factoryTechnicalResumeResultSchema.safeParse(
+            attempt.pendingResult,
+          );
+          if (
+            attempt.activePhase === 'COMPLETION_PENDING' &&
+            attempt.pendingResultHash !== null &&
+            reloadedPendingResult.success &&
+            reloadedPendingResult.data.resultHash === attempt.pendingResultHash
+          ) {
+            const terminal = await this.completeTechnicalResumeAttempt({
+              attemptId: attempt.attemptId,
+              pendingResultHash: attempt.pendingResultHash,
+            });
+            return factoryTechnicalResumeReconciliationSchema.parse({
+              outcome: 'FINALIZED',
+              attempt: terminal,
+            });
+          }
+          if (attempt.activePhase === 'EXECUTING') {
+            return factoryTechnicalResumeReconciliationSchema.parse({
+              outcome: 'ACTIVE',
+              attempt: mapTechnicalResumeAttempt(attempt),
+            });
+          }
+        } else {
+          attempt = await this.client.factoryTechnicalResumeAttempt.findUnique({
+            where: { attemptId: attempt.attemptId },
+          });
+        }
+      }
+      if (attempt === null) {
+        throw new ExecutionRepositoryError('Tentativa técnica não encontrada após recovery.', {
+          code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND,
+        });
+      }
+      return factoryTechnicalResumeReconciliationSchema.parse({
+        outcome: 'RECOVERY_REQUIRED',
+        attempt: mapTechnicalResumeAttempt(attempt),
+      });
     });
   }
 

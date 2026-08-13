@@ -341,6 +341,8 @@ export const persistedFactoryResultSchema = z
       'OUTPUT_LIMIT',
       'UNKNOWN',
     ]),
+    sandboxCleanupFailureCode: z.literal('SANDBOX_CLEANUP_FAILED').nullable().default(null),
+    sandboxCleanupSourceCode: z.string().min(1).max(128).nullable().default(null),
     hashes: z
       .object({
         lineageHash: z.string().regex(HASH_PATTERN),
@@ -417,6 +419,13 @@ export const persistedFactoryResultSchema = z
         code: 'custom',
         path: ['failure'],
         message: 'Somente resultados não bem-sucedidos possuem falha terminal.',
+      });
+    }
+    if (result.sandboxCleanupFailureCode === null && result.sandboxCleanupSourceCode !== null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['sandboxCleanupFailureCode'],
+        message: 'A evidência de cleanup da Sandbox deve ser persistida de forma completa.',
       });
     }
     const terminalStage = result.stages.find((stage) => stage.stageId === result.terminalStage);
@@ -590,6 +599,14 @@ export const executionRecordJobTerminalInputSchema = z
   .object({
     jobId: jobIdSchema,
     status: terminalExecutionRecordStatusSchema,
+    finishedAt: isoDateTimeSchema,
+  })
+  .strict();
+
+export const executionRecordInfrastructureFailureInputSchema = z
+  .object({
+    jobId: jobIdSchema,
+    code: z.string().regex(/^[A-Z][A-Z0-9_]{0,127}$/u),
     finishedAt: isoDateTimeSchema,
   })
   .strict();

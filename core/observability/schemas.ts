@@ -23,6 +23,12 @@ export const observabilityStageIdSchema = z.enum([
 ]);
 
 export const observableAgentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+export const factoryObservableAgentStageIdSchema = z.enum([
+  'PRODUCT_OWNER',
+  'DEVELOPER',
+  'QA',
+  'CODE_GENERATOR',
+]);
 export const executionTimelineStageIdSchema = z.enum([
   'KNOWLEDGE',
   'PRODUCT_OWNER',
@@ -61,6 +67,7 @@ export const observabilityStatusSchema = z.enum([
 const PUBLIC_STAGE_ORDER = ['KNOWLEDGE', 'PRODUCT_OWNER', 'DEVELOPER', 'QA'] as const;
 const FACTORY_STAGE_ORDER = factoryExecutionTimelineStageIdSchema.options;
 const METRICS_STAGE_ORDER = ['PRODUCT_OWNER', 'DEVELOPER', 'QA'] as const;
+const FACTORY_METRICS_STAGE_ORDER = ['PRODUCT_OWNER', 'DEVELOPER', 'QA', 'CODE_GENERATOR'] as const;
 
 export const executionObservabilityEventSchema = z
   .object({
@@ -96,6 +103,21 @@ const nullableMetricSchema = z.number().int().nonnegative().nullable();
 export const executionStageMetricsSchema = z
   .object({
     stageId: observableAgentStageIdSchema,
+    durationMs: nullableMetricSchema,
+    promptBytes: nullableMetricSchema,
+    completionBytes: nullableMetricSchema,
+    inputTokens: nullableMetricSchema,
+    outputTokens: nullableMetricSchema,
+    totalTokens: nullableMetricSchema,
+    providerLatencyMs: nullableMetricSchema,
+    validationDurationMs: nullableMetricSchema,
+    artifactGenerationDurationMs: nullableMetricSchema,
+  })
+  .strict();
+
+export const factoryExecutionStageMetricsSchema = z
+  .object({
+    stageId: factoryObservableAgentStageIdSchema,
     durationMs: nullableMetricSchema,
     promptBytes: nullableMetricSchema,
     completionBytes: nullableMetricSchema,
@@ -278,7 +300,7 @@ export const factoryExecutionObservabilitySummarySchema = z
   })
   .strict();
 
-export const factoryExecutionObservabilitySnapshotSchema = z
+export const factoryExecutionObservabilitySnapshotV2Schema = z
   .object({
     observabilityVersion: z.literal('2.0.0'),
     revision: z.number().int().nonnegative(),
@@ -380,6 +402,128 @@ export const factoryExecutionObservabilitySnapshotSchema = z
       }
     }
   });
+
+export const factoryExecutionObservabilitySnapshotV3Schema = z
+  .object({
+    observabilityVersion: z.literal('3.0.0'),
+    revision: z.number().int().nonnegative(),
+    executionId: z.string().regex(/^execution-[a-f0-9]{32}$/),
+    workflowId: z.string().min(1).max(128),
+    requestId: z.string().min(1).max(128).nullable(),
+    status: z.enum(['RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']),
+    updatedAt: isoDateTimeSchema,
+    events: z.array(factoryExecutionObservabilityEventSchema).max(64),
+    stages: z.array(factoryExecutionStageSchema).length(10),
+    stageMetrics: z.array(factoryExecutionStageMetricsSchema).length(4),
+    summary: factoryExecutionObservabilitySummarySchema.nullable(),
+  })
+  .strict()
+  .superRefine((snapshot, context) => {
+    snapshot.events.forEach((event, index) => {
+      if (event.executionId !== snapshot.executionId) {
+        context.addIssue({
+          code: 'custom',
+          path: ['events', index, 'executionId'],
+          message: 'O evento deve pertencer à execução do snapshot.',
+        });
+      }
+      if (event.sequence !== index + 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['events', index, 'sequence'],
+          message: 'A sequência dos eventos de observabilidade deve ser contígua.',
+        });
+      }
+      if (
+        index > 0 &&
+        Date.parse(event.finishedAt ?? event.startedAt ?? snapshot.updatedAt) <
+          Date.parse(
+            snapshot.events[index - 1]!.finishedAt ??
+              snapshot.events[index - 1]!.startedAt ??
+              snapshot.updatedAt,
+          )
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['events', index],
+          message: 'Os eventos de observabilidade devem ser monotônicos.',
+        });
+      }
+    });
+    snapshot.stages.forEach((stage, index) => {
+      if (stage.stageId !== FACTORY_STAGE_ORDER[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'stageId'],
+          message: 'As etapas da Factory devem preservar a ordem canônica.',
+        });
+      }
+      if (stage.executionId !== snapshot.executionId) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stages', index, 'executionId'],
+          message: 'A etapa deve pertencer à execução do snapshot.',
+        });
+      }
+    });
+    snapshot.stageMetrics.forEach((metrics, index) => {
+      if (metrics.stageId !== FACTORY_METRICS_STAGE_ORDER[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stageMetrics', index, 'stageId'],
+          message: 'As métricas devem preservar a ordem canônica dos agentes da Factory.',
+        });
+      }
+    });
+    if (
+      snapshot.summary !== null &&
+      (snapshot.summary.executionId !== snapshot.executionId ||
+        snapshot.summary.factoryStatus !== snapshot.status)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['summary'],
+        message: 'O resumo deve corresponder ao snapshot terminal da Factory.',
+      });
+    }
+    if (snapshot.summary !== null) {
+      const observedTotalTokens = snapshot.stageMetrics.reduce(
+        (total, metrics) => total + (metrics.totalTokens ?? 0),
+        0,
+      );
+      if (
+        !Number.isSafeInteger(observedTotalTokens) ||
+        snapshot.summary.totalTokens !== observedTotalTokens
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['summary', 'totalTokens'],
+          message: 'O total de tokens deve corresponder às métricas dos agentes da Factory.',
+        });
+      }
+      const executedStages = snapshot.stages
+        .filter((stage) => stage.status !== 'PENDING' && stage.status !== 'SKIPPED')
+        .map((stage) => stage.stageId);
+      const skippedStages = snapshot.stages
+        .filter((stage) => stage.status === 'PENDING' || stage.status === 'SKIPPED')
+        .map((stage) => stage.stageId);
+      if (
+        JSON.stringify(snapshot.summary.executedStages) !== JSON.stringify(executedStages) ||
+        JSON.stringify(snapshot.summary.skippedStages) !== JSON.stringify(skippedStages)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['summary'],
+          message: 'O resumo deve refletir as etapas executadas e ignoradas.',
+        });
+      }
+    }
+  });
+
+export const factoryExecutionObservabilitySnapshotSchema = z.union([
+  factoryExecutionObservabilitySnapshotV3Schema,
+  factoryExecutionObservabilitySnapshotV2Schema,
+]);
 
 export const executionObservabilitySnapshotSchema = z.union([
   factoryExecutionObservabilitySnapshotSchema,

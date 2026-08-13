@@ -7,6 +7,12 @@ export const EXECUTION_WORKER_ERROR_CODES = Object.freeze({
   SNAPSHOT_NOT_FOUND: 'EXECUTION_RERUN_SNAPSHOT_NOT_FOUND',
   SOURCE_NOT_ELIGIBLE: 'EXECUTION_RERUN_SOURCE_NOT_ELIGIBLE',
   REGENERATE_REQUIRED: 'EXECUTION_RERUN_REGENERATE_REQUIRED',
+  TECHNICAL_CHECKPOINT_NOT_FOUND: 'EXECUTION_TECHNICAL_CHECKPOINT_NOT_FOUND',
+  TECHNICAL_CLEANUP_PENDING: 'EXECUTION_TECHNICAL_CLEANUP_PENDING',
+  TECHNICAL_ATTEMPT_CONFLICT: 'EXECUTION_TECHNICAL_ATTEMPT_CONFLICT',
+  TECHNICAL_RESUME_FAILED: 'EXECUTION_TECHNICAL_RESUME_FAILED',
+  TECHNICAL_COMPLETION_PENDING: 'EXECUTION_TECHNICAL_COMPLETION_PENDING',
+  TECHNICAL_RECOVERY_REQUIRED: 'EXECUTION_TECHNICAL_RECOVERY_REQUIRED',
   SHUTDOWN: 'EXECUTION_WORKER_SHUTDOWN',
 } as const);
 
@@ -15,13 +21,19 @@ export type ExecutionWorkerErrorCode =
 
 export class ExecutionWorkerError extends Error {
   readonly code: ExecutionWorkerErrorCode;
+  readonly reasonCode: string | undefined;
 
   constructor(
     message: string,
-    options: { readonly code: ExecutionWorkerErrorCode; readonly cause?: unknown },
+    options: {
+      readonly code: ExecutionWorkerErrorCode;
+      readonly reasonCode?: string;
+      readonly cause?: unknown;
+    },
   ) {
     super(message, { cause: options.cause });
     this.name = 'ExecutionWorkerError';
     this.code = options.code;
+    this.reasonCode = options.reasonCode;
   }
 }

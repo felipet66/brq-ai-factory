@@ -62,7 +62,8 @@ const factoryPipelineStageIdSchema = z.enum([
   'SANDBOX_TEST',
   'WORKSPACE_RELEASE',
 ]);
-const agentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const legacyAgentStageIdSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
+const factoryAgentStageIdSchema = z.enum([...legacyAgentStageIdSchema.options, 'CODE_GENERATOR']);
 const workflowStageSchema = z.enum(['PRODUCT_OWNER', 'DEVELOPER', 'QA']);
 const observabilityStageIdSchema = z.enum([
   'EXECUTION',
@@ -295,6 +296,8 @@ const rawFactoryResultSchema = z
       'OUTPUT_LIMIT',
       'UNKNOWN',
     ]),
+    sandboxCleanupFailureCode: z.literal('SANDBOX_CLEANUP_FAILED').nullable().default(null),
+    sandboxCleanupSourceCode: z.string().min(1).max(128).nullable().default(null),
     hashes: z
       .object({
         lineageHash: z.string().regex(HASH_PATTERN),
@@ -467,7 +470,7 @@ const rawTimelineEventSchema = z
 
 const rawStageMetricsSchema = z
   .object({
-    stageId: agentStageIdSchema,
+    stageId: factoryAgentStageIdSchema,
     durationMs: nullableMetricSchema,
     promptBytes: nullableMetricSchema,
     completionBytes: nullableMetricSchema,
@@ -505,7 +508,7 @@ const rawTimelineSummarySchema = z
 
 const rawTimelineSchema = z
   .object({
-    observabilityVersion: z.enum(['1.0.0', '2.0.0']),
+    observabilityVersion: z.enum(['1.0.0', '2.0.0', '3.0.0']),
     executionId: executionIdSchema,
     workflowId: z.string().min(1).max(128),
     requestId: z.string().min(1).max(128).nullable(),
@@ -514,7 +517,7 @@ const rawTimelineSchema = z
     updatedAt: z.string().datetime({ offset: true }),
     events: z.array(rawTimelineEventSchema).max(64),
     stages: z.array(rawTimelineStageSchema).min(4).max(10),
-    stageMetrics: z.array(rawStageMetricsSchema).length(3),
+    stageMetrics: z.array(rawStageMetricsSchema).min(3).max(4),
     summary: rawTimelineSummarySchema.nullable(),
   })
   .passthrough()
@@ -523,6 +526,10 @@ const rawTimelineSchema = z
       timeline.observabilityVersion === '1.0.0'
         ? legacyStageIdSchema.options
         : factoryTimelineStageIdSchema.options;
+    const expectedMetricsOrder =
+      timeline.observabilityVersion === '3.0.0'
+        ? factoryAgentStageIdSchema.options
+        : legacyAgentStageIdSchema.options;
     if (timeline.stages.length !== expectedStageOrder.length) {
       context.addIssue({
         code: 'custom',
@@ -555,6 +562,38 @@ const rawTimelineSchema = z
         });
       }
     });
+    if (timeline.stageMetrics.length !== expectedMetricsOrder.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stageMetrics'],
+        message: 'The timeline metric set is invalid for its observability version.',
+      });
+    }
+    timeline.stageMetrics.forEach((metrics, index) => {
+      if (metrics.stageId !== expectedMetricsOrder[index]) {
+        context.addIssue({
+          code: 'custom',
+          path: ['stageMetrics', index, 'stageId'],
+          message: 'The timeline metrics are not in canonical order.',
+        });
+      }
+    });
+    if (timeline.observabilityVersion === '3.0.0' && timeline.summary !== null) {
+      const observedTotalTokens = timeline.stageMetrics.reduce(
+        (total, metrics) => total + (metrics.totalTokens ?? 0),
+        0,
+      );
+      if (
+        !Number.isSafeInteger(observedTotalTokens) ||
+        timeline.summary.totalTokens !== observedTotalTokens
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['summary', 'totalTokens'],
+          message: 'The timeline token total does not match its stage metrics.',
+        });
+      }
+    }
     if (timeline.summary !== null && timeline.summary.executionId !== timeline.executionId) {
       context.addIssue({
         code: 'custom',

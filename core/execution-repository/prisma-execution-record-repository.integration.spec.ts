@@ -3,10 +3,14 @@ import {
   calculateFactoryPipelineResultHash,
   type FactoryExecutionResult,
 } from '@brq/factory-pipeline';
-import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
+import {
+  createFactoryExecutionResultFixture,
+  createFactoryTechnicalCheckpointFixture,
+} from '@brq/factory-pipeline/testing';
 import {
   createInMemoryExecutionHistory,
   createInMemoryFactoryExecutionHistory,
+  factoryExecutionObservabilitySnapshotV2Schema,
 } from '@brq/observability';
 
 import {
@@ -25,9 +29,44 @@ import {
   createExecutionObservationFixture,
   createExecutionResultFixture,
 } from './testing/execution-record-fixtures';
+import {
+  createFactoryTechnicalResumeResultFixture,
+  createFailedTechnicalResumeSourceResultFixture,
+} from './testing/technical-resume-fixtures';
 
 const OWNER_USER_ID = 'user-execution-owner';
 const OTHER_USER_ID = 'user-other-owner';
+const TECHNICAL_LEASE_ID = 'technical-lease-123e4567-e89b-42d3-a456-426614174000';
+const TECHNICAL_LEASE_VERSION = 1;
+
+function technicalAttemptInput(input: {
+  readonly attemptId: string;
+  readonly checkpointHash: string;
+  readonly ownerId: string;
+  readonly requestId: string;
+  readonly startedAt: string;
+}) {
+  return {
+    ...input,
+    leaseId: TECHNICAL_LEASE_ID,
+    leaseVersion: TECHNICAL_LEASE_VERSION,
+    heartbeatAt: input.startedAt,
+    leaseExpiresAt: new Date(Date.parse(input.startedAt) + 600_000).toISOString(),
+  };
+}
+
+function technicalFailureInput(input: {
+  readonly attemptId: string;
+  readonly finishedAt: string;
+  readonly reasonCode: string;
+  readonly cleanupConfirmed: boolean;
+}) {
+  return {
+    ...input,
+    leaseId: TECHNICAL_LEASE_ID,
+    leaseVersion: TECHNICAL_LEASE_VERSION,
+  };
+}
 
 function profileValidationFailureResult(
   executionId: string,
@@ -244,6 +283,47 @@ describe('Prisma execution record repository', () => {
     expect(JSON.stringify(restored)).not.toContain('Allow customers');
   });
 
+  it('atomically and idempotently persists an infrastructure failure for execution and job', async () => {
+    const repository = ownerRepository(context);
+    await repository.createQueued({
+      workflowId: 'workflow-infrastructure-failure',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: 'request-infrastructure-failure',
+      traceId: null,
+      projectName: 'Infrastructure failure',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markJobRunning({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      startedAt: '2026-08-07T12:00:00.005Z',
+    });
+    await repository.markRunning({
+      workflowId: 'workflow-infrastructure-failure',
+      startedAt: '2026-08-07T12:00:00.010Z',
+    });
+    const input = {
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      code: 'EXECUTION_WORKER_EXECUTION_FAILED',
+      finishedAt: '2026-08-07T12:00:00.050Z',
+    } as const;
+
+    const failed = await repository.failInfrastructure(input);
+    const repeated = await repository.failInfrastructure(input);
+    const restored = await ownerRepository(context).findByJobId(EXECUTION_JOB_FIXTURE_ID);
+
+    expect(failed).toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED', finishedAt: input.finishedAt },
+      failure: { kind: 'INFRASTRUCTURE', code: input.code, sourceCode: null },
+      factoryResult: null,
+    });
+    expect(repeated).toEqual(failed);
+    expect(restored).toEqual(failed);
+    expect(await context.client.executionRecordLifecycleEvent.count()).toBe(3);
+  });
+
   it('round-trips a normalized terminal aggregate across repository instances', async () => {
     const repository = ownerRepository(context);
     await repository.create({
@@ -366,18 +446,61 @@ describe('Prisma execution record repository', () => {
       sandboxStatus: 'SUCCESS',
       hashes: { factoryResultHash: result.hashes.factoryResultHash },
     });
-    expect(restored?.observation?.observabilityVersion).toBe('2.0.0');
+    expect(restored?.observation?.observabilityVersion).toBe('3.0.0');
     expect(await context.client.executionFactoryResult.count()).toBe(1);
     expect(await context.client.executionFactoryStageResult.count()).toBe(12);
     expect(await context.client.executionFactoryLineage.count()).toBe(1);
     expect(await context.client.executionFactoryProvenance.count()).toBe(1);
     expect(await context.client.executionFactoryToolchainVersion.count()).toBeGreaterThan(0);
     expect(await context.client.executionObservedStage.count()).toBe(10);
-    expect(await context.client.executionStageMetric.count()).toBe(3);
+    expect(await context.client.executionStageMetric.count()).toBe(4);
     const serialized = JSON.stringify(restored?.factoryResult);
     expect(serialized).not.toMatch(
       /"(?:imageReference|containerId|prompt|content|path|stdout|stderr)"\s*:/,
     );
+  });
+
+  it('continues restoring legacy Factory Observability v2 snapshots', async () => {
+    const repository = ownerRepository(context);
+    const request = createObservabilityRequest();
+    const result = createFactoryExecutionResultFixture({
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      workflowId: request.workflowId,
+    });
+    const history = createInMemoryFactoryExecutionHistory({
+      now: () => Date.parse(result.finishedAt),
+    });
+    history.beginFactory(request);
+    history.completeFactory(result);
+    const current = history.get(result.executionId);
+    if (current === null || current.observabilityVersion !== '3.0.0') {
+      throw new Error('Expected a current Factory Observability snapshot.');
+    }
+    const legacy = factoryExecutionObservabilitySnapshotV2Schema.parse({
+      ...current,
+      observabilityVersion: '2.0.0',
+      stageMetrics: current.stageMetrics.slice(0, 3),
+    });
+
+    await repository.create({
+      workflowId: request.workflowId,
+      requestId: request.requestId ?? null,
+      traceId: request.traceId ?? null,
+      projectName: request.demand.title,
+      createdAt: result.startedAt,
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markRunning({ workflowId: request.workflowId, startedAt: result.startedAt });
+    await repository.completeFactory(request.workflowId, result, legacy);
+
+    const restored = await ownerRepository(context).findByExecutionId(result.executionId);
+    expect(restored?.observation?.observabilityVersion).toBe('2.0.0');
+    expect(restored?.observation?.stageMetrics).toHaveLength(3);
+    expect(restored?.observation?.stageMetrics.map((metrics) => metrics.stageId)).toEqual([
+      'PRODUCT_OWNER',
+      'DEVELOPER',
+      'QA',
+    ]);
   });
 
   it('round-trips the allowlisted profile rule without persisting rejected content', async () => {
@@ -696,6 +819,216 @@ describe('Prisma execution record repository', () => {
         startedAt: '2026-08-07T12:00:00.020Z',
       }),
     ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_CONFIGURATION });
+  });
+
+  it('owner-scopes terminal resume writes and validates result lineage against the checkpoint', async () => {
+    const owner = ownerRepository(context);
+    const other = ownerRepository(context, OTHER_USER_ID);
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    const attemptId = 'technical-resume-123e4567-e89b-42d3-a456-426614174000';
+    const sourceResult = createFailedTechnicalResumeSourceResultFixture({
+      executionId: checkpoint.source.executionId,
+      workflowId: checkpoint.source.workflowId,
+    });
+    await owner.create({
+      workflowId: checkpoint.source.workflowId,
+      requestId: checkpoint.source.requestId,
+      traceId: checkpoint.source.traceId,
+      projectName: 'Technical resume source',
+      createdAt: sourceResult.startedAt,
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await owner.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: sourceResult.startedAt,
+    });
+    await owner.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+    await owner.completeFactory(checkpoint.source.workflowId, sourceResult, null);
+    await owner.createTechnicalResumeAttempt(
+      technicalAttemptInput({
+        attemptId,
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId: OWNER_USER_ID,
+        requestId: 'request-technical-resume',
+        startedAt: '2026-08-13T12:00:01.500Z',
+      }),
+    );
+    await expect(
+      owner.createTechnicalResumeAttempt(
+        technicalAttemptInput({
+          attemptId: 'technical-resume-concurrent-claim',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId: OWNER_USER_ID,
+          requestId: 'request-technical-resume-concurrent',
+          startedAt: '2026-08-13T12:00:01.501Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+    const result = createFactoryTechnicalResumeResultFixture({ checkpoint });
+
+    await expect(
+      other.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: result.resultHash,
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND });
+    await expect(
+      other.failTechnicalResumeAttempt(
+        technicalFailureInput({
+          attemptId,
+          finishedAt: '2026-08-13T12:00:03.000Z',
+          reasonCode: 'TECHNICAL_RESUME_INTERNAL_ERROR',
+          cleanupConfirmed: false,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.NOT_FOUND });
+    await expect(
+      owner.stageTechnicalResumeAttemptResult({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        recordedAt: '2026-08-13T12:00:03.000Z',
+        result: createFactoryTechnicalResumeResultFixture({
+          checkpoint,
+          sourceWorkflowId: 'workflow-divergent-source',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+    await expect(
+      owner.findLatestTechnicalResumeAttemptOwned({
+        ownerId: OWNER_USER_ID,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({ attemptId, status: 'RUNNING', result: null });
+    await expect(
+      owner.stageTechnicalResumeAttemptResult({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        recordedAt: '2026-08-13T12:00:03.000Z',
+        result: createFactoryTechnicalResumeResultFixture({
+          checkpoint,
+          startedAt: '2026-08-13T12:00:00.000Z',
+          finishedAt: '2026-08-13T12:00:01.000Z',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+    await expect(
+      owner.renewTechnicalResumeAttemptLease({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        heartbeatAt: '2026-08-13T12:00:01.750Z',
+        leaseExpiresAt: '2026-08-13T12:11:00.000Z',
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      owner.renewTechnicalResumeAttemptLease({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        heartbeatAt: '2026-08-13T12:00:01.700Z',
+        leaseExpiresAt: '2026-08-13T12:12:00.000Z',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      owner.failTechnicalResumeAttempt(
+        technicalFailureInput({
+          attemptId,
+          finishedAt: '2026-08-13T12:00:01.000Z',
+          reasonCode: 'TECHNICAL_RESUME_INTERNAL_ERROR',
+          cleanupConfirmed: false,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+    await expect(
+      owner.findLatestTechnicalResumeAttemptOwned({
+        ownerId: OWNER_USER_ID,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({ attemptId, status: 'RUNNING' });
+    await owner.stageTechnicalResumeAttemptResult({
+      attemptId,
+      leaseId: TECHNICAL_LEASE_ID,
+      leaseVersion: TECHNICAL_LEASE_VERSION,
+      recordedAt: '2026-08-13T12:00:03.000Z',
+      result,
+    });
+    const terminalClaims = await Promise.allSettled([
+      owner.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: result.resultHash,
+      }),
+      owner.failTechnicalResumeAttempt(
+        technicalFailureInput({
+          attemptId,
+          finishedAt: result.finishedAt,
+          reasonCode: 'TECHNICAL_RESUME_INTERNAL_ERROR',
+          cleanupConfirmed: false,
+        }),
+      ),
+    ]);
+    expect(terminalClaims.filter((claim) => claim.status === 'fulfilled')).toHaveLength(1);
+    expect(terminalClaims.filter((claim) => claim.status === 'rejected')).toHaveLength(1);
+    expect(
+      await context.client.factoryTechnicalResumeAttempt.count({
+        where: { attemptId, status: 'RUNNING' },
+      }),
+    ).toBe(0);
+    expect(
+      await context.client.factoryTechnicalResumeAttempt.findUniqueOrThrow({
+        where: { attemptId },
+        select: { activeCheckpointHash: true },
+      }),
+    ).toEqual({ activeCheckpointHash: null });
+    await expect(
+      owner.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: result.resultHash,
+      }),
+    ).resolves.toMatchObject({ attemptId, status: 'SUCCESS', result, cleanupConfirmed: true });
+    await expect(
+      owner.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: 'f'.repeat(64),
+      }),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+
+    await expect(
+      owner.createTechnicalResumeAttempt(
+        technicalAttemptInput({
+          attemptId: 'technical-resume-after-terminal',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId: OWNER_USER_ID,
+          requestId: 'request-technical-resume-after-terminal',
+          startedAt: '2026-08-13T12:00:06.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+
+    await context.client.factoryTechnicalResumeAttempt.create({
+      data: {
+        attemptId: 'technical-resume-newer-failed-clock-rollback',
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId: OWNER_USER_ID,
+        requestId: 'request-newer-failed-clock-rollback',
+        status: 'FAILED',
+        startedAt: new Date('2026-08-13T13:00:00.000Z'),
+        finishedAt: new Date('2026-08-13T13:00:01.000Z'),
+        cleanupConfirmed: true,
+        failureReasonCode: 'CHECKPOINT_PROFILE_DRIFT',
+      },
+    });
+    await expect(
+      owner.reconcileTechnicalResumeAttemptOwned({
+        ownerId: OWNER_USER_ID,
+        sourceExecutionId: checkpoint.source.executionId,
+        observedAt: '2026-08-13T14:00:00.000Z',
+      }),
+    ).resolves.toMatchObject({ outcome: 'TERMINAL', attempt: { status: 'SUCCESS', attemptId } });
   });
 
   it('rejects malformed opaque owner scopes at construction', () => {

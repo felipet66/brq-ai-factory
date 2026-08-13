@@ -41,6 +41,10 @@ function validMetrics() {
   }));
 }
 
+function validFactoryMetrics() {
+  return [...validMetrics(), { ...validMetrics()[0]!, stageId: 'CODE_GENERATOR' }];
+}
+
 function validFactoryStages() {
   return [
     ['KNOWLEDGE', 'Knowledge'],
@@ -179,7 +183,7 @@ describe('Observability schemas', () => {
     );
   });
 
-  it('preserva snapshots v1 e aceita o contrato v2 aditivo da Factory', () => {
+  it('preserva snapshots v1/v2 e aceita o contrato v3 aditivo da Factory', () => {
     const base = {
       revision: 0,
       executionId: EXECUTION_ID,
@@ -205,6 +209,54 @@ describe('Observability schemas', () => {
     });
     expect(factory.observabilityVersion).toBe('2.0.0');
     expect(factory.stages).toHaveLength(10);
+    const factoryV3 = executionObservabilitySnapshotSchema.parse({
+      ...base,
+      observabilityVersion: '3.0.0',
+      stages: validFactoryStages(),
+      stageMetrics: validFactoryMetrics(),
+    });
+    expect(factoryV3.observabilityVersion).toBe('3.0.0');
+    expect(factoryV3.stageMetrics.map((metrics) => metrics.stageId)).toEqual([
+      'PRODUCT_OWNER',
+      'DEVELOPER',
+      'QA',
+      'CODE_GENERATOR',
+    ]);
+  });
+
+  it('mantém a cardinalidade imutável de métricas por versão da Factory', () => {
+    const base = {
+      revision: 0,
+      executionId: EXECUTION_ID,
+      workflowId: 'workflow-test',
+      requestId: null,
+      status: 'RUNNING',
+      updatedAt: '2026-08-07T10:00:00.000Z',
+      events: [],
+      stages: validFactoryStages(),
+      summary: null,
+    };
+    expect(
+      executionObservabilitySnapshotSchema.safeParse({
+        ...base,
+        observabilityVersion: '2.0.0',
+        stageMetrics: validMetrics(),
+      }).success,
+    ).toBe(true);
+    expect(
+      executionObservabilitySnapshotSchema.safeParse({
+        ...base,
+        observabilityVersion: '2.0.0',
+        stageMetrics: validFactoryMetrics(),
+      }).success,
+    ).toBe(false);
+    expect(
+      executionObservabilitySnapshotSchema.safeParse({
+        ...base,
+        observabilityVersion: '3.0.0',
+        stageMetrics: validMetrics(),
+      }).success,
+    ).toBe(false);
   });
 
   it('não aceita um payload v1 rotulado como Observability v2', () => {

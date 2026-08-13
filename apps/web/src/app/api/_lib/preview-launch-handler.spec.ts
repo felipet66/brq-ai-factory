@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AuthenticatedPrincipal } from '@/server/auth/contracts';
 import {
@@ -39,6 +39,8 @@ function service(overrides: Partial<PreviewApplicationService> = {}): PreviewApp
 }
 
 describe('Preview launch handler', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it('returns only a trusted one-time POST bridge to the isolated origin', async () => {
     const previewService = service();
     const handler = createPreviewLaunchHandler({
@@ -101,6 +103,59 @@ describe('Preview launch handler', () => {
       { params: Promise.resolve({ id: previewId }) },
     );
     expect(rejected.status).toBe(400);
+  });
+
+  it('accepts an Origin-less same-origin document navigation through the real CSRF guard', async () => {
+    vi.stubEnv('BETTER_AUTH_SECRET', 's'.repeat(32));
+    vi.stubEnv('BRQ_APP_ORIGIN', 'http://localhost:3000');
+    const previewService = service();
+    const handler = createPreviewLaunchHandler({
+      authenticate: vi.fn(async () => principal),
+      getService: async () => previewService,
+      requestIdFactory: () => 'request-123e4567-e89b-42d3-a456-426614174000',
+      nonceFactory: () => 'fixed-launch-nonce',
+    });
+
+    const response = await handler(
+      new Request(`http://localhost:3000/previews/${previewId}/launch`, {
+        method: 'POST',
+        headers: {
+          'sec-fetch-site': 'same-origin',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-dest': 'document',
+        },
+      }),
+      { params: Promise.resolve({ id: previewId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(previewService.createLaunch).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed before creating a launch when Origin and complete navigation metadata are absent', async () => {
+    vi.stubEnv('BETTER_AUTH_SECRET', 's'.repeat(32));
+    vi.stubEnv('BRQ_APP_ORIGIN', 'http://localhost:3000');
+    const previewService = service();
+    const handler = createPreviewLaunchHandler({
+      authenticate: vi.fn(async () => principal),
+      getService: async () => previewService,
+      requestIdFactory: () => 'request-123e4567-e89b-42d3-a456-426614174000',
+    });
+
+    const response = await handler(
+      new Request(`http://localhost:3000/previews/${previewId}/launch`, {
+        method: 'POST',
+        headers: {
+          'sec-fetch-site': 'same-origin',
+          'sec-fetch-mode': 'navigate',
+        },
+      }),
+      { params: Promise.resolve({ id: previewId }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).errors[0].code).toBe('CSRF_REJECTED');
+    expect(previewService.createLaunch).not.toHaveBeenCalled();
   });
 
   it('maps lifecycle conflicts and service unavailability without leaking internals', async () => {

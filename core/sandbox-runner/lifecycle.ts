@@ -1,9 +1,18 @@
 export const SANDBOX_STEP_IDS = ['PREPARE', 'TYPECHECK', 'BUILD', 'TEST'] as const;
+export const SANDBOX_DOCKER_OPERATION_IDS = [
+  'CREATE',
+  'INSPECT',
+  'START',
+  'READINESS',
+  'REMOVE',
+  'CONFIRM_ABSENCE',
+] as const;
 export const SANDBOX_INTERNAL_STATUSES = ['PENDING', 'RUNNING'] as const;
 export const SANDBOX_TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED'] as const;
 export const SANDBOX_STEP_TERMINAL_STATUSES = [...SANDBOX_TERMINAL_STATUSES, 'SKIPPED'] as const;
 
 export type SandboxStepId = (typeof SANDBOX_STEP_IDS)[number];
+export type SandboxDockerOperationId = (typeof SANDBOX_DOCKER_OPERATION_IDS)[number];
 export type SandboxInternalStatus = (typeof SANDBOX_INTERNAL_STATUSES)[number];
 export type SandboxTerminalStatus = (typeof SANDBOX_TERMINAL_STATUSES)[number];
 export type SandboxStepTerminalStatus = (typeof SANDBOX_STEP_TERMINAL_STATUSES)[number];

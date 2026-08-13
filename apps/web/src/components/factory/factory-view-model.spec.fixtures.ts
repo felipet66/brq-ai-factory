@@ -1,6 +1,7 @@
 import type {
   ExecutionHistoryFactoryResult,
   ExecutionHistoryTimelineV2,
+  ExecutionHistoryTimelineV3,
 } from '@/api/execution-history-contracts';
 
 import type {
@@ -74,6 +75,8 @@ export function factoryResultFixture(
     sandboxStatus: 'SUCCESS',
     sandboxRunId: `sandbox-${'b'.repeat(32)}`,
     sandboxResourceOutcome: 'NONE',
+    sandboxCleanupFailureCode: null,
+    sandboxCleanupSourceCode: null,
     hashes: {
       lineageHash: plainHash('a'),
       provenanceHash: plainHash('b'),
@@ -538,6 +541,29 @@ export function factoryTimelineV2Fixture(
       factoryStatus: 'SUCCESS',
       factoryResultHash: plainHash('c'),
     },
+    ...overrides,
+  };
+}
+
+export function factoryTimelineV3Fixture(
+  overrides: Partial<ExecutionHistoryTimelineV3> = {},
+): ExecutionHistoryTimelineV3 {
+  const v2 = factoryTimelineV2Fixture();
+  return {
+    ...v2,
+    observabilityVersion: '3.0.0',
+    stageMetrics: [
+      ...v2.stageMetrics,
+      {
+        ...v2.stageMetrics[0]!,
+        stageId: 'CODE_GENERATOR',
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      },
+    ],
+    summary:
+      v2.summary === null ? null : { ...v2.summary, totalTokens: v2.summary.totalTokens + 150 },
     ...overrides,
   };
 }

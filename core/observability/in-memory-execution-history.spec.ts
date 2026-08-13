@@ -30,15 +30,27 @@ describe('In-memory execution history', () => {
       ...base,
       agentExecutionId: request.agents.productOwner.agentExecutionId,
     });
-    history.capture('info', 'agent.run.completed', {
+    const productOwnerUsage = {
       ...base,
       agent: 'PRODUCT_OWNER',
-      promptBytes: 12_000,
-      bytesReceived: 2_000,
       usageInputCount: 300,
       usageOutputCount: 100,
       providerDurationMs: 25,
+    } as const;
+    history.capture('info', 'agent.run.provider.completed', productOwnerUsage);
+    expect(history.get(result.executionId)?.stageMetrics[0]).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 100,
+      totalTokens: 400,
+      promptBytes: null,
+      completionBytes: null,
     });
+    history.capture('info', 'agent.run.completed', {
+      ...productOwnerUsage,
+      promptBytes: 12_000,
+      bytesReceived: 2_000,
+    });
+    expect(history.get(result.executionId)?.stageMetrics[0]?.totalTokens).toBe(400);
     history.capture('info', 'response.validation.accepted', {
       ...base,
       agentExecutionId: request.agents.productOwner.agentExecutionId,

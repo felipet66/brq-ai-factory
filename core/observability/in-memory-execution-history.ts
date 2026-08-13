@@ -39,6 +39,7 @@ const CAPTURED_LOG_EVENTS = new Set([
   'workflow.stage.rejected',
   'workflow.failed',
   'workflow.cancelled',
+  'agent.run.provider.completed',
   'agent.run.completed',
   'response.validation.accepted',
   'response.validation.rejected',
@@ -307,15 +308,19 @@ export function createInMemoryExecutionHistory(
     const stageId = stageForContext(record, context);
     if (stageId === null) return;
     const current = record.metrics.get(stageId)!;
-    if (event === 'agent.run.completed') {
+    if (event === 'agent.run.provider.completed' || event === 'agent.run.completed') {
       const inputTokens = asMetric(context.usageInputCount);
       const outputTokens = asMetric(context.usageOutputCount);
       const totalTokens =
         inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens;
       record.metrics.set(stageId, {
         ...current,
-        promptBytes: asMetric(context.promptBytes),
-        completionBytes: asMetric(context.bytesReceived),
+        ...(event === 'agent.run.completed'
+          ? {
+              promptBytes: asMetric(context.promptBytes),
+              completionBytes: asMetric(context.bytesReceived),
+            }
+          : {}),
         inputTokens,
         outputTokens,
         totalTokens: totalTokens !== null && Number.isSafeInteger(totalTokens) ? totalTokens : null,

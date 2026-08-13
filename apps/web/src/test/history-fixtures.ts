@@ -46,6 +46,8 @@ export function historyFactoryResult(
     sandboxStatus: 'SUCCESS',
     sandboxRunId: `sandbox-${'5'.repeat(32)}`,
     sandboxResourceOutcome: 'NONE',
+    sandboxCleanupFailureCode: null,
+    sandboxCleanupSourceCode: null,
     hashes: {
       lineageHash: '4'.repeat(64),
       provenanceHash: '5'.repeat(64),

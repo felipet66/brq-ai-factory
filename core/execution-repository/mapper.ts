@@ -10,6 +10,7 @@ import {
 import type {
   ExecutionRecord,
   ExecutionRecordCreatedInput,
+  ExecutionRecordInfrastructureFailureInput,
   ExecutionRecordJobRunningInput,
   ExecutionRecordJobTerminalInput,
   ExecutionRecordLifecycleEvent,
@@ -19,6 +20,7 @@ import type {
 import { immutableClone } from './immutability';
 import {
   executionRecordCreatedInputSchema,
+  executionRecordInfrastructureFailureInputSchema,
   executionRecordJobRunningInputSchema,
   executionRecordJobTerminalInputSchema,
   executionRecordQueuedInputSchema,
@@ -143,6 +145,52 @@ export function projectJobTerminalExecutionRecord(
   );
 }
 
+export function projectInfrastructureFailedExecutionRecord(
+  record: ExecutionRecord,
+  input: ExecutionRecordInfrastructureFailureInput,
+): ExecutionRecord {
+  const validInput = executionRecordInfrastructureFailureInputSchema.parse(input);
+  if (
+    record.job?.jobId !== validInput.jobId ||
+    !['QUEUED', 'RUNNING'].includes(record.job.status) ||
+    ['SUCCESS', 'FAILED', 'CANCELLED'].includes(record.status)
+  ) {
+    throw new TypeError('Somente uma execução ativa e seu job correspondente podem falhar.');
+  }
+  const durationStart = record.startedAt ?? record.job.startedAt ?? record.createdAt;
+  const durationMs = Math.max(0, Date.parse(validInput.finishedAt) - Date.parse(durationStart));
+  const lifecycleEvent: ExecutionRecordLifecycleEvent = {
+    sequence: record.lifecycle.length + 1,
+    event: 'EXECUTION_FAILED',
+    state: 'FAILED',
+    occurredAt: validInput.finishedAt,
+    durationMs,
+  };
+
+  return immutableClone(
+    executionRecordSchema.parse({
+      ...record,
+      status: 'FAILED',
+      workflowStatus: null,
+      finishedAt: validInput.finishedAt,
+      durationMs,
+      job: {
+        ...record.job,
+        status: 'FAILED',
+        finishedAt: validInput.finishedAt,
+      },
+      failure: {
+        kind: 'INFRASTRUCTURE',
+        code: validInput.code,
+        sourceCode: null,
+      },
+      factoryResult: null,
+      lifecycle: [...record.lifecycle, lifecycleEvent],
+      revision: record.revision + 1,
+    }),
+  );
+}
+
 export function projectRunningExecutionRecord(
   record: ExecutionRecord,
   startedAt: string,
@@ -232,6 +280,8 @@ export function projectPersistedFactoryResult(
       sandboxStatus: result.sandbox.status,
       sandboxRunId: result.sandbox.sandboxRunId,
       sandboxResourceOutcome: result.sandbox.resourceOutcome,
+      sandboxCleanupFailureCode: result.sandbox.cleanupFailure?.code ?? null,
+      sandboxCleanupSourceCode: result.sandbox.cleanupFailure?.sourceCode ?? null,
       hashes: {
         lineageHash: result.hashes.lineageHash,
         provenanceHash: result.hashes.provenanceHash,

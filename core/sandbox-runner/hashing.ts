@@ -119,6 +119,14 @@ export interface SandboxResultHashInput {
       readonly truncated: boolean;
     } | null;
   } | null;
+  /** Additive cleanup evidence. Omitted/null preserves the immutable v2 hash for historical runs. */
+  readonly cleanupFailure?: {
+    readonly code: string;
+    readonly stage: string;
+    readonly sourceCode: string | null;
+    readonly reasonCode: string | null;
+    readonly diagnosticSummary: null;
+  } | null;
   readonly policyHash: string;
   readonly commandPolicyHash: string;
   readonly limitsHash: string;
@@ -138,7 +146,7 @@ export interface SandboxResultHashInput {
 }
 
 export function calculateSandboxResultHash(input: SandboxResultHashInput): string {
-  return domainHash('brq-sandbox-runner:result:v2', {
+  const identity = {
     runnerVersion: SANDBOX_RUNNER_VERSION,
     contractVersion: SANDBOX_RUNNER_CONTRACT_VERSION,
     sandboxRunId: input.sandboxRunId,
@@ -186,5 +194,12 @@ export function calculateSandboxResultHash(input: SandboxResultHashInput): strin
       runtimeVersion: input.runtimeIdentity.runtimeVersion,
       toolchainVersions: input.runtimeIdentity.toolchainVersions,
     },
+  };
+  if (input.cleanupFailure === undefined || input.cleanupFailure === null) {
+    return domainHash('brq-sandbox-runner:result:v2', identity);
+  }
+  return domainHash('brq-sandbox-runner:result:v3', {
+    ...identity,
+    cleanupFailure: input.cleanupFailure,
   });
 }

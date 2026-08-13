@@ -41,6 +41,7 @@ function assertOptions(options: CreatePersistentFactoryPipelineOptions): void {
     typeof options.repository?.findByWorkflowId !== 'function' ||
     typeof options.repository?.markRunning !== 'function' ||
     typeof options.repository?.completeFactory !== 'function' ||
+    typeof options.repository?.saveTechnicalCheckpoint !== 'function' ||
     typeof options.history?.flush !== 'function' ||
     typeof options.history?.get !== 'function' ||
     (options.now !== undefined && typeof options.now !== 'function')
@@ -122,6 +123,11 @@ export function createPersistentFactoryPipeline(
       : {
           preflight: options.pipeline.preflight.bind(options.pipeline),
         }),
+    ...(options.pipeline.resumeTechnical === undefined
+      ? {}
+      : {
+          resumeTechnical: options.pipeline.resumeTechnical.bind(options.pipeline),
+        }),
     async execute(
       rawRequest: ExecutionRequest,
       runOptions?: FactoryPipelineRunOptions,
@@ -129,9 +135,6 @@ export function createPersistentFactoryPipeline(
       const parsed = executionRequestSchema.safeParse(rawRequest);
       if (!parsed.success) return options.pipeline.execute(rawRequest, runOptions);
       const request = parsed.data;
-      await options.pipeline.preflight?.(
-        runOptions?.signal === undefined ? undefined : { signal: runOptions.signal },
-      );
       const existing = await options.repository.findByWorkflowId(request.workflowId);
       const jobId = existing?.job?.jobId;
       if (existing === null) {
@@ -182,7 +185,21 @@ export function createPersistentFactoryPipeline(
       }
 
       try {
-        const result = await options.pipeline.execute(request, runOptions);
+        const result = await options.pipeline.execute(
+          request,
+          options.pipeline.resumeTechnical === undefined
+            ? runOptions
+            : {
+                ...runOptions,
+                onTechnicalCheckpoint: async (checkpoint) => {
+                  await options.repository.saveTechnicalCheckpoint({
+                    checkpoint,
+                    createdAt: isoNow(now),
+                  });
+                  await runOptions?.onTechnicalCheckpoint?.(checkpoint);
+                },
+              },
+        );
         await persistTerminal(request, result, jobId);
         return result;
       } catch (error) {

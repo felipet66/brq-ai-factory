@@ -183,6 +183,20 @@ export const sandboxFailureSchema = z
     }
   });
 
+export const sandboxCleanupFailureSchema = sandboxFailureSchema.superRefine((failure, context) => {
+  if (
+    failure.code !== SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED ||
+    failure.stage !== SANDBOX_RUNNER_ERROR_STAGES.CLEANUP ||
+    failure.reasonCode !== null ||
+    failure.diagnosticSummary !== null
+  ) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A falha secundária de cleanup deve identificar somente remoção não confirmada.',
+    });
+  }
+});
+
 export const sandboxOutputSummarySchema = z
   .object({
     summary: z
@@ -419,6 +433,7 @@ export const sandboxRunResultSchema = z
     steps: z.array(sandboxStepResultSchema).length(SANDBOX_STEP_IDS.length),
     limits: sandboxEffectiveLimitsSchema,
     resourceOutcome: sandboxResourceOutcomeSchema,
+    cleanupFailure: sandboxCleanupFailureSchema.nullable().default(null),
     failure: sandboxFailureSchema.nullable(),
     hashes: sandboxHashesSchema,
     lineage: sandboxLineageSchema,
@@ -464,7 +479,10 @@ export const sandboxRunResultSchema = z
       }
     }
     const allSucceeded = result.steps.every((step) => step.status === 'SUCCESS');
-    if (result.status === 'SUCCESS' && (!allSucceeded || result.failure !== null)) {
+    if (
+      result.status === 'SUCCESS' &&
+      (!allSucceeded || result.cleanupFailure !== null || result.failure !== null)
+    ) {
       context.addIssue({
         code: 'custom',
         path: ['status'],
@@ -492,9 +510,12 @@ export const sandboxRunResultSchema = z
     const interruptedStep = result.steps.find((step) =>
       ['FAILED', 'TIMEOUT', 'CANCELLED'].includes(step.status),
     );
+    const legacyCleanupOverride =
+      result.cleanupFailure === null &&
+      result.failure?.code === SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED &&
+      result.failure.stage === SANDBOX_RUNNER_ERROR_STAGES.CLEANUP;
     const cleanupOverridesPrimaryStatus =
-      result.status === 'FAILED' &&
-      result.failure?.code === SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED;
+      result.status === 'FAILED' && (result.cleanupFailure !== null || legacyCleanupOverride);
     if (
       interruptedStep !== undefined &&
       interruptedStep.status !== result.status &&
@@ -506,7 +527,7 @@ export const sandboxRunResultSchema = z
         message: 'O status final deve corresponder à etapa que interrompeu o pipeline.',
       });
     }
-    if (interruptedStep !== undefined && !cleanupOverridesPrimaryStatus) {
+    if (interruptedStep !== undefined && !legacyCleanupOverride) {
       if (
         result.failure?.code !== interruptedStep.failure?.code ||
         result.failure?.stage !== interruptedStep.failure?.stage ||
@@ -521,6 +542,13 @@ export const sandboxRunResultSchema = z
           message: 'A falha final deve preservar a falha da etapa que interrompeu o pipeline.',
         });
       }
+    }
+    if (result.cleanupFailure !== null && result.status !== 'FAILED') {
+      context.addIssue({
+        code: 'custom',
+        path: ['cleanupFailure'],
+        message: 'Cleanup não confirmado deve manter o resultado fail-closed.',
+      });
     }
     const expectedResourceOutcome = interruptedStep?.resourceOutcome ?? 'NONE';
     if (result.resourceOutcome !== expectedResourceOutcome) {
@@ -579,6 +607,16 @@ export const sandboxRunResultSchema = z
               sourceCode: result.failure.sourceCode,
               reasonCode: result.failure.reasonCode,
               diagnosticSummary: result.failure.diagnosticSummary,
+            },
+      cleanupFailure:
+        result.cleanupFailure === null
+          ? null
+          : {
+              code: result.cleanupFailure.code,
+              stage: result.cleanupFailure.stage,
+              sourceCode: result.cleanupFailure.sourceCode,
+              reasonCode: result.cleanupFailure.reasonCode,
+              diagnosticSummary: null,
             },
       policyHash: result.hashes.policyHash,
       commandPolicyHash: result.hashes.commandPolicyHash,

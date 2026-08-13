@@ -12,3 +12,4 @@ export {
 } from './execution-rerun-dispatcher';
 export { createSnapshottingExecutionDispatcher } from './snapshotting-execution-dispatcher';
 export { createExecutionWorker } from './execution-worker';
+export { createTechnicalResumeDispatcher } from './technical-resume-dispatcher';

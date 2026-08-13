@@ -252,6 +252,37 @@ function timelineV2Data(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function timelineV3Data(overrides: Record<string, unknown> = {}) {
+  const v2 = timelineV2Data();
+  const v2Summary = v2.summary as Record<string, unknown>;
+  const legacyTotalTokens =
+    typeof v2Summary.totalTokens === 'number'
+      ? v2Summary.totalTokens
+      : (v2.stageMetrics as { readonly totalTokens?: number | null }[]).reduce(
+          (total, metrics) => total + (metrics.totalTokens ?? 0),
+          0,
+        );
+  return {
+    ...v2,
+    observabilityVersion: '3.0.0',
+    stageMetrics: [
+      ...(v2.stageMetrics as Record<string, unknown>[]),
+      {
+        ...(v2.stageMetrics as Record<string, unknown>[])[0],
+        stageId: 'CODE_GENERATOR',
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+      },
+    ],
+    summary: {
+      ...v2Summary,
+      totalTokens: legacyTotalTokens + 150,
+    },
+    ...overrides,
+  };
+}
+
 describe('execution history HTTP client', () => {
   it('builds the canonical list query and projects immutable list items', async () => {
     const fetchImplementation = vi.fn<FetchImplementation>(async () =>
@@ -820,6 +851,32 @@ describe('execution history HTTP client', () => {
     });
     await expect(
       getExecutionTimeline(EXECUTION_ID, { fetchImplementation: invalidOrderFetch }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+
+  it('accepts Observability v3 with Code Generator metrics and preserves v2 cardinality', async () => {
+    const v3Fetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(successEnvelope(timelineV3Data(), EXECUTION_ID)),
+    );
+
+    const timeline = await getExecutionTimeline(EXECUTION_ID, { fetchImplementation: v3Fetch });
+
+    expect(timeline.observabilityVersion).toBe('3.0.0');
+    expect(timeline.stageMetrics).toHaveLength(4);
+    expect(timeline.stageMetrics[3]).toMatchObject({
+      stageId: 'CODE_GENERATOR',
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+    });
+
+    const mislabeledV2Fetch = vi.fn<FetchImplementation>(async () =>
+      jsonResponse(
+        successEnvelope({ ...timelineV3Data(), observabilityVersion: '2.0.0' }, EXECUTION_ID),
+      ),
+    );
+    await expect(
+      getExecutionTimeline(EXECUTION_ID, { fetchImplementation: mislabeledV2Fetch }),
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 

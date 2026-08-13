@@ -173,6 +173,55 @@ describe('sandbox hashing', () => {
     expect(calculateSandboxResultHash({ ...input, steps: [changedStep] })).not.toBe(baseline);
   });
 
+  it('keeps legacy hashes stable and binds additive cleanup evidence independently', () => {
+    const step = createSandboxStepResultsFixture()[0]!;
+    const input = {
+      sandboxRunId: 'sandbox-' + 'a'.repeat(32),
+      sandboxRequestHash: 'b'.repeat(64),
+      status: 'FAILED',
+      workspaceHash: 'c'.repeat(64),
+      steps: [step],
+      resourceOutcome: 'NONE',
+      failure: {
+        code: 'SANDBOX_CLEANUP_FAILED',
+        stage: 'CLEANUP',
+        sourceCode: 'REMOVAL_NOT_CONFIRMED',
+        reasonCode: null,
+        diagnosticSummary: null,
+      },
+      policyHash: 'd'.repeat(64),
+      commandPolicyHash: 'e'.repeat(64),
+      limitsHash: 'f'.repeat(64),
+      runtimeIdentity: {
+        adapter: 'DOCKER',
+        engineName: 'DOCKER',
+        clientVersion: '1',
+        serverVersion: '1',
+        imageReference: 'image@sha256:' + '1'.repeat(64),
+        imageDigest: 'sha256:' + '1'.repeat(64),
+        imageId: 'sha256:' + '2'.repeat(64),
+        platform: 'linux/arm64',
+        runtimeName: 'NODE',
+        runtimeVersion: '24',
+        toolchainVersions: {},
+      },
+    } as const;
+    const legacy = calculateSandboxResultHash(input);
+    expect(calculateSandboxResultHash({ ...input, cleanupFailure: null })).toBe(legacy);
+    expect(
+      calculateSandboxResultHash({
+        ...input,
+        cleanupFailure: {
+          code: 'SANDBOX_CLEANUP_FAILED',
+          stage: 'CLEANUP',
+          sourceCode: 'REMOVAL_NOT_CONFIRMED',
+          reasonCode: null,
+          diagnosticSummary: null,
+        },
+      }),
+    ).not.toBe(legacy);
+  });
+
   it('binds safe TypeScript diagnostic metadata into the result hash', () => {
     const source = createSandboxStepResultsFixture()[1]!;
     const summary = {

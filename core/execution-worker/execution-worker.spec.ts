@@ -19,11 +19,13 @@ import {
   FactoryPipelineError,
   createFactoryPipelineCoordinator,
   type FactoryExecutionResult,
+  type FactoryPipelineRunOptions,
 } from '@brq/factory-pipeline';
 import { createInMemoryJobQueue, type JobQueue } from '@brq/job-queue';
 import {
   createFactoryExecutionResultFixture,
   createFactoryPipelineConfigurationFixture,
+  createFactoryTechnicalCheckpointFixture,
 } from '@brq/factory-pipeline/testing';
 import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it, vi } from 'vitest';
@@ -316,6 +318,116 @@ describe('execution worker', () => {
     expect(lines.join('\n')).not.toContain('PRIVATE-OBSERVABILITY-DETAIL');
   });
 
+  it('terminalizes execution and job when durable technical checkpoint persistence fails', async () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (line) => lines.push(line), now: () => new Date(0) });
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const baseRepository = createInMemoryExecutionRecordRepository();
+    const repository = {
+      ...baseRepository,
+      saveTechnicalCheckpoint: vi.fn(async () =>
+        Promise.reject(new Error('TOP-SECRET-CHECKPOINT-PERSISTENCE')),
+      ),
+    };
+    const request = createWorkerExecutionRequestFixture();
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    const execute = vi.fn(
+      async (_request: ExecutionRequest, runOptions?: FactoryPipelineRunOptions) => {
+        try {
+          await runOptions?.onTechnicalCheckpoint?.(checkpoint);
+        } catch (cause) {
+          throw new FactoryPipelineError('Private checkpoint persistence details.', {
+            code: 'FACTORY_PIPELINE_TECHNICAL_CHECKPOINT_FAILED',
+            stage: 'TECHNICAL_CHECKPOINT',
+            reasonCode: 'TECHNICAL_CHECKPOINT_PERSISTENCE_FAILED',
+            cause,
+          });
+        }
+        throw new Error('The checkpoint callback must fail.');
+      },
+    );
+    const pipeline = createPersistentFactoryPipeline({
+      pipeline: {
+        execute,
+        resumeTechnical: vi.fn(async () => Promise.reject(new Error('not used'))),
+      },
+      repository,
+      history: factoryHistory(),
+      logger,
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const worker = createExecutionWorker({ queue, repository, pipeline, logger });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+
+    expect(repository.saveTechnicalCheckpoint).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(await queue.get(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      failure: { code: 'FACTORY_PIPELINE_TECHNICAL_CHECKPOINT_FAILED' },
+    });
+    expect(await baseRepository.findByJobId(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED' },
+      failure: {
+        kind: 'INFRASTRUCTURE',
+        code: 'FACTORY_PIPELINE_TECHNICAL_CHECKPOINT_FAILED',
+        sourceCode: null,
+      },
+      factoryResult: null,
+    });
+    expect(
+      (await baseRepository.findByJobId(job.jobId))?.lifecycle.map((event) => event.state),
+    ).toEqual(['CREATED', 'RUNNING', 'FAILED']);
+    expect(lines.join('\n')).not.toContain('TOP-SECRET');
+    expect(lines.join('\n')).not.toContain('Private checkpoint persistence details.');
+  });
+
+  it('terminalizes execution and job when completeFactory fails before returning the result', async () => {
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const baseRepository = createInMemoryExecutionRecordRepository();
+    const completeFactory = vi.fn(async () =>
+      Promise.reject(new Error('TOP-SECRET-COMPLETE-FACTORY')),
+    );
+    const repository = { ...baseRepository, completeFactory };
+    const request = createWorkerExecutionRequestFixture();
+    const identity = deriveExecutionIdentity(request);
+    const result = createFactoryExecutionResultFixture({
+      executionId: identity.executionId,
+      workflowId: request.workflowId,
+    });
+    const pipeline = createPersistentFactoryPipeline({
+      pipeline: { execute: async () => result },
+      repository,
+      history: factoryHistory(),
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const worker = createExecutionWorker({ queue, repository, pipeline });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+
+    expect(completeFactory).toHaveBeenCalledOnce();
+    expect(await queue.get(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      failure: { code: EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED },
+    });
+    expect(await baseRepository.findByJobId(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED' },
+      failure: {
+        kind: 'INFRASTRUCTURE',
+        code: EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
+      },
+      factoryResult: null,
+    });
+  });
+
   it('consumes jobs in FIFO order and invokes the public Engine exactly once per job', async () => {
     const queue = createInMemoryJobQueue({
       now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
@@ -469,7 +581,7 @@ describe('execution worker', () => {
     const repository: ExecutionRecordRepository = {
       ...baseRepository,
       markJobRunning: vi.fn(async () => Promise.reject(new Error('database secret'))),
-      markJobTerminal: vi.fn(async (input) => baseRepository.markJobTerminal(input)),
+      failInfrastructure: vi.fn(async (input) => baseRepository.failInfrastructure(input)),
     };
     const execute = vi.fn(async () => createFailedExecutionResultFixture(request));
     const worker = createExecutionWorker({ queue, repository, engine: { execute } });
@@ -482,10 +594,11 @@ describe('execution worker', () => {
       failure: { code: EXECUTION_WORKER_ERROR_CODES.PERSISTENCE_FAILED },
     });
     expect(await baseRepository.findByJobId(job.jobId)).toMatchObject({
-      status: 'CREATED',
+      status: 'FAILED',
       job: { status: 'FAILED' },
+      failure: { kind: 'INFRASTRUCTURE', code: EXECUTION_WORKER_ERROR_CODES.PERSISTENCE_FAILED },
     });
-    expect(repository.markJobTerminal).toHaveBeenCalledOnce();
+    expect(repository.failInfrastructure).toHaveBeenCalledOnce();
   });
 
   it('sanitizes a technical Engine failure and never retries it', async () => {
@@ -520,13 +633,44 @@ describe('execution worker', () => {
       },
     });
     expect(await repository.findByJobId(job.jobId)).toMatchObject({
-      status: 'CREATED',
+      status: 'FAILED',
       job: { status: 'FAILED' },
+      failure: {
+        kind: 'INFRASTRUCTURE',
+        code: EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED,
+      },
     });
     expect(lines.join('\n')).toContain('execution.worker.failed');
     expect(lines.join('\n')).toContain(EXECUTION_WORKER_ERROR_CODES.EXECUTION_FAILED);
     expect(lines.join('\n')).not.toContain('TOP-SECRET');
     expect(lines.join('\n')).not.toContain('Private title');
+  });
+
+  it('logs a sanitized secondary persistence failure instead of swallowing it', async () => {
+    const lines: string[] = [];
+    const logger = createLogger({ sink: (line) => lines.push(line), now: () => new Date(0) });
+    const queue = createInMemoryJobQueue({
+      now: incrementalWorkerClock(EXECUTION_WORKER_FIXTURE_EPOCH, 1),
+    });
+    const baseRepository = createInMemoryExecutionRecordRepository();
+    const repository: ExecutionRecordRepository = {
+      ...baseRepository,
+      failInfrastructure: vi.fn(async () =>
+        Promise.reject(new Error('TOP-SECRET-SECONDARY-PERSISTENCE')),
+      ),
+    };
+    const request = createWorkerExecutionRequestFixture();
+    const execute = vi.fn(async () => Promise.reject(new Error('TOP-SECRET-PRIMARY-FAILURE')));
+    const worker = createExecutionWorker({ queue, repository, engine: { execute }, logger });
+    const job = await dispatch(queue, repository, request);
+
+    await worker.drain();
+
+    expect(await queue.get(job.jobId)).toMatchObject({ status: 'FAILED' });
+    expect(repository.failInfrastructure).toHaveBeenCalledOnce();
+    expect(lines.join('\n')).toContain('execution.worker.infrastructure.persistence.failed');
+    expect(lines.join('\n')).toContain(EXECUTION_WORKER_ERROR_CODES.PERSISTENCE_FAILED);
+    expect(lines.join('\n')).not.toContain('TOP-SECRET');
   });
 
   it('preserves a safe Factory preflight source code without exposing its private cause', async () => {
@@ -556,6 +700,11 @@ describe('execution worker', () => {
     expect(await queue.get(job.jobId)).toMatchObject({
       status: 'FAILED',
       failure: { code: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH' },
+    });
+    expect(await repository.findByJobId(job.jobId)).toMatchObject({
+      status: 'FAILED',
+      job: { status: 'FAILED' },
+      failure: { kind: 'INFRASTRUCTURE', code: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH' },
     });
     expect(lines.join('\n')).toContain('DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH');
     expect(lines.join('\n')).not.toContain('PRIVATE DOCKER DETAILS');

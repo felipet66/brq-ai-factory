@@ -6,6 +6,7 @@ import { createApprovedPreviewArtifactFixture } from '@brq/preview-artifact/test
 
 import type {
   ApprovedPreviewStartRequest,
+  PreviewInspectRequest,
   PreviewRunner,
   PreviewRuntimeInspection,
   PreviewRuntimeObservation,
@@ -72,6 +73,7 @@ export function createRunningPreviewSessionFixture(): PreviewSession {
 export interface FakePreviewRunnerControls {
   readonly runner: PreviewRunner;
   readonly startRequests: ApprovedPreviewStartRequest[];
+  readonly inspectRequests: PreviewInspectRequest[];
   readonly stopReasons: string[];
   setStartError(error: unknown): void;
   setStopError(error: unknown): void;
@@ -80,6 +82,7 @@ export interface FakePreviewRunnerControls {
 
 export function createFakePreviewRunner(): FakePreviewRunnerControls {
   const startRequests: ApprovedPreviewStartRequest[] = [];
+  const inspectRequests: PreviewInspectRequest[] = [];
   const stopReasons: string[] = [];
   let startError: unknown;
   let stopError: unknown;
@@ -113,6 +116,7 @@ export function createFakePreviewRunner(): FakePreviewRunnerControls {
       };
     },
     async inspect(request) {
+      inspectRequests.push(request);
       return (
         inspection ?? {
           previewId: request.previewId,
@@ -147,6 +151,7 @@ export function createFakePreviewRunner(): FakePreviewRunnerControls {
   return {
     runner,
     startRequests,
+    inspectRequests,
     stopReasons,
     setStartError(error) {
       startError = error;

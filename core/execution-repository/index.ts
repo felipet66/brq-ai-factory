@@ -36,6 +36,7 @@ export {
   previewAccessTicketRevokeInputSchema,
 } from './preview-persistence-schemas';
 export * from './schemas';
+export * from './technical-resume-schemas';
 export type {
   ExecutionRequestSnapshot,
   ExecutionRequestSnapshotLookup,

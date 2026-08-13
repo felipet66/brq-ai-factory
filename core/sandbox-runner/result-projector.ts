@@ -60,6 +60,7 @@ export interface FinalizeSandboxRunInput {
   readonly steps: readonly SandboxStepResult[];
   readonly resourceOutcome: SandboxResourceOutcome;
   readonly failure: SandboxFailure | null;
+  readonly cleanupFailure?: SandboxFailure | null;
 }
 
 export function finalizeSandboxRunResult(input: FinalizeSandboxRunInput): SandboxRunResult {
@@ -120,6 +121,16 @@ export function finalizeSandboxRunResult(input: FinalizeSandboxRunInput): Sandbo
             reasonCode: input.failure.reasonCode,
             diagnosticSummary: input.failure.diagnosticSummary,
           },
+    cleanupFailure:
+      input.cleanupFailure === undefined || input.cleanupFailure === null
+        ? null
+        : {
+            code: input.cleanupFailure.code,
+            stage: input.cleanupFailure.stage,
+            sourceCode: input.cleanupFailure.sourceCode,
+            reasonCode: input.cleanupFailure.reasonCode,
+            diagnosticSummary: null,
+          },
     policyHash,
     commandPolicyHash,
     limitsHash,
@@ -144,6 +155,7 @@ export function finalizeSandboxRunResult(input: FinalizeSandboxRunInput): Sandbo
     steps: input.steps,
     limits: effectiveLimits,
     resourceOutcome: input.resourceOutcome,
+    cleanupFailure: input.cleanupFailure ?? null,
     failure: input.failure,
     hashes: {
       policyHash,

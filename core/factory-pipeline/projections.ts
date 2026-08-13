@@ -274,6 +274,25 @@ export function projectWorkspaceToSandboxRunRequest(
   executionRequest: ExecutionRequest,
   configuration: FactoryPipelineConfiguration['sandbox'],
 ): SandboxRunRequest {
+  return projectWorkspaceToSandboxRunRequestFromContext(
+    workspace,
+    executionId,
+    {
+      ...(executionRequest.requestId === undefined
+        ? {}
+        : { requestId: executionRequest.requestId }),
+      ...(executionRequest.traceId === undefined ? {} : { traceId: executionRequest.traceId }),
+    },
+    configuration,
+  );
+}
+
+export function projectWorkspaceToSandboxRunRequestFromContext(
+  workspace: WorkspaceMaterializationResult,
+  executionId: string,
+  context: { readonly requestId?: string; readonly traceId?: string },
+  configuration: FactoryPipelineConfiguration['sandbox'],
+): SandboxRunRequest {
   const parsedWorkspace = parseBoundary(
     workspaceMaterializationResultSchema,
     workspace,
@@ -284,10 +303,8 @@ export function projectWorkspaceToSandboxRunRequest(
     sandboxRunRequestSchema.parse({
       context: {
         executionId,
-        ...(executionRequest.requestId === undefined
-          ? {}
-          : { requestId: executionRequest.requestId }),
-        ...(executionRequest.traceId === undefined ? {} : { traceId: executionRequest.traceId }),
+        ...(context.requestId === undefined ? {} : { requestId: context.requestId }),
+        ...(context.traceId === undefined ? {} : { traceId: context.traceId }),
       },
       workspace: parsedWorkspace,
       policyId: configuration.policyId,
@@ -478,6 +495,7 @@ export function projectFactorySandboxSummary(
       status: fallbackStatus,
       sandboxRunId: null,
       resourceOutcome: 'NONE',
+      cleanupFailure: null,
       steps: ['PREPARE', 'TYPECHECK', 'BUILD', 'TEST'].map((stepId) => ({
         stepId,
         status: 'SKIPPED',
@@ -498,6 +516,17 @@ export function projectFactorySandboxSummary(
     status: result.status,
     sandboxRunId: result.sandboxRunId,
     resourceOutcome: result.resourceOutcome,
+    cleanupFailure:
+      result.cleanupFailure === null
+        ? null
+        : {
+            code: 'SANDBOX_CLEANUP_FAILED' as const,
+            stage: 'CLEANUP' as const,
+            sourceCode: result.cleanupFailure.sourceCode,
+            reasonCode: null,
+            diagnosticSummary: null,
+            message: result.cleanupFailure.message,
+          },
     steps: result.steps.map((step) => ({
       stepId: step.stepId,
       status: step.status,
@@ -539,6 +568,29 @@ export function projectFactorySandboxSummary(
       toolchainVersions: result.provenance.runtime.toolchainVersions,
     },
   });
+}
+
+/**
+ * Fail-closed projection used when the sandbox boundary throws after it may have
+ * acquired physical resources. The primary failure remains on the pipeline/result;
+ * this evidence only prevents an unobserved termination from becoming a cleanup
+ * attestation.
+ */
+export function projectFactorySandboxSummaryWithUnconfirmedTermination(
+  result: SandboxRunResult | null,
+  fallbackStatus: FactorySandboxSummary['status'],
+): FactorySandboxSummary {
+  return immutableClone({
+    ...projectFactorySandboxSummary(result, fallbackStatus),
+    cleanupFailure: {
+      code: 'SANDBOX_CLEANUP_FAILED' as const,
+      stage: 'CLEANUP' as const,
+      sourceCode: 'SANDBOX_TERMINATION_UNCONFIRMED',
+      reasonCode: null,
+      diagnosticSummary: null,
+      message: 'A ausência de recursos físicos da Sandbox não pôde ser confirmada.',
+    },
+  }) as FactorySandboxSummary;
 }
 
 export function projectFactoryPipelineProvenance(input: {

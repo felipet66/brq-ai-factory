@@ -7,7 +7,7 @@ import { createRepositoryBackedFactoryExecutionHistory } from './repository-back
 import { createExecutionRequestFixture } from './testing/execution-record-fixtures';
 
 describe('Repository-backed Factory execution history', () => {
-  it('persiste revisões v2 sem terminalizar o aggregate antes da Factory', async () => {
+  it('persiste revisões v3 sem terminalizar o aggregate antes da Factory', async () => {
     const request = createExecutionRequestFixture();
     const result = createFactoryExecutionResultFixture({
       executionId: `execution-${'d'.repeat(32)}`,
@@ -38,7 +38,7 @@ describe('Repository-backed Factory execution history', () => {
     await history.flush(request.workflowId);
     expect(await repository.findByWorkflowId(request.workflowId)).toMatchObject({
       status: 'RUNNING',
-      observation: { observabilityVersion: '2.0.0', status: 'RUNNING' },
+      observation: { observabilityVersion: '3.0.0', status: 'RUNNING' },
     });
 
     history.completeFactory(result);
@@ -46,7 +46,7 @@ describe('Repository-backed Factory execution history', () => {
     expect(await repository.findByWorkflowId(request.workflowId)).toMatchObject({
       status: 'RUNNING',
       observation: {
-        observabilityVersion: '2.0.0',
+        observabilityVersion: '3.0.0',
         status: 'SUCCESS',
         summary: { factoryResultHash: result.hashes.factoryResultHash },
       },

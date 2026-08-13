@@ -54,6 +54,7 @@ describe('repository-backed execution history', () => {
         createQueued: vi.fn(),
         markJobRunning: vi.fn(),
         markJobTerminal: vi.fn(),
+        failInfrastructure: vi.fn(),
         markRunning: vi.fn(),
         saveObservation,
         complete: vi.fn(),

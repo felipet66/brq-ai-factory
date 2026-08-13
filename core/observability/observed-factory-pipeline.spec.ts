@@ -42,6 +42,39 @@ describe('Observed Factory Pipeline', () => {
     expect(history.beginFactory).not.toHaveBeenCalled();
   });
 
+  it('encaminha o resume técnico exatamente e preserva o bind da capability original', async () => {
+    const history = recorder();
+    const checkpoint = { checkpointHash: 'a'.repeat(64) } as never;
+    const resumeOptions = {
+      attemptId: 'technical-resume-4fbd475c-ced4-47ed-aad5-82a772ea75cd',
+    } as const;
+    const resumed = { status: 'SUCCESS', resultHash: 'b'.repeat(64) } as never;
+    const pipeline: FactoryPipelineCoordinator = {
+      execute: async () => result(),
+      async resumeTechnical(observedCheckpoint, observedOptions) {
+        expect(this).toBe(pipeline);
+        expect(observedCheckpoint).toBe(checkpoint);
+        expect(observedOptions).toBe(resumeOptions);
+        return resumed;
+      },
+    };
+    const observed = createObservedFactoryPipeline({ pipeline, history });
+
+    await expect(observed.resumeTechnical?.(checkpoint, resumeOptions)).resolves.toBe(resumed);
+
+    expect(history.beginFactory).not.toHaveBeenCalled();
+    expect(history.completeFactory).not.toHaveBeenCalled();
+  });
+
+  it('não anuncia resume técnico quando o pipeline original não suporta a capability', () => {
+    const observed = createObservedFactoryPipeline({
+      pipeline: { execute: async () => result() },
+      history: recorder(),
+    });
+
+    expect(observed).not.toHaveProperty('resumeTechnical');
+  });
+
   it('preserva resultado, identidade e AbortSignal', async () => {
     const request = createObservabilityRequest();
     const terminal = { ...result(), workflowId: request.workflowId } as FactoryExecutionResult;

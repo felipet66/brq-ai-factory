@@ -193,9 +193,11 @@ describe('sandbox public schemas and result projection', () => {
       steps: createSandboxStepResultsFixture(),
       resourceOutcome: 'NONE',
       failure,
+      cleanupFailure: failure,
     });
     expect(result.status).toBe('FAILED');
     expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
+    expect(result.cleanupFailure).toEqual(result.failure);
   });
 
   it('allows cleanup failure to override a cancelled step while preserving its evidence', async () => {
@@ -256,12 +258,48 @@ describe('sandbox public schemas and result projection', () => {
       durationMs: 1_000,
       steps,
       resourceOutcome: 'NONE',
-      failure: cleanupFailure,
+      failure: cancelledFailure,
+      cleanupFailure,
     });
 
     expect(result.status).toBe('FAILED');
-    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
+    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CANCELLED);
+    expect(result.cleanupFailure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
     expect(result.steps[0]?.status).toBe('CANCELLED');
+  });
+
+  it('rejects cleanup evidence that does not identify a cleanup failure', async () => {
+    const request = await requestFixture();
+    expect(() =>
+      finalizeSandboxRunResult({
+        request,
+        policy: createSandboxExecutionPolicyFixture(),
+        effectiveLimits: resolveSandboxLimits(),
+        runtime,
+        status: 'FAILED',
+        startedAt: '2026-08-10T00:00:00.000Z',
+        finishedAt: '2026-08-10T00:00:04.000Z',
+        durationMs: 4_000,
+        steps: createSandboxStepResultsFixture(),
+        resourceOutcome: 'NONE',
+        failure: {
+          code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+          stage: 'CLEANUP',
+          message: 'Cleanup failed.',
+          sourceCode: 'REMOVAL_NOT_CONFIRMED',
+          reasonCode: null,
+          diagnosticSummary: null,
+        },
+        cleanupFailure: {
+          code: SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED,
+          stage: 'PREPARE',
+          message: 'Not cleanup.',
+          sourceCode: 'EXIT_1',
+          reasonCode: null,
+          diagnosticSummary: null,
+        },
+      }),
+    ).toThrow();
   });
 
   it('accepts an interrupted pipeline only when subsequent stages are skipped', async () => {

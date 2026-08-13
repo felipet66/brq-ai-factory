@@ -28,6 +28,7 @@ export {
   SANDBOX_RUNNER_ERROR_CODES,
   SANDBOX_RUNNER_ERROR_STAGES,
   SandboxRunnerError,
+  type SandboxRunnerCleanupFailure,
   type SandboxRunnerErrorCode,
   type SandboxRunnerErrorStage,
 } from './errors';
@@ -44,17 +45,19 @@ export {
 } from './hashing';
 export {
   SANDBOX_INTERNAL_STATUSES,
+  SANDBOX_DOCKER_OPERATION_IDS,
   SANDBOX_STEP_IDS,
   SANDBOX_STEP_TERMINAL_STATUSES,
   SANDBOX_TERMINAL_STATUSES,
   subsequentSandboxSteps,
   type SandboxInternalStatus,
+  type SandboxDockerOperationId,
   type SandboxStepId,
   type SandboxStepTerminalStatus,
   type SandboxTerminalStatus,
 } from './lifecycle';
 export { DEFAULT_SANDBOX_LIMITS, SANDBOX_ABSOLUTE_LIMITS, type SandboxLimits } from './limits';
-export { logSandboxEvent, sandboxLogContext } from './logging';
+export { logSandboxEvent, sandboxDockerOperationLogContext, sandboxLogContext } from './logging';
 export { sanitizeSandboxOutput, type SandboxOutputSanitizationOptions } from './output-sanitizer';
 export {
   extractSandboxHelperDiagnosticSummary,
@@ -77,6 +80,7 @@ export {
 } from './result-projector';
 export {
   sandboxContextSchema,
+  sandboxCleanupFailureSchema,
   sandboxDiagnosticSummarySchema,
   sandboxEffectiveLimitsSchema,
   sandboxFailureSchema,

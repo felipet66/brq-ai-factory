@@ -2,7 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { assertSameOriginMutation } from './csrf';
+import { assertSameOriginMutation, assertSameOriginNavigationMutation } from './csrf';
+
+const navigationHeaders = {
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-dest': 'document',
+} as const;
 
 describe('authentication origin protection', () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -46,7 +52,10 @@ describe('authentication origin protection', () => {
       method: 'POST',
       headers: { origin: 'http://localhost:3000' },
     });
-    const missing = new Request('http://localhost:3000/api/auth/logout', { method: 'POST' });
+    const missing = new Request('http://localhost:3000/api/auth/logout', {
+      method: 'POST',
+      headers: navigationHeaders,
+    });
     const malformed = new Request('http://localhost:3000/api/auth/logout', {
       method: 'POST',
       headers: { origin: 'not a valid origin' },
@@ -57,6 +66,73 @@ describe('authentication origin protection', () => {
       expect.objectContaining({ kind: 'CSRF_REJECTED' }),
     );
     expect(() => assertSameOriginMutation(malformed)).toThrowError(
+      expect.objectContaining({ kind: 'CSRF_REJECTED' }),
+    );
+  });
+
+  it('accepts an exact Origin or complete same-origin document navigation metadata', () => {
+    const exactOrigin = new Request('http://localhost:3000/previews/preview-1/launch', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:3000' },
+    });
+    const navigationWithoutOrigin = new Request('http://localhost:3000/previews/preview-1/launch', {
+      method: 'POST',
+      headers: navigationHeaders,
+    });
+
+    expect(() =>
+      assertSameOriginNavigationMutation(exactOrigin, 'http://localhost:3000'),
+    ).not.toThrow();
+    expect(() =>
+      assertSameOriginNavigationMutation(navigationWithoutOrigin, 'http://localhost:3000'),
+    ).not.toThrow();
+  });
+
+  it.each([
+    [
+      'missing Fetch Site',
+      'http://localhost:3000/previews/preview-1/launch',
+      { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' },
+    ],
+    [
+      'cross-site Fetch Site',
+      'http://localhost:3000/previews/preview-1/launch',
+      { ...navigationHeaders, 'sec-fetch-site': 'cross-site' },
+    ],
+    [
+      'non-navigation Fetch Mode',
+      'http://localhost:3000/previews/preview-1/launch',
+      { ...navigationHeaders, 'sec-fetch-mode': 'cors' },
+    ],
+    [
+      'non-document Fetch Destination',
+      'http://localhost:3000/previews/preview-1/launch',
+      { ...navigationHeaders, 'sec-fetch-dest': 'iframe' },
+    ],
+    [
+      'request URL origin mismatch',
+      'http://127.0.0.1:3000/previews/preview-1/launch',
+      navigationHeaders,
+    ],
+  ] as const)('rejects an Origin-less request with %s', (_case, url, headers) => {
+    const request = new Request(url, { method: 'POST', headers });
+
+    expect(() => assertSameOriginNavigationMutation(request, 'http://localhost:3000')).toThrowError(
+      expect.objectContaining({ kind: 'CSRF_REJECTED' }),
+    );
+  });
+
+  it.each([
+    ['opaque Origin', 'null', 'same-origin'],
+    ['origin mismatch', 'https://attacker.example.test', 'same-origin'],
+    ['cross-site metadata', 'http://localhost:3000', 'cross-site'],
+  ] as const)('rejects %s even when an Origin header is present', (_case, origin, fetchSite) => {
+    const request = new Request('http://localhost:3000/previews/preview-1/launch', {
+      method: 'POST',
+      headers: { origin, 'sec-fetch-site': fetchSite },
+    });
+
+    expect(() => assertSameOriginNavigationMutation(request, 'http://localhost:3000')).toThrowError(
       expect.objectContaining({ kind: 'CSRF_REJECTED' }),
     );
   });

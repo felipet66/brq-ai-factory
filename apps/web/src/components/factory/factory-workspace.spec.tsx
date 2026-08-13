@@ -19,6 +19,10 @@ vi.mock('./execution-rerun-control', () => ({
   ExecutionRerunControl: ({ eligible }: { readonly eligible: boolean }) =>
     eligible ? <section aria-label="cache-only rerun">ELIGIBLE</section> : null,
 }));
+vi.mock('./technical-resume-control', () => ({
+  TechnicalResumeControl: ({ eligible }: { readonly eligible: boolean }) =>
+    eligible ? <section aria-label="technical resume">ELIGIBLE</section> : null,
+}));
 
 afterEach(cleanup);
 
@@ -110,6 +114,7 @@ describe('FactoryWorkspace', () => {
     );
 
     expect(screen.getByRole('region', { name: 'cache-only rerun' })).toHaveTextContent('ELIGIBLE');
+    expect(screen.getByRole('region', { name: 'technical resume' })).toHaveTextContent('ELIGIBLE');
   });
 
   it('does not offer rerun when Code Generator did not succeed', () => {
@@ -143,6 +148,36 @@ describe('FactoryWorkspace', () => {
     );
 
     expect(screen.queryByRole('region', { name: 'cache-only rerun' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'technical resume' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer technical resume until Profile Validation succeeded', () => {
+    const successful = factoryResultFixture();
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({
+        status: 'FAILED',
+        factoryResult: factoryResultFixture({
+          status: 'FAILED',
+          stages: successful.stages.map((stage) =>
+            stage.stageId === 'CODE_PROFILE_VALIDATION'
+              ? { ...stage, status: 'FAILED', failureCode: 'PROFILE_INCOMPATIBLE' }
+              : stage,
+          ),
+        }),
+      }),
+      timeline: factoryTimelineV2Fixture({ status: 'FAILED' }),
+    });
+
+    render(
+      <FactoryWorkspace
+        model={model}
+        canAccessPlayground={false}
+        updateError={null}
+        onReload={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('region', { name: 'technical resume' })).not.toBeInTheDocument();
   });
 
   it('renders a safe Sandbox reason separately from its stable failure code', () => {

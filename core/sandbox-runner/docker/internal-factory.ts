@@ -24,9 +24,9 @@ import {
   calculateSandboxRequestHash,
   deriveSandboxRunId,
 } from '../hashing';
-import { SANDBOX_STEP_IDS, type SandboxStepId } from '../lifecycle';
+import { SANDBOX_STEP_IDS, type SandboxDockerOperationId, type SandboxStepId } from '../lifecycle';
 import type { SandboxLimits } from '../limits';
-import { logSandboxEvent, sandboxLogContext } from '../logging';
+import { logSandboxEvent, sandboxDockerOperationLogContext, sandboxLogContext } from '../logging';
 import { sanitizeSandboxOutput } from '../output-sanitizer';
 import {
   resolveSandboxPolicy,
@@ -52,7 +52,11 @@ import {
   type DockerSandboxArtifactSink,
   type DockerSandboxArtifactUnavailableCode,
 } from './artifact-capture';
-import type { DockerCommandExecutor, DockerCommandResult } from './docker-cli';
+import type {
+  DockerCommandExecutor,
+  DockerCommandRequest,
+  DockerCommandResult,
+} from './docker-cli';
 import type { ResolvedDockerSandboxRunnerOptions } from './docker-configuration';
 import { verifyCreatedContainer, verifyDockerRuntimeAndImage } from './docker-image-verifier';
 import { createWorkspacePayload } from './workspace-payload';
@@ -61,12 +65,17 @@ import { readAndVerifyWorkspace } from './workspace-reader';
 interface DockerSandboxRunnerDependencies {
   readonly executor: DockerCommandExecutor;
   readonly artifactSink?: DockerSandboxArtifactSink;
+  /** Test seam for the short, bounded create reconciliation interval. */
+  readonly wait?: (durationMs: number) => Promise<void>;
 }
 
 const ADMIN_OUTPUT_LIMIT = 1024 * 1024;
 const ARTIFACT_EXPORT_OUTPUT_LIMIT = 1536 * 1024;
 const ARTIFACT_EXPORT_TIMEOUT_MS = 15_000;
 const MINIMUM_DOCKER_MEMORY_BYTES = 128 * 1024 * 1024;
+const CREATE_RECONCILIATION_MAX_ATTEMPTS = 4;
+const CREATE_RECONCILIATION_INTERVAL_MS = 50;
+const CREATE_RECONCILIATION_MAX_BUDGET_MS = 500;
 const EMPTY_CAPTURE = Object.freeze({
   value: '',
   observedBytes: 0,
@@ -82,12 +91,102 @@ function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true;
 }
 
+async function boundedWait(durationMs: number): Promise<void> {
+  if (durationMs <= 0) return;
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+}
+
 function safeLog(operation: () => void): void {
   try {
     operation();
   } catch {
     // Observability is best effort and never changes a sandbox outcome.
   }
+}
+
+function dockerOperationId(args: readonly string[]): SandboxDockerOperationId | null {
+  if (args[0] !== 'container') return null;
+  if (args[1] === 'create') return 'CREATE';
+  if (args[1] === 'inspect') return 'INSPECT';
+  if (args[1] === 'start') return 'START';
+  if (args[1] === 'rm') return 'REMOVE';
+  if (args[1] === 'ls') return 'CONFIRM_ABSENCE';
+  if (args[1] === 'exec' && args.includes('/opt/brq/runner/ready.mjs')) return 'READINESS';
+  return null;
+}
+
+function observeDockerOperations(input: {
+  readonly executor: DockerCommandExecutor;
+  readonly logger: ResolvedDockerSandboxRunnerOptions['logger'];
+  readonly now: () => number;
+  readonly phase: 'PREFLIGHT' | 'RUN';
+  readonly policyId: string;
+  readonly sandboxRunId?: string;
+  readonly executionId?: string;
+  readonly workspaceId?: string;
+}): DockerCommandExecutor {
+  if (input.logger === undefined) return input.executor;
+  return Object.freeze({
+    async execute(request: DockerCommandRequest) {
+      const operation = dockerOperationId(request.args);
+      if (operation === null) return input.executor.execute(request);
+      const started = input.now();
+      try {
+        const result = await input.executor.execute(request);
+        const failed =
+          result.exitCode !== 0 ||
+          result.timedOut ||
+          result.cancelled ||
+          result.outputLimitExceeded ||
+          result.sourceCode !== null;
+        safeLog(() =>
+          logSandboxEvent(
+            input.logger,
+            failed ? 'warn' : 'info',
+            failed ? 'sandbox.docker.operation.failed' : 'sandbox.docker.operation.completed',
+            sandboxDockerOperationLogContext({
+              phase: input.phase,
+              policyId: input.policyId,
+              operation,
+              durationMs: Math.max(0, input.now() - started),
+              timeoutMs: request.timeoutMs,
+              exitCode: result.exitCode,
+              timedOut: result.timedOut,
+              cancelled: result.cancelled,
+              ...(input.sandboxRunId === undefined ? {} : { sandboxRunId: input.sandboxRunId }),
+              ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
+              ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+            }),
+          ),
+        );
+        return result;
+      } catch (error) {
+        safeLog(() =>
+          logSandboxEvent(
+            input.logger,
+            'warn',
+            'sandbox.docker.operation.failed',
+            sandboxDockerOperationLogContext({
+              phase: input.phase,
+              policyId: input.policyId,
+              operation,
+              durationMs: Math.max(0, input.now() - started),
+              timeoutMs: request.timeoutMs,
+              exitCode: null,
+              timedOut: false,
+              cancelled: false,
+              ...(input.sandboxRunId === undefined ? {} : { sandboxRunId: input.sandboxRunId }),
+              ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
+              ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+            }),
+          ),
+        );
+        throw error;
+      }
+    },
+  });
 }
 
 async function notifyArtifactUnavailable(
@@ -349,11 +448,24 @@ async function discoverOwnedContainer(input: {
   readonly limits: SandboxLimits;
   readonly containerName: string;
   readonly ownershipToken: string;
+  readonly deadlineMs?: number;
+  readonly now?: () => number;
 }): Promise<ContainerDiscovery> {
+  const commandTimeout = (): number | null => {
+    if (input.deadlineMs === undefined || input.now === undefined) {
+      return input.limits.administrativeTimeoutMs;
+    }
+    const remaining = input.deadlineMs - input.now();
+    return remaining <= 0
+      ? null
+      : Math.max(1, Math.min(input.limits.administrativeTimeoutMs, remaining));
+  };
+  const inspectionTimeout = commandTimeout();
+  if (inspectionTimeout === null) return { status: 'UNCONFIRMED' };
   try {
     const inspection = await input.executor.execute({
       args: ['container', 'inspect', '--format', '{{json .}}', input.containerName],
-      timeoutMs: input.limits.administrativeTimeoutMs,
+      timeoutMs: inspectionTimeout,
       hardOutputBytes: ADMIN_OUTPUT_LIMIT,
       capturedOutputBytesPerStream: ADMIN_OUTPUT_LIMIT,
     });
@@ -380,6 +492,8 @@ async function discoverOwnedContainer(input: {
   } catch {
     // A filtered list below is the independent absence/ownership confirmation.
   }
+  const filteredTimeout = commandTimeout();
+  if (filteredTimeout === null) return { status: 'UNCONFIRMED' };
   try {
     const filtered = await input.executor.execute({
       args: [
@@ -392,7 +506,7 @@ async function discoverOwnedContainer(input: {
         '--filter',
         `label=org.brq.sandbox.ownership=${input.ownershipToken}`,
       ],
-      timeoutMs: input.limits.administrativeTimeoutMs,
+      timeoutMs: filteredTimeout,
       hardOutputBytes: ADMIN_OUTPUT_LIMIT,
       capturedOutputBytesPerStream: ADMIN_OUTPUT_LIMIT,
     });
@@ -415,11 +529,47 @@ async function discoverOwnedContainer(input: {
   }
 }
 
+async function reconcileAmbiguousCreate(input: {
+  readonly executor: DockerCommandExecutor;
+  readonly limits: SandboxLimits;
+  readonly containerName: string;
+  readonly ownershipToken: string;
+  readonly now: () => number;
+  readonly wait: (durationMs: number) => Promise<void>;
+}): Promise<ContainerDiscovery> {
+  const startedAt = input.now();
+  const deadlineMs =
+    startedAt + Math.min(input.limits.administrativeTimeoutMs, CREATE_RECONCILIATION_MAX_BUDGET_MS);
+  let consecutiveAbsenceObservations = 0;
+
+  for (let attempt = 0; attempt < CREATE_RECONCILIATION_MAX_ATTEMPTS; attempt += 1) {
+    const discovery = await discoverOwnedContainer({
+      executor: input.executor,
+      limits: input.limits,
+      containerName: input.containerName,
+      ownershipToken: input.ownershipToken,
+      deadlineMs,
+      now: input.now,
+    });
+    if (discovery.status === 'OWNED') return discovery;
+    consecutiveAbsenceObservations =
+      discovery.status === 'ABSENT' ? consecutiveAbsenceObservations + 1 : 0;
+
+    if (attempt === CREATE_RECONCILIATION_MAX_ATTEMPTS - 1) break;
+    const remainingMs = deadlineMs - input.now();
+    if (remainingMs <= 0) break;
+    await input.wait(Math.min(CREATE_RECONCILIATION_INTERVAL_MS, remainingMs));
+  }
+
+  return consecutiveAbsenceObservations >= 2 ? { status: 'ABSENT' } : { status: 'UNCONFIRMED' };
+}
+
 async function cleanupOwnedContainer(input: {
   readonly executor: DockerCommandExecutor;
   readonly limits: SandboxLimits;
   readonly containerId: string;
 }): Promise<SandboxFailure | null> {
+  let removalConfirmed = false;
   try {
     const cleanup = await input.executor.execute({
       args: ['container', 'rm', '--force', '--volumes', input.containerId],
@@ -434,8 +584,16 @@ async function cleanupOwnedContainer(input: {
       cleanup.outputLimitExceeded ||
       cleanup.sourceCode !== null
     ) {
-      throw new Error('cleanup failed');
+      removalConfirmed = false;
+    } else {
+      removalConfirmed = true;
     }
+  } catch {
+    removalConfirmed = false;
+  }
+
+  let absenceConfirmed = false;
+  try {
     const confirmation = await input.executor.execute({
       args: ['container', 'ls', '--all', '--quiet', '--filter', `id=${input.containerId}`],
       timeoutMs: input.limits.administrativeTimeoutMs,
@@ -450,15 +608,177 @@ async function cleanupOwnedContainer(input: {
       confirmation.outputLimitExceeded ||
       confirmation.sourceCode !== null
     ) {
-      throw new Error('cleanup not confirmed');
+      absenceConfirmed = false;
+    } else {
+      absenceConfirmed = true;
     }
-    return null;
   } catch {
-    return stableFailure({
+    absenceConfirmed = false;
+  }
+
+  if (removalConfirmed && absenceConfirmed) return null;
+  return stableFailure({
+    code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+    stage: SANDBOX_RUNNER_ERROR_STAGES.CLEANUP,
+    message: 'A remoção do container não pôde ser confirmada.',
+    sourceCode: 'REMOVAL_NOT_CONFIRMED',
+  });
+}
+
+async function runDisposablePreflightProbe(input: {
+  readonly executor: DockerCommandExecutor;
+  readonly limits: SandboxLimits;
+  readonly image: ResolvedDockerSandboxRunnerOptions['image'];
+  readonly policy: SandboxExecutionPolicy;
+  readonly now: () => number;
+  readonly wait: (durationMs: number) => Promise<void>;
+  readonly signal?: AbortSignal;
+}): Promise<void> {
+  const probeId = randomUUID().replaceAll('-', '');
+  const containerName = `brq-preflight-${probeId}`;
+  const ownershipToken = `preflight-${probeId}`;
+  let containerId: string | null = null;
+  let createOwnershipUnconfirmed = false;
+  let primaryFailure: SandboxRunnerError | null = null;
+  let cleanupFailure: SandboxFailure | null = null;
+
+  try {
+    createOwnershipUnconfirmed = true;
+    let createResult: DockerCommandResult;
+    try {
+      createResult = await input.executor.execute({
+        args: buildCreateContainerArguments({
+          containerName,
+          ownershipToken,
+          imageReference: input.image.reference,
+          limits: input.limits,
+        }),
+        timeoutMs: input.limits.administrativeTimeoutMs,
+        hardOutputBytes: ADMIN_OUTPUT_LIMIT,
+        capturedOutputBytesPerStream: ADMIN_OUTPUT_LIMIT,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+    } catch (error) {
+      const discovery = await reconcileAmbiguousCreate({
+        executor: input.executor,
+        limits: input.limits,
+        containerName,
+        ownershipToken,
+        now: input.now,
+        wait: input.wait,
+      });
+      containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
+      createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
+      throw new SandboxRunnerError('O runtime Docker rejeitou a criação do container.', {
+        code: SANDBOX_RUNNER_ERROR_CODES.RUNTIME_UNAVAILABLE,
+        stage: SANDBOX_RUNNER_ERROR_STAGES.START,
+        sourceCode: 'DOCKER_COMMAND_REJECTED',
+        cause: error,
+      });
+    }
+    if (
+      createResult.exitCode !== 0 ||
+      createResult.timedOut ||
+      createResult.cancelled ||
+      createResult.outputLimitExceeded ||
+      createResult.sourceCode !== null
+    ) {
+      const discovery = await reconcileAmbiguousCreate({
+        executor: input.executor,
+        limits: input.limits,
+        containerName,
+        ownershipToken,
+        now: input.now,
+        wait: input.wait,
+      });
+      containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
+      createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
+      throw administrativeFailure(createResult);
+    }
+    const candidateId = createResult.stdout.value.trim();
+    if (!/^[a-f0-9]{12,64}$/u.test(candidateId)) {
+      const discovery = await reconcileAmbiguousCreate({
+        executor: input.executor,
+        limits: input.limits,
+        containerName,
+        ownershipToken,
+        now: input.now,
+        wait: input.wait,
+      });
+      containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
+      createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
+      throw new SandboxRunnerError('O Docker não retornou um containerId seguro.', {
+        code: SANDBOX_RUNNER_ERROR_CODES.START_FAILED,
+        stage: SANDBOX_RUNNER_ERROR_STAGES.START,
+        sourceCode: 'INVALID_CONTAINER_ID',
+      });
+    }
+    containerId = candidateId;
+    createOwnershipUnconfirmed = false;
+    const inspection = await administrativeCommand(
+      input.executor,
+      input.limits,
+      ['container', 'inspect', '--format', '{{json .}}', containerId],
+      input.signal,
+    );
+    verifyCreatedContainer(inspection.stdout.value, input.limits, ownershipToken);
+    await administrativeCommand(
+      input.executor,
+      input.limits,
+      ['container', 'start', containerId],
+      input.signal,
+    );
+    await administrativeCommand(
+      input.executor,
+      input.limits,
+      buildReadinessArguments(containerId),
+      input.signal,
+    );
+  } catch (error) {
+    primaryFailure =
+      error instanceof SandboxRunnerError
+        ? error
+        : new SandboxRunnerError('O probe ativo da sandbox não foi concluído.', {
+            code: SANDBOX_RUNNER_ERROR_CODES.START_FAILED,
+            stage: SANDBOX_RUNNER_ERROR_STAGES.START,
+          });
+  } finally {
+    cleanupFailure =
+      containerId === null
+        ? createOwnershipUnconfirmed
+          ? stableFailure({
+              code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+              stage: SANDBOX_RUNNER_ERROR_STAGES.CLEANUP,
+              message: 'A ausência do container de preflight não pôde ser confirmada.',
+              sourceCode: 'OWNERSHIP_NOT_CONFIRMED',
+            })
+          : null
+        : await cleanupOwnedContainer({
+            executor: input.executor,
+            limits: input.limits,
+            containerId,
+          });
+  }
+
+  if (primaryFailure !== null) {
+    if (cleanupFailure === null) throw primaryFailure;
+    throw new SandboxRunnerError(primaryFailure.message, {
+      code: primaryFailure.code,
+      stage: primaryFailure.stage,
+      ...(primaryFailure.sourceCode === undefined ? {} : { sourceCode: primaryFailure.sourceCode }),
+      cleanupFailure: {
+        code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+        stage: SANDBOX_RUNNER_ERROR_STAGES.CLEANUP,
+        sourceCode: cleanupFailure.sourceCode,
+      },
+      cause: primaryFailure,
+    });
+  }
+  if (cleanupFailure !== null) {
+    throw new SandboxRunnerError('O probe ativo terminou sem cleanup confirmado.', {
       code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
       stage: SANDBOX_RUNNER_ERROR_STAGES.CLEANUP,
-      message: 'A remoção do container não pôde ser confirmada.',
-      sourceCode: 'REMOVAL_NOT_CONFIRMED',
+      ...(cleanupFailure.sourceCode === null ? {} : { sourceCode: cleanupFailure.sourceCode }),
     });
   }
 }
@@ -672,33 +992,61 @@ export function createDockerSandboxRunnerWithDependencies(
   dependencies: DockerSandboxRunnerDependencies,
 ): SandboxRunner {
   const now = options.now ?? Date.now;
+  const wait = dependencies.wait ?? boundedWait;
   const ceiling = resolveSandboxLimits({}, options.limitCeiling);
   let active = false;
 
   return Object.freeze({
     preflight: async (preflightOptions: SandboxPreflightOptions): Promise<void> => {
-      const policy = resolveSandboxPolicy(options.policies, preflightOptions.policyId);
-      if (Object.values(policy.steps).some((command) => !isStrictSandboxCommand(command))) {
-        throw new SandboxRunnerError('A policy contém um comando não autorizado.', {
-          code: SANDBOX_RUNNER_ERROR_CODES.CONFIGURATION_ERROR,
-          stage: SANDBOX_RUNNER_ERROR_STAGES.CONFIGURATION,
+      if (active) {
+        throw new SandboxRunnerError('O runner Docker já possui uma operação ativa.', {
+          code: SANDBOX_RUNNER_ERROR_CODES.CAPACITY_EXCEEDED,
+          stage: SANDBOX_RUNNER_ERROR_STAGES.CAPACITY,
         });
       }
-      if (isAborted(preflightOptions.signal)) {
-        throw new SandboxRunnerError('O preflight da sandbox foi cancelado.', {
-          code: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
-          stage: SANDBOX_RUNNER_ERROR_STAGES.REQUEST_VALIDATION,
+      active = true;
+      try {
+        const policy = resolveSandboxPolicy(options.policies, preflightOptions.policyId);
+        if (Object.values(policy.steps).some((command) => !isStrictSandboxCommand(command))) {
+          throw new SandboxRunnerError('A policy contém um comando não autorizado.', {
+            code: SANDBOX_RUNNER_ERROR_CODES.CONFIGURATION_ERROR,
+            stage: SANDBOX_RUNNER_ERROR_STAGES.CONFIGURATION,
+          });
+        }
+        if (isAborted(preflightOptions.signal)) {
+          throw new SandboxRunnerError('O preflight da sandbox foi cancelado.', {
+            code: SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
+            stage: SANDBOX_RUNNER_ERROR_STAGES.REQUEST_VALIDATION,
+          });
+        }
+        await verifyDockerPreflight({
+          executor: dependencies.executor,
+          limits: ceiling,
+          image: options.image,
+          policy,
+          started: now(),
+          now,
+          ...(preflightOptions.signal === undefined ? {} : { signal: preflightOptions.signal }),
         });
+        const observedExecutor = observeDockerOperations({
+          executor: dependencies.executor,
+          logger: options.logger,
+          now,
+          phase: 'PREFLIGHT',
+          policyId: policy.policyId,
+        });
+        await runDisposablePreflightProbe({
+          executor: observedExecutor,
+          limits: ceiling,
+          image: options.image,
+          policy,
+          now,
+          wait,
+          ...(preflightOptions.signal === undefined ? {} : { signal: preflightOptions.signal }),
+        });
+      } finally {
+        active = false;
       }
-      await verifyDockerPreflight({
-        executor: dependencies.executor,
-        limits: ceiling,
-        image: options.image,
-        policy,
-        started: now(),
-        now,
-        ...(preflightOptions.signal === undefined ? {} : { signal: preflightOptions.signal }),
-      });
     },
     run: async (
       rawRequest: SandboxRunRequest,
@@ -775,6 +1123,16 @@ export function createDockerSandboxRunnerWithDependencies(
           policyHash,
         });
         const sandboxRunId = deriveSandboxRunId(sandboxRequestHash);
+        const observedExecutor = observeDockerOperations({
+          executor: dependencies.executor,
+          logger: options.logger,
+          now,
+          phase: 'RUN',
+          policyId: policy.policyId,
+          sandboxRunId,
+          executionId: request.context.executionId,
+          workspaceId: request.workspace.workspaceId,
+        });
 
         const containerName = `brq-${sandboxRunId}`;
         const ownershipToken = `${sandboxRunId}-${randomUUID()}`;
@@ -783,18 +1141,38 @@ export function createDockerSandboxRunnerWithDependencies(
         let createOwnershipUnconfirmed = false;
         try {
           createOwnershipUnconfirmed = true;
-          const createResult = await dependencies.executor.execute({
-            args: buildCreateContainerArguments({
+          let createResult: DockerCommandResult;
+          try {
+            createResult = await observedExecutor.execute({
+              args: buildCreateContainerArguments({
+                containerName,
+                ownershipToken,
+                imageReference: options.image.reference,
+                limits,
+              }),
+              timeoutMs: remainingTimeout(started, limits, now),
+              hardOutputBytes: ADMIN_OUTPUT_LIMIT,
+              capturedOutputBytesPerStream: ADMIN_OUTPUT_LIMIT,
+              ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
+            });
+          } catch (error) {
+            const discovery = await reconcileAmbiguousCreate({
+              executor: observedExecutor,
+              limits,
               containerName,
               ownershipToken,
-              imageReference: options.image.reference,
-              limits,
-            }),
-            timeoutMs: remainingTimeout(started, limits, now),
-            hardOutputBytes: ADMIN_OUTPUT_LIMIT,
-            capturedOutputBytesPerStream: ADMIN_OUTPUT_LIMIT,
-            ...(runOptions.signal === undefined ? {} : { signal: runOptions.signal }),
-          });
+              now,
+              wait,
+            });
+            containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
+            createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
+            throw new SandboxRunnerError('O runtime Docker rejeitou a criação do container.', {
+              code: SANDBOX_RUNNER_ERROR_CODES.RUNTIME_UNAVAILABLE,
+              stage: SANDBOX_RUNNER_ERROR_STAGES.START,
+              sourceCode: 'DOCKER_COMMAND_REJECTED',
+              cause: error,
+            });
+          }
           if (
             createResult.exitCode !== 0 ||
             createResult.timedOut ||
@@ -802,11 +1180,13 @@ export function createDockerSandboxRunnerWithDependencies(
             createResult.outputLimitExceeded ||
             createResult.sourceCode !== null
           ) {
-            const discovery = await discoverOwnedContainer({
-              executor: dependencies.executor,
+            const discovery = await reconcileAmbiguousCreate({
+              executor: observedExecutor,
               limits,
               containerName,
               ownershipToken,
+              now,
+              wait,
             });
             containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
             createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
@@ -814,11 +1194,13 @@ export function createDockerSandboxRunnerWithDependencies(
           }
           const candidateId = createResult.stdout.value.trim();
           if (!/^[a-f0-9]{12,64}$/u.test(candidateId)) {
-            const discovery = await discoverOwnedContainer({
-              executor: dependencies.executor,
+            const discovery = await reconcileAmbiguousCreate({
+              executor: observedExecutor,
               limits,
               containerName,
               ownershipToken,
+              now,
+              wait,
             });
             containerId = discovery.status === 'OWNED' ? discovery.containerId : null;
             createOwnershipUnconfirmed = discovery.status === 'UNCONFIRMED';
@@ -831,7 +1213,7 @@ export function createDockerSandboxRunnerWithDependencies(
           containerId = candidateId;
           createOwnershipUnconfirmed = false;
           const inspection = await administrativeCommand(
-            dependencies.executor,
+            observedExecutor,
             limits,
             ['container', 'inspect', '--format', '{{json .}}', containerId],
             runOptions.signal,
@@ -839,14 +1221,14 @@ export function createDockerSandboxRunnerWithDependencies(
           );
           verifyCreatedContainer(inspection.stdout.value, limits, ownershipToken);
           await administrativeCommand(
-            dependencies.executor,
+            observedExecutor,
             limits,
             ['container', 'start', containerId],
             runOptions.signal,
             remainingTimeout(started, limits, now),
           );
           await administrativeCommand(
-            dependencies.executor,
+            observedExecutor,
             limits,
             buildReadinessArguments(containerId),
             runOptions.signal,
@@ -960,7 +1342,7 @@ export function createDockerSandboxRunnerWithDependencies(
                 );
                 let commandResult: DockerCommandResult;
                 try {
-                  commandResult = await dependencies.executor.execute({
+                  commandResult = await observedExecutor.execute({
                     args: buildExecArguments({
                       containerId,
                       policy: command,
@@ -990,7 +1372,7 @@ export function createDockerSandboxRunnerWithDependencies(
                   !commandResult.timedOut &&
                   !commandResult.outputLimitExceeded
                     ? await observeResourceOutcome(
-                        dependencies.executor,
+                        observedExecutor,
                         limits,
                         containerId,
                         Math.max(
@@ -1051,7 +1433,7 @@ export function createDockerSandboxRunnerWithDependencies(
               dependencies.artifactSink !== undefined
             ) {
               await capturePreviewArtifact({
-                executor: dependencies.executor,
+                executor: observedExecutor,
                 sink: dependencies.artifactSink,
                 correlation: Object.freeze({
                   executionId: request.context.executionId,
@@ -1098,7 +1480,7 @@ export function createDockerSandboxRunnerWithDependencies(
                   })
                 : null
               : await cleanupOwnedContainer({
-                  executor: dependencies.executor,
+                  executor: observedExecutor,
                   limits,
                   containerId,
                 });
@@ -1121,13 +1503,8 @@ export function createDockerSandboxRunnerWithDependencies(
         }
         if (cleanupFailure !== null) {
           status = 'FAILED';
-          failure = stableFailure({
-            code: cleanupFailure.code,
-            stage: cleanupFailure.stage,
-            message: cleanupFailure.message,
-            sourceCode: failure?.code ?? cleanupFailure.sourceCode,
-            diagnosticSummary: null,
-          });
+          // Cleanup remains fail-closed but never replaces the primary execution cause.
+          failure ??= cleanupFailure;
         }
 
         const finished = now();
@@ -1143,6 +1520,7 @@ export function createDockerSandboxRunnerWithDependencies(
           steps,
           resourceOutcome,
           failure,
+          cleanupFailure,
         });
         safeLog(() =>
           logSandboxEvent(

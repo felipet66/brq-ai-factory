@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createFactoryExecutionResultFixture } from '@brq/factory-pipeline/testing';
+import {
+  calculateFactoryPipelineResultHash,
+  factoryExecutionResultSchema,
+  type FactoryExecutionResult,
+  type FactoryResultHashInput,
+} from '@brq/factory-pipeline';
+import {
+  createFactoryExecutionResultFixture,
+  createFactoryTechnicalCheckpointFixture,
+} from '@brq/factory-pipeline/testing';
 
 import { createInMemoryExecutionRecordRepository } from './adapters/in-memory-execution-record-repository';
 import { EXECUTION_REPOSITORY_ERROR_CODES } from './errors';
@@ -9,6 +18,8 @@ import {
   createExecutionObservationFixture,
   createExecutionResultFixture,
 } from './testing/execution-record-fixtures';
+import { createFactoryTechnicalResumeResultFixture } from './testing/technical-resume-fixtures';
+import { createFailedTechnicalResumeSourceResultFixture } from './testing/technical-resume-fixtures';
 
 const createdInput = (workflowId: string, createdAt = '2026-08-07T12:00:00.000Z') => ({
   workflowId,
@@ -18,6 +29,103 @@ const createdInput = (workflowId: string, createdAt = '2026-08-07T12:00:00.000Z'
   createdAt,
   metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 as const },
 });
+
+const TECHNICAL_LEASE_ID = 'technical-lease-123e4567-e89b-42d3-a456-426614174000';
+const TECHNICAL_LEASE_VERSION = 1;
+
+function technicalAttempt<T extends { readonly startedAt: string }>(input: T) {
+  return {
+    ...input,
+    leaseId: TECHNICAL_LEASE_ID,
+    leaseVersion: TECHNICAL_LEASE_VERSION,
+    heartbeatAt: input.startedAt,
+    leaseExpiresAt: new Date(Date.parse(input.startedAt) + 60_000).toISOString(),
+  };
+}
+
+function technicalFailure<T extends object>(input: T) {
+  return {
+    ...input,
+    leaseId: TECHNICAL_LEASE_ID,
+    leaseVersion: TECHNICAL_LEASE_VERSION,
+  };
+}
+
+async function prepareTechnicalResumeSource(ownerId: string) {
+  const repository = createInMemoryExecutionRecordRepository({ ownerId });
+  const checkpoint = createFactoryTechnicalCheckpointFixture();
+  await repository.create(createdInput(checkpoint.source.workflowId));
+  await repository.markRunning({
+    workflowId: checkpoint.source.workflowId,
+    startedAt: '2026-08-13T12:00:00.000Z',
+  });
+  await repository.saveTechnicalCheckpoint({
+    checkpoint,
+    createdAt: '2026-08-13T12:00:01.000Z',
+  });
+  await repository.completeFactory(
+    checkpoint.source.workflowId,
+    createFailedTechnicalResumeSourceResultFixture({
+      executionId: checkpoint.source.executionId,
+      workflowId: checkpoint.source.workflowId,
+    }),
+    null,
+  );
+  return { checkpoint, repository };
+}
+
+function factoryResultWithCleanupPending(input: {
+  readonly executionId: string;
+  readonly workflowId: string;
+}): FactoryExecutionResult {
+  const source = createFactoryExecutionResultFixture(input);
+  const hashes = {
+    executionHash: source.hashes.executionHash,
+    workflowHash: source.hashes.workflowHash,
+    generationHash: source.hashes.generationHash,
+    bundleHash: source.hashes.bundleHash,
+    workspacePlanHash: source.hashes.workspacePlanHash,
+    workspaceHash: source.hashes.workspaceHash,
+    sandboxRequestHash: source.hashes.sandboxRequestHash,
+    sandboxResultHash: source.hashes.sandboxResultHash,
+    lineageHash: source.hashes.lineageHash,
+    provenanceHash: source.hashes.provenanceHash,
+  };
+  const projection: FactoryResultHashInput = {
+    ...source,
+    status: 'FAILED',
+    terminalStage: 'SANDBOX',
+    sandbox: {
+      ...source.sandbox,
+      status: 'FAILED',
+      cleanupFailure: {
+        code: 'SANDBOX_CLEANUP_FAILED',
+        stage: 'CLEANUP',
+        sourceCode: 'REMOVAL_NOT_CONFIRMED',
+        reasonCode: null,
+        diagnosticSummary: null,
+        message: 'A remoção do container não pôde ser confirmada.',
+      },
+    },
+    hashes,
+    failure: {
+      code: 'SANDBOX_CLEANUP_FAILED',
+      stage: 'SANDBOX',
+      sourceCode: null,
+      reasonCode: null,
+      profileRuleId: null,
+      diagnosticSummary: null,
+      message: 'A execução isolada não concluiu todas as verificações.',
+    },
+  };
+  return factoryExecutionResultSchema.parse({
+    ...projection,
+    hashes: {
+      ...hashes,
+      factoryResultHash: calculateFactoryPipelineResultHash(projection),
+    },
+  });
+}
 
 describe('in-memory execution record repository', () => {
   it('persists queued job metadata independently and resolves it by jobId', async () => {
@@ -89,6 +197,52 @@ describe('in-memory execution record repository', () => {
         startedAt: '2026-08-07T12:00:00.010Z',
       }),
     ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
+  it('atomically and idempotently fails the active execution and job on infrastructure failure', async () => {
+    const repository = createInMemoryExecutionRecordRepository();
+    await repository.createQueued({
+      workflowId: 'workflow-001',
+      executionId: EXECUTION_RECORD_FIXTURE_ID,
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      requestId: null,
+      traceId: null,
+      projectName: 'Infrastructure failure',
+      queuedAt: '2026-08-07T12:00:00.000Z',
+      metadata: { engineVersion: '1.0.0', contractVersion: '1.0.0', attempt: 1 },
+    });
+    await repository.markJobRunning({
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      startedAt: '2026-08-07T12:00:00.005Z',
+    });
+    await repository.markRunning({
+      workflowId: 'workflow-001',
+      startedAt: '2026-08-07T12:00:00.010Z',
+    });
+    const input = {
+      jobId: EXECUTION_JOB_FIXTURE_ID,
+      code: 'FACTORY_PIPELINE_TECHNICAL_CHECKPOINT_FAILED',
+      finishedAt: '2026-08-07T12:00:00.050Z',
+    } as const;
+
+    const failed = await repository.failInfrastructure(input);
+    const repeated = await repository.failInfrastructure(input);
+
+    expect(failed).toMatchObject({
+      status: 'FAILED',
+      workflowStatus: null,
+      finishedAt: input.finishedAt,
+      durationMs: 40,
+      job: { status: 'FAILED', finishedAt: input.finishedAt },
+      failure: {
+        kind: 'INFRASTRUCTURE',
+        code: input.code,
+        sourceCode: null,
+      },
+      factoryResult: null,
+    });
+    expect(failed.lifecycle.map((event) => event.state)).toEqual(['CREATED', 'RUNNING', 'FAILED']);
+    expect(repeated).toEqual(failed);
   });
 
   it('persists the complete lifecycle, observation, hashes and immutable snapshots', async () => {
@@ -227,5 +381,452 @@ describe('in-memory execution record repository', () => {
         createdBefore: '2026-08-07T00:00:00.000Z',
       }),
     ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.INVALID_INPUT });
+  });
+
+  it('keeps the source immutable and projects the latest physical resume attempt owner-scoped', async () => {
+    const ownerId = 'owner-technical-resume';
+    const repository = createInMemoryExecutionRecordRepository({ ownerId });
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    await repository.create(createdInput(checkpoint.source.workflowId));
+    await repository.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: '2026-08-13T12:00:00.000Z',
+    });
+    await repository.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+
+    expect(
+      await repository.findTechnicalCheckpointOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).toMatchObject({ cleanup: null });
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-pending',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-resume-pending',
+          startedAt: '2026-08-13T12:00:01.500Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+
+    const sourceResult = createFailedTechnicalResumeSourceResultFixture({
+      executionId: checkpoint.source.executionId,
+      workflowId: checkpoint.source.workflowId,
+    });
+    await repository.completeFactory(checkpoint.source.workflowId, sourceResult, null);
+    const simultaneousClaims = await Promise.allSettled([
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-a',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-resume-a',
+          startedAt: '2026-08-13T12:00:02.000Z',
+        }),
+      ),
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-concurrent',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-resume-concurrent',
+          startedAt: '2026-08-13T12:00:02.000Z',
+        }),
+      ),
+    ]);
+    expect(simultaneousClaims.filter((claim) => claim.status === 'fulfilled')).toHaveLength(1);
+    expect(simultaneousClaims.filter((claim) => claim.status === 'rejected')).toHaveLength(1);
+    expect(simultaneousClaims[1]).toMatchObject({
+      status: 'rejected',
+      reason: { code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT },
+    });
+    await repository.failTechnicalResumeAttempt(
+      technicalFailure({
+        attemptId: 'technical-resume-a',
+        finishedAt: '2026-08-13T12:00:02.500Z',
+        reasonCode: 'CHECKPOINT_PROFILE_DRIFT',
+        cleanupConfirmed: true,
+      }),
+    );
+    await repository.createTechnicalResumeAttempt(
+      technicalAttempt({
+        attemptId: 'technical-resume-b',
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId,
+        requestId: 'request-resume-b',
+        startedAt: '2026-08-13T12:00:02.000Z',
+      }),
+    );
+
+    await expect(
+      repository.findLatestTechnicalResumeAttemptOwned({
+        ownerId: 'another-owner',
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      repository.findLatestTechnicalResumeAttemptOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({
+      attemptId: 'technical-resume-b',
+      checkpointHash: checkpoint.checkpointHash,
+      status: 'RUNNING',
+    });
+    await expect(
+      repository.findByExecutionId(checkpoint.source.executionId),
+    ).resolves.toMatchObject({
+      factoryResult: { hashes: { factoryResultHash: sourceResult.hashes.factoryResultHash } },
+    });
+  });
+
+  it('keeps an attempt RUNNING when a terminal result diverges from its persisted checkpoint', async () => {
+    const ownerId = 'owner-technical-resume';
+    const repository = createInMemoryExecutionRecordRepository({ ownerId });
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    const attemptId = 'technical-resume-123e4567-e89b-42d3-a456-426614174000';
+    await repository.create(createdInput(checkpoint.source.workflowId));
+    await repository.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: '2026-08-13T12:00:00.000Z',
+    });
+    await repository.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+    await repository.completeFactory(
+      checkpoint.source.workflowId,
+      createFailedTechnicalResumeSourceResultFixture({
+        executionId: checkpoint.source.executionId,
+        workflowId: checkpoint.source.workflowId,
+      }),
+      null,
+    );
+    await repository.createTechnicalResumeAttempt(
+      technicalAttempt({
+        attemptId,
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId,
+        requestId: 'request-technical-resume',
+        startedAt: '2026-08-13T12:00:01.500Z',
+      }),
+    );
+
+    const divergentResults = [
+      createFactoryTechnicalResumeResultFixture({
+        checkpoint,
+        sourceExecutionId: `execution-${'9'.repeat(32)}`,
+      }),
+      createFactoryTechnicalResumeResultFixture({
+        checkpoint,
+        sourceWorkflowId: 'workflow-divergent-source',
+      }),
+      createFactoryTechnicalResumeResultFixture({
+        checkpoint,
+        checkpointHash: 'f'.repeat(64),
+      }),
+    ];
+    for (const result of divergentResults) {
+      await expect(
+        repository.stageTechnicalResumeAttemptResult({
+          attemptId,
+          leaseId: TECHNICAL_LEASE_ID,
+          leaseVersion: TECHNICAL_LEASE_VERSION,
+          recordedAt: '2026-08-13T12:00:04.000Z',
+          result,
+        }),
+      ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+    }
+    await expect(
+      repository.findLatestTechnicalResumeAttemptOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({ attemptId, status: 'RUNNING', result: null });
+
+    const result = createFactoryTechnicalResumeResultFixture({ checkpoint });
+    await repository.stageTechnicalResumeAttemptResult({
+      attemptId,
+      leaseId: TECHNICAL_LEASE_ID,
+      leaseVersion: TECHNICAL_LEASE_VERSION,
+      recordedAt: '2026-08-13T12:00:04.000Z',
+      result,
+    });
+    const terminalClaims = await Promise.allSettled([
+      repository.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: result.resultHash,
+      }),
+      repository.failTechnicalResumeAttempt(
+        technicalFailure({
+          attemptId,
+          finishedAt: result.finishedAt,
+          reasonCode: 'TECHNICAL_RESUME_INTERNAL_ERROR',
+          cleanupConfirmed: false,
+        }),
+      ),
+    ]);
+    expect(terminalClaims.filter((claim) => claim.status === 'fulfilled')).toHaveLength(1);
+    expect(terminalClaims.filter((claim) => claim.status === 'rejected')).toHaveLength(1);
+    await expect(
+      repository.findLatestTechnicalResumeAttemptOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({ attemptId, status: 'SUCCESS', result });
+  });
+
+  it('reconciles a durable journal without rerunning and makes SUCCESS definitive', async () => {
+    const ownerId = 'owner-journal-reconciliation';
+    const { checkpoint, repository } = await prepareTechnicalResumeSource(ownerId);
+    const attemptId = 'technical-resume-123e4567-e89b-42d3-a456-426614174000';
+    const result = createFactoryTechnicalResumeResultFixture({ checkpoint, attemptId });
+    await repository.createTechnicalResumeAttempt(
+      technicalAttempt({
+        attemptId,
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId,
+        requestId: 'request-journal-reconciliation',
+        startedAt: '2026-08-13T12:00:01.500Z',
+      }),
+    );
+    await repository.stageTechnicalResumeAttemptResult({
+      attemptId,
+      leaseId: TECHNICAL_LEASE_ID,
+      leaseVersion: TECHNICAL_LEASE_VERSION,
+      recordedAt: '2026-08-13T12:00:03.000Z',
+      result,
+    });
+
+    await expect(
+      repository.reconcileTechnicalResumeAttemptOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+        observedAt: '2026-08-13T12:00:04.000Z',
+      }),
+    ).resolves.toMatchObject({ outcome: 'FINALIZED', attempt: { status: 'SUCCESS', result } });
+    await expect(
+      repository.completeTechnicalResumeAttempt({
+        attemptId,
+        pendingResultHash: result.resultHash,
+      }),
+    ).resolves.toMatchObject({ status: 'SUCCESS', result });
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-after-success',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-after-success',
+          startedAt: '2026-08-13T11:00:00.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
+  it('never unlocks an expired lease and rejects non-monotonic heartbeats', async () => {
+    const ownerId = 'owner-expired-lease';
+    const { checkpoint, repository } = await prepareTechnicalResumeSource(ownerId);
+    const attemptId = 'technical-resume-expired-lease';
+    await repository.createTechnicalResumeAttempt(
+      technicalAttempt({
+        attemptId,
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId,
+        requestId: 'request-expired-lease',
+        startedAt: '2026-08-13T12:00:01.500Z',
+      }),
+    );
+    await expect(
+      repository.renewTechnicalResumeAttemptLease({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        heartbeatAt: '2026-08-13T12:00:01.400Z',
+        leaseExpiresAt: '2026-08-13T12:02:00.000Z',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.renewTechnicalResumeAttemptLease({
+        attemptId,
+        leaseId: TECHNICAL_LEASE_ID,
+        leaseVersion: TECHNICAL_LEASE_VERSION,
+        heartbeatAt: '2026-08-13T12:00:02.000Z',
+        leaseExpiresAt: '2026-08-13T12:00:30.000Z',
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      repository.reconcileTechnicalResumeAttemptOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+        observedAt: '2026-08-13T12:02:00.000Z',
+      }),
+    ).resolves.toMatchObject({
+      outcome: 'RECOVERY_REQUIRED',
+      attempt: {
+        attemptId,
+        activePhase: 'RECOVERY_REQUIRED',
+        recoveryReasonCode: 'TECHNICAL_ATTEMPT_LEASE_EXPIRED',
+      },
+    });
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-after-expiry',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-after-expiry',
+          startedAt: '2026-08-13T12:02:01.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
+  it('rejects technical resume when the checkpoint source did not finish as FAILED', async () => {
+    const ownerId = 'owner-success-source';
+    const repository = createInMemoryExecutionRecordRepository({ ownerId });
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    await repository.create(createdInput(checkpoint.source.workflowId));
+    await repository.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: '2026-08-13T12:00:00.000Z',
+    });
+    await repository.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+    await repository.completeFactory(
+      checkpoint.source.workflowId,
+      createFactoryExecutionResultFixture({
+        executionId: checkpoint.source.executionId,
+        workflowId: checkpoint.source.workflowId,
+      }),
+      null,
+    );
+
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-success-source',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-success-source',
+          startedAt: '2026-08-13T12:00:02.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
+  it('blocks a new attempt after a terminal result without confirmed cleanup', async () => {
+    const ownerId = 'owner-unconfirmed-cleanup';
+    const repository = createInMemoryExecutionRecordRepository({ ownerId });
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    const attemptId = 'technical-resume-unconfirmed-cleanup';
+    await repository.create(createdInput(checkpoint.source.workflowId));
+    await repository.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: '2026-08-13T12:00:00.000Z',
+    });
+    await repository.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+    await repository.completeFactory(
+      checkpoint.source.workflowId,
+      createFailedTechnicalResumeSourceResultFixture({
+        executionId: checkpoint.source.executionId,
+        workflowId: checkpoint.source.workflowId,
+      }),
+      null,
+    );
+    await repository.createTechnicalResumeAttempt(
+      technicalAttempt({
+        attemptId,
+        checkpointHash: checkpoint.checkpointHash,
+        ownerId,
+        requestId: 'request-unconfirmed-cleanup',
+        startedAt: '2026-08-13T12:00:02.000Z',
+      }),
+    );
+    await repository.failTechnicalResumeAttempt(
+      technicalFailure({
+        attemptId,
+        finishedAt: '2026-08-13T12:00:03.000Z',
+        reasonCode: 'TECHNICAL_RESUME_INTERNAL_ERROR',
+        cleanupConfirmed: false,
+      }),
+    );
+
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-blocked-by-cleanup',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-blocked-by-cleanup',
+          startedAt: '2026-08-13T12:00:04.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
+  });
+
+  it('keeps checkpoint cleanup pending when Sandbox container absence was not confirmed', async () => {
+    const ownerId = 'owner-cleanup-pending';
+    const repository = createInMemoryExecutionRecordRepository({ ownerId });
+    const checkpoint = createFactoryTechnicalCheckpointFixture();
+    await repository.create(createdInput(checkpoint.source.workflowId));
+    await repository.markRunning({
+      workflowId: checkpoint.source.workflowId,
+      startedAt: '2026-08-13T12:00:00.000Z',
+    });
+    await repository.saveTechnicalCheckpoint({
+      checkpoint,
+      createdAt: '2026-08-13T12:00:01.000Z',
+    });
+    const sourceResult = factoryResultWithCleanupPending({
+      executionId: checkpoint.source.executionId,
+      workflowId: checkpoint.source.workflowId,
+    });
+
+    const completed = await repository.completeFactory(
+      checkpoint.source.workflowId,
+      sourceResult,
+      null,
+    );
+
+    expect(completed).toMatchObject({
+      status: 'FAILED',
+      failure: { code: 'SANDBOX_CLEANUP_FAILED' },
+      factoryResult: {
+        terminalStage: 'SANDBOX',
+        workspaceReleaseStatus: 'RELEASED',
+        sandboxCleanupFailureCode: 'SANDBOX_CLEANUP_FAILED',
+        sandboxCleanupSourceCode: 'REMOVAL_NOT_CONFIRMED',
+      },
+    });
+    await expect(
+      repository.findTechnicalCheckpointOwned({
+        ownerId,
+        sourceExecutionId: checkpoint.source.executionId,
+      }),
+    ).resolves.toMatchObject({ cleanup: null });
+    await expect(
+      repository.createTechnicalResumeAttempt(
+        technicalAttempt({
+          attemptId: 'technical-resume-cleanup-pending',
+          checkpointHash: checkpoint.checkpointHash,
+          ownerId,
+          requestId: 'request-resume-cleanup-pending',
+          startedAt: '2026-08-13T12:00:02.000Z',
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXECUTION_REPOSITORY_ERROR_CODES.CONFLICT });
   });
 });

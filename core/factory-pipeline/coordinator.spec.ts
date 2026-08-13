@@ -21,6 +21,11 @@ import {
   type CodeGeneratorAgentResult,
   type GeneratedCodeProposal,
 } from '@brq/code-generator-agent';
+import {
+  CONTROLLED_WORKSPACE_ERROR_CODES,
+  CONTROLLED_WORKSPACE_ERROR_STAGES,
+  ControlledWorkspaceError,
+} from '@brq/controlled-workspace';
 import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/filesystem';
 import {
   createExecutionEngine,
@@ -77,8 +82,10 @@ import { FACTORY_PIPELINE_ERROR_CODES, FactoryPipelineError } from './errors';
 import { projectExecutionToCodeGenerationRequest } from './projections';
 import {
   createFactoryPipelineConfigurationFixture,
+  createFactoryTechnicalBoundaryIdentityFixture,
   incrementalFactoryPipelineClock,
 } from './testing/factory-pipeline-fixtures';
+import type { FactoryTechnicalCheckpoint } from './technical-checkpoint';
 
 const EMPTY_SELECTION = { required: [], optional: [] } as const;
 const KNOWLEDGE_MANIFEST = {
@@ -132,6 +139,7 @@ function createSandboxResult(
     readonly status?: SandboxRunResult['status'];
     readonly steps?: readonly SandboxStepResult[];
     readonly failure?: SandboxFailure | null;
+    readonly cleanupFailure?: SandboxFailure | null;
   } = {},
 ): SandboxRunResult {
   const steps = input.steps ?? createSandboxStepResultsFixture();
@@ -139,7 +147,10 @@ function createSandboxResult(
   const failure = input.failure ?? null;
   return finalizeSandboxRunResult({
     request: sandboxRequest,
-    policy: createSandboxExecutionPolicyFixture({ policyId: configuration.sandbox.policyId }),
+    policy: createSandboxExecutionPolicyFixture({
+      policyId: configuration.sandbox.policyId,
+      version: configuration.sandbox.policyVersion,
+    }),
     effectiveLimits: DEFAULT_SANDBOX_LIMITS,
     runtime: createSandboxRuntimeObservationFixture(),
     status,
@@ -149,6 +160,7 @@ function createSandboxResult(
     steps,
     resourceOutcome: 'NONE',
     failure,
+    cleanupFailure: input.cleanupFailure ?? null,
   });
 }
 
@@ -315,6 +327,7 @@ async function createHarness(
     workspace,
     sandboxRunner,
     configuration,
+    technicalBoundaryIdentity: createFactoryTechnicalBoundaryIdentityFixture(configuration),
     logger,
     now: incrementalFactoryPipelineClock(),
   });
@@ -418,6 +431,7 @@ async function createRealOfflineGraphHarness(input: {
     workspace: createFilesystemControlledWorkspace({ rootPath, logger }),
     sandboxRunner: { run: sandboxRun },
     configuration,
+    technicalBoundaryIdentity: createFactoryTechnicalBoundaryIdentityFixture(configuration),
     logger,
     now: incrementalFactoryPipelineClock(),
   });
@@ -547,6 +561,108 @@ afterAll(async () => {
 });
 
 describe('FactoryPipelineCoordinator', () => {
+  it('blocks every paid execution boundary when direct execute preflight fails', async () => {
+    const executionExecute = vi.fn(async () => execution);
+    const codeGeneratorExecute = vi.fn(async () => generated);
+    const sandboxRun = vi.fn();
+    const preflight = vi.fn(async () => {
+      throw Object.assign(new Error('private Docker diagnostics'), {
+        code: SANDBOX_RUNNER_ERROR_CODES.RUNTIME_UNAVAILABLE,
+        sourceCode: 'DOCKER_DAEMON_UNAVAILABLE',
+      });
+    });
+    const { coordinator } = await createHarness({
+      executionEngine: { execute: executionExecute },
+      codeGeneratorAgent: { execute: codeGeneratorExecute },
+      sandboxRunner: { preflight, run: sandboxRun },
+    });
+
+    await expect(coordinator.execute(request)).rejects.toMatchObject({
+      code: FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
+      stage: 'SANDBOX_PREPARE',
+      sourceCode: 'DOCKER_DAEMON_UNAVAILABLE',
+    });
+
+    expect(preflight).toHaveBeenCalledOnce();
+    expect(executionExecute).not.toHaveBeenCalled();
+    expect(codeGeneratorExecute).not.toHaveBeenCalled();
+    expect(sandboxRun).not.toHaveBeenCalled();
+  });
+
+  it('runs the authoritative preflight exactly once during a normal direct execution', async () => {
+    const preflight = vi.fn(async () => undefined);
+    const { coordinator } = await createHarness({
+      sandboxRunner: {
+        preflight,
+        run: async (sandboxRequest) => createSandboxResult(sandboxRequest),
+      },
+    });
+
+    await expect(coordinator.execute(request)).resolves.toMatchObject({ status: 'SUCCESS' });
+
+    expect(preflight).toHaveBeenCalledOnce();
+  });
+
+  it('checkpoints only an approved bundle and resumes workspace/sandbox without agents', async () => {
+    const executionExecute = vi.fn(async () => execution);
+    const codeGeneratorExecute = vi.fn(async () => generated);
+    const harness = await createHarness({
+      executionEngine: { execute: executionExecute },
+      codeGeneratorAgent: { execute: codeGeneratorExecute },
+    });
+    let checkpoint: FactoryTechnicalCheckpoint | undefined;
+
+    const sourceResult = await harness.coordinator.execute(request, {
+      onTechnicalCheckpoint: (observed) => {
+        checkpoint = observed;
+      },
+    });
+
+    expect(sourceResult.status).toBe('SUCCESS');
+    expect(checkpoint).toBeDefined();
+    expect(checkpoint?.profileValidation.compatible).toBe(true);
+    expect(checkpoint?.bundle.hashes.bundleHash).toBe(sourceResult.hashes.bundleHash);
+    expect(executionExecute).toHaveBeenCalledOnce();
+    expect(codeGeneratorExecute).toHaveBeenCalledOnce();
+
+    const resumed = await harness.coordinator.resumeTechnical!(checkpoint!, {
+      attemptId: 'technical-resume-123e4567-e89b-42d3-a456-426614174000',
+    });
+
+    expect(resumed).toMatchObject({
+      status: 'SUCCESS',
+      checkpointHash: checkpoint?.checkpointHash,
+      sourceExecutionId: execution.executionId,
+    });
+    expect(executionExecute).toHaveBeenCalledOnce();
+    expect(codeGeneratorExecute).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a tampered checkpoint before workspace and does not invoke agents', async () => {
+    const executionExecute = vi.fn(async () => execution);
+    const codeGeneratorExecute = vi.fn(async () => generated);
+    const harness = await createHarness({
+      executionEngine: { execute: executionExecute },
+      codeGeneratorAgent: { execute: codeGeneratorExecute },
+    });
+    let checkpoint: FactoryTechnicalCheckpoint | undefined;
+    await harness.coordinator.execute(request, {
+      onTechnicalCheckpoint: (observed) => {
+        checkpoint = observed;
+      },
+    });
+    const tampered = structuredClone(checkpoint!) as Mutable<FactoryTechnicalCheckpoint>;
+    tampered.bundle.files[0]!.content += '\n// tampered';
+
+    await expect(
+      harness.coordinator.resumeTechnical!(tampered, {
+        attemptId: 'technical-resume-123e4567-e89b-42d3-a456-426614174001',
+      }),
+    ).rejects.toMatchObject({ reasonCode: 'CHECKPOINT_INVALID' });
+    expect(executionExecute).toHaveBeenCalledOnce();
+    expect(codeGeneratorExecute).toHaveBeenCalledOnce();
+  });
+
   it('runs the real greenfield graph offline with trusted intent rules and CREATE eligibility', async () => {
     const harness = await createRealOfflineGraphHarness({
       productOwnerSpecification: createProductOwnerSpecification(),
@@ -1319,7 +1435,7 @@ describe('FactoryPipelineCoordinator', () => {
     expect(JSON.stringify(result)).not.toContain('private stdout-only test marker');
   });
 
-  it('does not attach an earlier TypeScript summary to an overriding cleanup failure', async () => {
+  it('keeps the primary TypeScript failure terminal and projects cleanup separately', async () => {
     const diagnosticSummary = {
       diagnosticCount: 1,
       diagnosticCodes: [2322],
@@ -1369,16 +1485,22 @@ describe('FactoryPipelineCoordinator', () => {
           createSandboxResult(sandboxRequest, {
             status: 'FAILED',
             steps,
-            failure: cleanupFailure,
+            failure: typecheckFailure,
+            cleanupFailure,
           }),
       },
     });
 
     const result = await coordinator.execute(request);
-    expect(result.terminalStage).toBe('SANDBOX');
-    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
-    expect(result.failure?.reasonCode).toBeNull();
-    expect(result.failure?.diagnosticSummary).toBeNull();
+    expect(result.terminalStage).toBe('SANDBOX_TYPECHECK');
+    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED);
+    expect(result.failure?.reasonCode).toBe('TYPESCRIPT_DIAGNOSTICS');
+    expect(result.failure?.diagnosticSummary).toEqual(diagnosticSummary);
+    expect(result.sandbox.cleanupFailure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+      stage: 'CLEANUP',
+      sourceCode: 'CONTAINER_REMAINS',
+    });
     expect(
       result.stages.find((candidate) => candidate.stageId === 'SANDBOX_TYPECHECK')
         ?.diagnosticSummary,
@@ -1516,6 +1638,39 @@ describe('FactoryPipelineCoordinator', () => {
     expect(sandboxRun).not.toHaveBeenCalled();
   });
 
+  it('never reports NOT_REQUIRED when materialization itself reports cleanup failure', async () => {
+    const rootPath = await mkdtemp(path.join(tmpdir(), 'brq-factory-pipeline-'));
+    temporaryRoots.push(rootPath);
+    const realWorkspace = createFilesystemControlledWorkspace({ rootPath, logger });
+    const release = vi.fn(realWorkspace.release);
+    const sandboxRun = vi.fn();
+    const { coordinator } = await createHarness({
+      workspace: {
+        plan: realWorkspace.plan,
+        materialize: async () => {
+          throw new ControlledWorkspaceError('private cleanup diagnostics', {
+            code: CONTROLLED_WORKSPACE_ERROR_CODES.CLEANUP_FAILED,
+            stage: CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP,
+            workspaceId: `workspace-${'a'.repeat(32)}`,
+          });
+        },
+        release,
+      },
+      sandboxRunner: { run: sandboxRun },
+    });
+
+    const result = await coordinator.execute(request);
+
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      terminalStage: 'WORKSPACE_MATERIALIZATION',
+      workspace: { materializationStatus: 'FAILED', releaseStatus: 'FAILED' },
+    });
+    expect(release).not.toHaveBeenCalled();
+    expect(sandboxRun).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private cleanup diagnostics');
+  });
+
   it('requests compensating release when a materialized workspace violates correlation', async () => {
     const rootPath = await mkdtemp(path.join(tmpdir(), 'brq-factory-pipeline-'));
     temporaryRoots.push(rootPath);
@@ -1541,8 +1696,50 @@ describe('FactoryPipelineCoordinator', () => {
     expect(result.status).toBe('FAILED');
     expect(result.terminalStage).toBe('WORKSPACE_MATERIALIZATION');
     expect(result.failure?.code).toBe(FACTORY_PIPELINE_ERROR_CODES.CONTRACT_VIOLATION);
+    expect(result.workspace.releaseStatus).toBe('RELEASED');
     expect(release).toHaveBeenCalledOnce();
     await expect(access(path.join(rootPath, materialized!.workspaceId))).rejects.toBeDefined();
+  });
+
+  it('keeps invalid materialization primary and marks failed compensating release fail-closed', async () => {
+    const rootPath = await mkdtemp(path.join(tmpdir(), 'brq-factory-pipeline-'));
+    temporaryRoots.push(rootPath);
+    const realWorkspace = createFilesystemControlledWorkspace({ rootPath, logger });
+    const sandboxRun = vi.fn();
+    const release = vi.fn(async () => {
+      throw new Error('private compensating release details');
+    });
+    const { coordinator } = await createHarness({
+      workspace: {
+        plan: realWorkspace.plan,
+        materialize: async (plan, options) => {
+          const materialized = await realWorkspace.materialize(plan, options);
+          const tampered = structuredClone(materialized) as Mutable<typeof materialized>;
+          tampered.source.bundleHash = '0'.repeat(64);
+          return tampered;
+        },
+        release,
+      },
+      sandboxRunner: { run: sandboxRun },
+    });
+
+    const result = await coordinator.execute(request);
+
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      terminalStage: 'WORKSPACE_MATERIALIZATION',
+      workspace: {
+        materializationStatus: 'FAILED',
+        releaseStatus: 'FAILED',
+      },
+      failure: {
+        code: FACTORY_PIPELINE_ERROR_CODES.CONTRACT_VIOLATION,
+        stage: 'WORKSPACE_MATERIALIZATION',
+      },
+    });
+    expect(release).toHaveBeenCalledOnce();
+    expect(sandboxRun).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private compensating release details');
   });
 
   it('maps a Sandbox port error and cancellation without leaking its cause', async () => {
@@ -1559,6 +1756,10 @@ describe('FactoryPipelineCoordinator', () => {
     expect(failedResult.status).toBe('FAILED');
     expect(failedResult.terminalStage).toBe('SANDBOX_PREPARE');
     expect(failedResult.workspace.releaseStatus).toBe('RELEASED');
+    expect(failedResult.sandbox.cleanupFailure).toMatchObject({
+      code: 'SANDBOX_CLEANUP_FAILED',
+      sourceCode: 'SANDBOX_TERMINATION_UNCONFIRMED',
+    });
     expect(JSON.stringify(failedResult)).not.toContain('docker daemon private diagnostics');
 
     const controller = new AbortController();
@@ -1575,6 +1776,10 @@ describe('FactoryPipelineCoordinator', () => {
     });
     expect(cancelledResult.status).toBe('CANCELLED');
     expect(cancelledResult.workspace.releaseStatus).toBe('RELEASED');
+    expect(cancelledResult.sandbox.cleanupFailure).toMatchObject({
+      code: 'SANDBOX_CLEANUP_FAILED',
+      sourceCode: 'SANDBOX_TERMINATION_UNCONFIRMED',
+    });
   });
 
   it('maps the Docker preflight to a safe Factory error with the effective policy', async () => {

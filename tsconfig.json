@@ -8,6 +8,7 @@
     "agents/developer/**/*.ts",
     "agents/product-owner/**/*.ts",
     "agents/qa/**/*.ts",
+    "core/adaptive-orchestrator/**/*.ts",
     "core/agent-runner/**/*.ts",
     "core/ai-provider/**/*.ts",
     "core/artifact-generator/**/*.ts",

@@ -153,7 +153,7 @@ export interface FactoryTechnicalStage {
   readonly diagnosticSummary: PublicTypeScriptDiagnosticSummary | null;
   readonly resourceOutcome:
     'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN' | null;
-  readonly evidenceSource: 'OBSERVABILITY_V2' | 'FACTORY_RESULT';
+  readonly evidenceSource: 'OBSERVABILITY_V2' | 'OBSERVABILITY_V3' | 'FACTORY_RESULT';
   readonly facts: readonly FactoryTechnicalFact[];
 }
 
@@ -666,7 +666,10 @@ function createTechnicalStages(
   execution: FactoryExecutionSource,
   timeline: FactoryTimelineSource | null,
 ): readonly FactoryTechnicalStage[] {
-  const factoryTimeline = timeline?.observabilityVersion === '2.0.0' ? timeline : null;
+  const factoryTimeline =
+    timeline?.observabilityVersion === '2.0.0' || timeline?.observabilityVersion === '3.0.0'
+      ? timeline
+      : null;
   return freezeArray(
     TECHNICAL_STAGE_DEFINITIONS.flatMap((definition) => {
       const observed = factoryTimeline?.stages.find((stage) => stage.stageId === definition.id);
@@ -702,7 +705,11 @@ function createTechnicalStages(
               : null,
           resourceOutcome: persisted?.resourceOutcome ?? null,
           evidenceSource:
-            observed === undefined ? ('FACTORY_RESULT' as const) : ('OBSERVABILITY_V2' as const),
+            observed === undefined
+              ? ('FACTORY_RESULT' as const)
+              : factoryTimeline?.observabilityVersion === '3.0.0'
+                ? ('OBSERVABILITY_V3' as const)
+                : ('OBSERVABILITY_V2' as const),
           facts: technicalFacts(execution, definition.id),
         }),
       ];

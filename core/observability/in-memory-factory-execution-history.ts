@@ -4,13 +4,12 @@ import type { LogLevel } from '@brq/shared/logger/logger';
 
 import type {
   CreateInMemoryExecutionHistoryOptions,
-  ExecutionStageMetrics,
   FactoryExecutionHistoryRecorder,
   FactoryExecutionObservabilityEvent,
   FactoryExecutionObservabilitySnapshot,
+  FactoryExecutionStageMetrics,
   FactoryExecutionStage,
   FactoryExecutionTimelineStageId,
-  ObservableAgentStageId,
   ObservabilityStatus,
 } from './contracts';
 import { OBSERVABILITY_ERROR_CODES, ObservabilityError } from './errors';
@@ -22,7 +21,7 @@ import {
 import { factoryExecutionObservabilitySnapshotSchema } from './schemas';
 import { emptyStageMetrics } from './stage-metrics';
 
-export const FACTORY_OBSERVABILITY_VERSION = '2.0.0';
+export const FACTORY_OBSERVABILITY_VERSION = '3.0.0';
 
 const STAGE_ORDER = [
   'KNOWLEDGE',
@@ -36,7 +35,8 @@ const STAGE_ORDER = [
   'SANDBOX_BUILD',
   'SANDBOX_TEST',
 ] as const satisfies readonly FactoryExecutionTimelineStageId[];
-const AGENT_STAGE_ORDER = ['PRODUCT_OWNER', 'DEVELOPER', 'QA'] as const;
+const AGENT_STAGE_ORDER = ['PRODUCT_OWNER', 'DEVELOPER', 'QA', 'CODE_GENERATOR'] as const;
+type FactoryAgentStageId = (typeof AGENT_STAGE_ORDER)[number];
 const EXECUTION_ID_PATTERN = /^execution-[a-f0-9]{32}$/;
 const CAPTURED_EVENTS = new Set([
   'execution.started',
@@ -47,6 +47,7 @@ const CAPTURED_EVENTS = new Set([
   'workflow.stage.rejected',
   'workflow.failed',
   'workflow.cancelled',
+  'agent.run.provider.completed',
   'agent.run.completed',
   'response.validation.accepted',
   'response.validation.rejected',
@@ -88,7 +89,7 @@ interface MutableStage {
 interface MutableFactoryRecord {
   readonly workflowId: string;
   readonly requestId: string | null;
-  readonly agentStages: ReadonlyMap<string, ObservableAgentStageId>;
+  readonly agentStages: ReadonlyMap<string, Exclude<FactoryAgentStageId, 'CODE_GENERATOR'>>;
   executionId: string | null;
   status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
   revision: number;
@@ -96,7 +97,7 @@ interface MutableFactoryRecord {
   lastTimestampMs: number;
   readonly events: FactoryExecutionObservabilityEvent[];
   readonly stages: Map<FactoryExecutionTimelineStageId, MutableStage>;
-  readonly metrics: Map<ObservableAgentStageId, ExecutionStageMetrics>;
+  readonly metrics: Map<FactoryAgentStageId, FactoryExecutionStageMetrics>;
   summary: FactoryExecutionObservabilitySnapshot['summary'];
 }
 
@@ -155,8 +156,15 @@ function initialStages(): Map<FactoryExecutionTimelineStageId, MutableStage> {
   );
 }
 
-function initialMetrics(): Map<ObservableAgentStageId, ExecutionStageMetrics> {
-  return new Map(AGENT_STAGE_ORDER.map((stageId) => [stageId, emptyStageMetrics(stageId)]));
+function initialMetrics(): Map<FactoryAgentStageId, FactoryExecutionStageMetrics> {
+  return new Map(
+    AGENT_STAGE_ORDER.map((stageId) => [
+      stageId,
+      stageId === 'CODE_GENERATOR'
+        ? { ...emptyStageMetrics('QA'), stageId }
+        : emptyStageMetrics(stageId),
+    ]),
+  );
 }
 
 function factoryStageId(value: unknown): FactoryExecutionTimelineStageId | null {
@@ -183,7 +191,7 @@ function factoryStageId(value: unknown): FactoryExecutionTimelineStageId | null 
   return null;
 }
 
-function totalTokens(metrics: readonly ExecutionStageMetrics[]): number {
+function totalTokens(metrics: readonly { readonly totalTokens: number | null }[]): number {
   return metrics.reduce((total, stage) => {
     const next = total + (stage.totalTokens ?? 0);
     if (!Number.isSafeInteger(next))
@@ -311,9 +319,14 @@ export function createInMemoryFactoryExecutionHistory(
   const stageForContext = (
     record: MutableFactoryRecord,
     context: Readonly<Record<string, unknown>>,
-  ): ObservableAgentStageId | null => {
+  ): FactoryAgentStageId | null => {
     const explicit = asString(context.agent);
-    if (explicit === 'PRODUCT_OWNER' || explicit === 'DEVELOPER' || explicit === 'QA') {
+    if (
+      explicit === 'PRODUCT_OWNER' ||
+      explicit === 'DEVELOPER' ||
+      explicit === 'QA' ||
+      explicit === 'CODE_GENERATOR'
+    ) {
       return explicit;
     }
     const agentExecutionId = asString(context.agentExecutionId);
@@ -328,15 +341,19 @@ export function createInMemoryFactoryExecutionHistory(
     const stageId = stageForContext(record, context);
     if (stageId === null) return;
     const current = record.metrics.get(stageId)!;
-    if (event === 'agent.run.completed') {
+    if (event === 'agent.run.provider.completed' || event === 'agent.run.completed') {
       const inputTokens = asMetric(context.usageInputCount);
       const outputTokens = asMetric(context.usageOutputCount);
       const combined =
         inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens;
       record.metrics.set(stageId, {
         ...current,
-        promptBytes: asMetric(context.promptBytes),
-        completionBytes: asMetric(context.bytesReceived),
+        ...(event === 'agent.run.completed'
+          ? {
+              promptBytes: asMetric(context.promptBytes),
+              completionBytes: asMetric(context.bytesReceived),
+            }
+          : {}),
         inputTokens,
         outputTokens,
         totalTokens: combined !== null && Number.isSafeInteger(combined) ? combined : null,
@@ -551,6 +568,13 @@ export function createInMemoryFactoryExecutionHistory(
                 ? 'SKIPPED'
                 : 'FAILED';
         finishStage(record, stage, status, at, errorCode(context));
+        if (stage === 'CODE_GENERATOR') {
+          record.metrics.set(stage, {
+            ...record.metrics.get(stage)!,
+            durationMs: record.stages.get(stage)!.durationMs,
+          });
+          touch(record);
+        }
       }
     },
 

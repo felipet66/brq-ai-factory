@@ -3,7 +3,12 @@ import {
   sanitizeCodeGeneratorSourceReasonCode,
   type CodeGeneratorAgentResult,
 } from '@brq/code-generator-agent';
-import type { WorkspaceMaterializationResult, WorkspacePlan } from '@brq/controlled-workspace';
+import {
+  CONTROLLED_WORKSPACE_ERROR_STAGES,
+  ControlledWorkspaceError,
+  type WorkspaceMaterializationResult,
+  type WorkspacePlan,
+} from '@brq/controlled-workspace';
 import {
   assertFactoryExecutionProfilePreflight,
   createFactoryExecutionProfileValidator,
@@ -44,6 +49,7 @@ import {
   projectFactoryGenerationSummary,
   projectFactoryPipelineProvenance,
   projectFactorySandboxSummary,
+  projectFactorySandboxSummaryWithUnconfirmedTermination,
   projectFactorySourceExecutionSummary,
   projectFactoryWorkspaceSummary,
   projectGeneratedBundleToWorkspacePlanRequest,
@@ -54,6 +60,8 @@ import { sanitizeFactoryProfileRuleId, sanitizeTechnicalCode } from './sanitizat
 import { factoryPipelineConfigurationSchema } from './schemas';
 import { createFactoryStageLedger } from './stage-ledger';
 import type { FactoryPipelineStageId } from './state-machine';
+import { createFactoryTechnicalCheckpoint } from './technical-checkpoint';
+import { createFactoryTechnicalResumeExecutor } from './technical-resume';
 
 interface PrimaryOutcome {
   readonly status: Exclude<FactoryPipelineStatus, 'SUCCESS'>;
@@ -121,6 +129,13 @@ function cancellationRequested(error: unknown, signal: AbortSignal | undefined):
   if (signal?.aborted) return true;
   const code = sourceCode(error)?.toUpperCase() ?? '';
   return code.includes('CANCELLED') || code.includes('CANCELED');
+}
+
+function workspaceCleanupFailed(error: unknown): boolean {
+  return (
+    error instanceof ControlledWorkspaceError &&
+    error.stage === CONTROLLED_WORKSPACE_ERROR_STAGES.CLEANUP
+  );
 }
 
 function assertNotAborted(
@@ -312,6 +327,16 @@ export function createFactoryPipelineCoordinator(
   );
   const logger = options.logger ?? createLogger();
   const observe = options.now ?? (() => performance.timeOrigin + performance.now());
+  const technicalResumeExecutor =
+    options.technicalBoundaryIdentity === undefined
+      ? null
+      : createFactoryTechnicalResumeExecutor({
+          workspace: options.workspace,
+          sandboxRunner: options.sandboxRunner,
+          configuration,
+          boundaryIdentity: options.technicalBoundaryIdentity,
+          now: observe,
+        });
 
   const runPreflight = async (
     preflightOptions: FactoryPipelinePreflightOptions = {},
@@ -337,12 +362,20 @@ export function createFactoryPipelineCoordinator(
 
   return {
     preflight: runPreflight,
+    ...(technicalResumeExecutor === null
+      ? {}
+      : { resumeTechnical: technicalResumeExecutor.resumeTechnical.bind(technicalResumeExecutor) }),
     async execute(
       rawRequest: ExecutionRequest,
       runOptions: FactoryPipelineRunOptions = {},
     ): Promise<FactoryExecutionResult> {
       const request = parseRequest(rawRequest);
       const identity = deriveExecutionIdentity(request);
+      // This is the authoritative paid-work boundary. Decorators may expose preflight for
+      // diagnostics, but every execution must pass it here before the Execution Engine runs.
+      await runPreflight(
+        runOptions.signal === undefined ? undefined : { signal: runOptions.signal },
+      );
       let lastTimestamp = 0;
       const timestamp = (): number => {
         const observed = observe();
@@ -447,6 +480,7 @@ export function createFactoryPipelineCoordinator(
       let materializationCandidate: WorkspaceMaterializationResult | null = null;
       let sandbox: SandboxRunResult | null = null;
       let sandboxFallbackStatus: 'SKIPPED' | 'FAILED' | 'CANCELLED' = 'SKIPPED';
+      let sandboxTerminationUnconfirmed = false;
       let releaseStatus: 'RELEASED' | 'FAILED' | 'NOT_REQUIRED' = 'NOT_REQUIRED';
 
       const startStage = (stage: FactoryPipelineStageId): void => {
@@ -574,6 +608,7 @@ export function createFactoryPipelineCoordinator(
             );
             primary = { status: 'FAILED', terminalStage: 'CODE_PROFILE_VALIDATION', failure };
           } else {
+            assertNotAborted(runOptions.signal, 'CODE_PROFILE_VALIDATION', execution.executionId);
             finishStage(
               'CODE_PROFILE_VALIDATION',
               'SUCCESS',
@@ -633,6 +668,49 @@ export function createFactoryPipelineCoordinator(
         }
       }
 
+      if (
+        primary === null &&
+        codeGeneratorResult?.outcome === 'GENERATED' &&
+        profileValidation?.compatible === true &&
+        workspacePlan !== null &&
+        runOptions.onTechnicalCheckpoint !== undefined
+      ) {
+        if (options.technicalBoundaryIdentity === undefined) {
+          throw new FactoryPipelineError(
+            'A composição não declarou as identidades exigidas pelo checkpoint técnico.',
+            {
+              code: FACTORY_PIPELINE_ERROR_CODES.TECHNICAL_CHECKPOINT_FAILED,
+              stage: 'TECHNICAL_CHECKPOINT',
+              executionId: execution.executionId,
+              reasonCode: 'TECHNICAL_BOUNDARY_IDENTITY_MISSING',
+            },
+          );
+        }
+        try {
+          const checkpoint = createFactoryTechnicalCheckpoint({
+            requestContext: {
+              ...(request.requestId === undefined ? {} : { requestId: request.requestId }),
+              ...(request.traceId === undefined ? {} : { traceId: request.traceId }),
+            },
+            bundle: codeGeneratorResult.bundle,
+            profileValidation,
+            configuration,
+            boundaryIdentity: options.technicalBoundaryIdentity,
+            workspacePlan,
+          });
+          await runOptions.onTechnicalCheckpoint(checkpoint);
+        } catch (error) {
+          if (error instanceof FactoryPipelineError) throw error;
+          throw new FactoryPipelineError('O checkpoint técnico não pôde ser persistido.', {
+            code: FACTORY_PIPELINE_ERROR_CODES.TECHNICAL_CHECKPOINT_FAILED,
+            stage: 'TECHNICAL_CHECKPOINT',
+            executionId: execution.executionId,
+            reasonCode: 'TECHNICAL_CHECKPOINT_PERSISTENCE_FAILED',
+            cause: error,
+          });
+        }
+      }
+
       if (primary === null && workspacePlan !== null) {
         startStage('WORKSPACE_MATERIALIZATION');
         try {
@@ -649,10 +727,17 @@ export function createFactoryPipelineCoordinator(
         } catch (error) {
           if (materializationCandidate !== null && workspace === null) {
             try {
-              await options.workspace.release(materializationCandidate);
+              parseWorkspaceReleaseBoundary(
+                await options.workspace.release(materializationCandidate),
+                materializationCandidate,
+              );
+              releaseStatus = 'RELEASED';
             } catch {
-              // The primary boundary violation remains authoritative; cleanup is best effort here.
+              // Preserve the primary boundary violation while making cleanup uncertainty fail-closed.
+              releaseStatus = 'FAILED';
             }
+          } else if (workspaceCleanupFailed(error)) {
+            releaseStatus = 'FAILED';
           }
           const cancelled = cancellationRequested(error, runOptions.signal);
           const failure = failureFor(
@@ -727,6 +812,7 @@ export function createFactoryPipelineCoordinator(
             );
           }
         } catch (error) {
+          sandboxTerminationUnconfirmed = true;
           const cancelled = cancellationRequested(error, runOptions.signal);
           const failure = failureFor(
             'SANDBOX_PREPARE',
@@ -805,7 +891,9 @@ export function createFactoryPipelineCoordinator(
           releaseStatus,
           materialization: workspace,
         }),
-        sandbox: projectFactorySandboxSummary(sandbox, sandboxFallbackStatus),
+        sandbox: sandboxTerminationUnconfirmed
+          ? projectFactorySandboxSummaryWithUnconfirmedTermination(sandbox, sandboxFallbackStatus)
+          : projectFactorySandboxSummary(sandbox, sandboxFallbackStatus),
         provenance: projectFactoryPipelineProvenance({
           execution,
           codeGeneratorResult,

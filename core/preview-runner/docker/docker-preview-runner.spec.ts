@@ -8,6 +8,7 @@ import {
 } from '@brq/preview-artifact/testing';
 import { describe, expect, it } from 'vitest';
 
+import type { PreviewRuntimeObservation } from '../contracts';
 import { createResolvedPreviewFixture } from '../testing/preview-runner-fixtures';
 import type {
   DockerCommandExecutor,
@@ -50,6 +51,7 @@ class FakeDockerExecutor implements DockerCommandExecutor {
   previewId = '';
   executionId = '';
   artifactId = '';
+  expiresAtEpochSeconds = '';
   imageId = IMAGE_ID;
 
   async execute(request: DockerCommandRequest): Promise<DockerCommandResult> {
@@ -125,6 +127,7 @@ class FakeDockerExecutor implements DockerCommandExecutor {
       this.previewId = labelValues['org.brq.preview.id'] ?? '';
       this.executionId = labelValues['org.brq.preview.execution'] ?? '';
       this.artifactId = labelValues['org.brq.preview.artifact'] ?? '';
+      this.expiresAtEpochSeconds = labelValues['org.brq.preview.expires'] ?? '';
       return commandResult({ stdout: `${CONTAINER_ID}\n` });
     }
     if (args[0] === 'container' && args[1] === 'start') {
@@ -159,7 +162,9 @@ class FakeDockerExecutor implements DockerCommandExecutor {
   private containerInspection(): Record<string, unknown> {
     return {
       Id: CONTAINER_ID,
+      Image: IMAGE_ID,
       Config: {
+        Image: IMAGE_REFERENCE,
         User: '65532:65532',
         ExposedPorts: null,
         Entrypoint: ['/opt/brq/preview/idle'],
@@ -171,6 +176,7 @@ class FakeDockerExecutor implements DockerCommandExecutor {
           'org.brq.preview.id': this.previewId,
           'org.brq.preview.execution': this.executionId,
           'org.brq.preview.artifact': this.artifactId,
+          'org.brq.preview.expires': this.expiresAtEpochSeconds,
         },
       },
       State: { Running: this.started },
@@ -284,6 +290,25 @@ async function createHarness(
     options,
     runner,
     request: createResolvedPreviewFixture().request,
+  };
+}
+
+function rediscoveryInspectionRequest(
+  request: ReturnType<typeof createResolvedPreviewFixture>['request'],
+  runtime: PreviewRuntimeObservation | null,
+) {
+  return {
+    previewId: request.previewId,
+    executionId: request.executionId,
+    expected: {
+      artifactId: request.artifact.artifactId,
+      expiresAt: request.expiresAt,
+      sessionRevision: 2,
+      previewSessionHash: request.hashes.previewSessionHash,
+      policy: request.policy,
+      limits: request.effectiveLimits,
+      runtime,
+    },
   };
 }
 
@@ -412,6 +437,132 @@ describe('DockerPreviewRunner', () => {
     expect(
       executor.requests.filter((call) => call.args[0] === 'network' && call.args[1] === 'rm'),
     ).toHaveLength(1);
+  });
+
+  it('rediscovers a healthy owned runtime after runner memory is lost', async () => {
+    const { createRelay, executor, healthProbe, options, runner, request } = await createHarness();
+    const started = await runner.start(request);
+    const restartedRunner = createDockerPreviewRunnerWithDependencies(options, {
+      executor,
+      healthProbe,
+      createRelay,
+      randomId: () => 'unused-after-restart',
+      sleep: async () => undefined,
+    });
+
+    await expect(
+      restartedRunner.inspect(rediscoveryInspectionRequest(request, started.runtime)),
+    ).resolves.toMatchObject({ status: 'RUNNING', health: 'HEALTHY', runtime: started.runtime });
+    expect(
+      restartedRunner.resolveGatewayTarget({
+        previewId: request.previewId,
+        executionId: request.executionId,
+      }),
+    ).toMatchObject({ host: '127.0.0.1', expiresAt: request.expiresAt });
+    expect(executor.requests.some((call) => call.args[1] === 'rm')).toBe(false);
+  });
+
+  it('confirms transient inspection health before preserving a rediscovered runtime', async () => {
+    const { createRelay, executor, options, runner, request } = await createHarness();
+    const started = await runner.start(request);
+    let checks = 0;
+    const restartedRunner = createDockerPreviewRunnerWithDependencies(options, {
+      executor,
+      healthProbe: {
+        async check() {
+          checks += 1;
+          return checks >= 2;
+        },
+      },
+      createRelay,
+      randomId: () => 'unused-after-restart',
+      sleep: async () => undefined,
+    });
+
+    await expect(
+      restartedRunner.inspect(rediscoveryInspectionRequest(request, started.runtime)),
+    ).resolves.toMatchObject({ status: 'RUNNING', health: 'HEALTHY' });
+    expect(checks).toBe(2);
+    expect(executor.requests.some((call) => call.args[1] === 'rm')).toBe(false);
+  });
+
+  it('reports persistent inspection health failure without adopting or removing the runtime', async () => {
+    const { createRelay, executor, options, runner, request } = await createHarness();
+    const started = await runner.start(request);
+    let checks = 0;
+    const restartedRunner = createDockerPreviewRunnerWithDependencies(options, {
+      executor,
+      healthProbe: {
+        async check() {
+          checks += 1;
+          return false;
+        },
+      },
+      createRelay,
+      randomId: () => 'unused-after-restart',
+      sleep: async () => undefined,
+    });
+
+    await expect(
+      restartedRunner.inspect(rediscoveryInspectionRequest(request, started.runtime)),
+    ).resolves.toMatchObject({ status: 'UNHEALTHY', health: 'UNHEALTHY' });
+    expect(checks).toBe(3);
+    expect(
+      restartedRunner.resolveGatewayTarget({
+        previewId: request.previewId,
+        executionId: request.executionId,
+      }),
+    ).toBeNull();
+    expect(executor.requests.some((call) => call.args[1] === 'rm')).toBe(false);
+  });
+
+  it('fails closed without cleanup when rediscovered ownership is unsafe', async () => {
+    const { createRelay, executor, healthProbe, options, runner, request } = await createHarness();
+    const started = await runner.start(request);
+    executor.networkOwnershipToken = 'foreign-preview-ownership-0001';
+    const restartedRunner = createDockerPreviewRunnerWithDependencies(options, {
+      executor,
+      healthProbe,
+      createRelay,
+      randomId: () => 'unused-after-restart',
+      sleep: async () => undefined,
+    });
+
+    await expect(
+      restartedRunner.inspect(rediscoveryInspectionRequest(request, started.runtime)),
+    ).rejects.toMatchObject({
+      code: 'PREVIEW_ARTIFACT_INTEGRITY_MISMATCH',
+      stage: 'RECONCILIATION',
+      sourceCode: 'RUNTIME_REDISCOVERY_MISMATCH',
+    });
+    expect(executor.requests.some((call) => call.args[1] === 'rm')).toBe(false);
+  });
+
+  it('distinguishes real absence from partial rediscovery without destructive cleanup', async () => {
+    const { createRelay, executor, healthProbe, options, runner, request } = await createHarness();
+    const started = await runner.start(request);
+    const expected = rediscoveryInspectionRequest(request, started.runtime);
+    const restartedRunner = createDockerPreviewRunnerWithDependencies(options, {
+      executor,
+      healthProbe,
+      createRelay,
+      randomId: () => 'unused-after-restart',
+      sleep: async () => undefined,
+    });
+
+    executor.containerRemoved = true;
+    await expect(restartedRunner.inspect(expected)).rejects.toMatchObject({
+      code: 'PREVIEW_RUNTIME_LOST',
+      stage: 'RECONCILIATION',
+      sourceCode: 'RUNTIME_REDISCOVERY_PARTIAL',
+    });
+    executor.networkRemoved = true;
+    await expect(restartedRunner.inspect(expected)).resolves.toMatchObject({
+      status: 'MISSING',
+      health: 'NOT_APPLICABLE',
+      runtime: null,
+    });
+    expect(executor.requests.some((call) => call.args[1] === 'rm')).toBe(false);
   });
 
   it('fails closed instead of removing orphan resources with divergent ownership', async () => {

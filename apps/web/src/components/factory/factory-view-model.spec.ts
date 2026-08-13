@@ -16,6 +16,7 @@ import {
   factoryResultFixture,
   factoryTimelineFixture,
   factoryTimelineV2Fixture,
+  factoryTimelineV3Fixture,
 } from './factory-view-model.spec.fixtures';
 
 function timelineWithStageStatus(
@@ -132,6 +133,28 @@ describe('FactoryViewModel', () => {
       failedTechnicalStageId: null,
     });
     expectDeeplyFrozen(factory.technicalStages);
+  });
+
+  it('uses Observability v3 as technical evidence without dropping Code Generator metrics', () => {
+    const timeline = factoryTimelineV3Fixture();
+    const model = createFactoryViewModel({
+      execution: factoryExecutionFixture({ factoryResult: factoryResultFixture() }),
+      timeline,
+    });
+
+    expect(model.technicalStages).toHaveLength(7);
+    expect(
+      model.technicalStages
+        .filter((stage) => stage.id !== 'CODE_PROFILE_VALIDATION')
+        .every((stage) => stage.evidenceSource === 'OBSERVABILITY_V3'),
+    ).toBe(true);
+    expect(
+      model.technicalStages.find((stage) => stage.id === 'CODE_PROFILE_VALIDATION'),
+    ).toMatchObject({ evidenceSource: 'FACTORY_RESULT' });
+    expect(timeline.stageMetrics[3]).toMatchObject({
+      stageId: 'CODE_GENERATOR',
+      totalTokens: 150,
+    });
   });
 
   it('maps v2 Factory terminal evidence into the allowlisted activity feed', () => {

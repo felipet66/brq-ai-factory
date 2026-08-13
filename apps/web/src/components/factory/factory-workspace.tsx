@@ -8,6 +8,7 @@ import { AgentStation } from './agent-station';
 import { resolveAgentVisualState, type AgentVisualPresentation } from './agent-visual-state';
 import { ExecutionHeader } from './execution-header';
 import { ExecutionRerunControl } from './execution-rerun-control';
+import { TechnicalResumeControl } from './technical-resume-control';
 import { FactoryActivityFeed } from './factory-activity-feed';
 import { FactoryProgress } from './factory-progress';
 import { FactoryReadinessTrace } from './factory-readiness-trace';
@@ -107,6 +108,18 @@ export function FactoryWorkspace({
 
       <FactoryReadinessTrace trace={model.readinessTrace} />
       <FactoryTechnicalPipeline stages={model.technicalStages} />
+      <TechnicalResumeControl
+        executionId={model.execution.executionId}
+        eligible={
+          model.execution.status === 'FAILED' &&
+          model.technicalStages.some(
+            (stage) => stage.id === 'CODE_GENERATOR' && stage.sourceStatus === 'SUCCESS',
+          ) &&
+          model.technicalStages.some(
+            (stage) => stage.id === 'CODE_PROFILE_VALIDATION' && stage.sourceStatus === 'SUCCESS',
+          )
+        }
+      />
       <ExecutionRerunControl
         executionId={model.execution.executionId}
         eligible={

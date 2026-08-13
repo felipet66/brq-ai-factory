@@ -7,7 +7,14 @@ import {
   loadCodeGeneratorPromptAssets,
   type CodeGeneratorAgent,
 } from '@brq/code-generator-agent';
-import type { ControlledWorkspace } from '@brq/controlled-workspace';
+import {
+  calculateWorkspaceConfigurationHash,
+  calculateWorkspacePolicyHash,
+  CONTROLLED_WORKSPACE_CONTRACT_VERSION,
+  CONTROLLED_WORKSPACE_VERSION,
+  resolveControlledWorkspaceLimits,
+  type ControlledWorkspace,
+} from '@brq/controlled-workspace';
 import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/filesystem';
 import { createDeveloperAgent, loadDeveloperPromptAssets } from '@brq/developer-agent';
 import { createExecutionEngine, type ExecutionEngine } from '@brq/execution-engine';
@@ -28,15 +35,18 @@ import {
   createCacheOnlyExecutionDispatcher,
   createExecutionRerunDispatcher,
   createSnapshottingExecutionDispatcher,
+  createTechnicalResumeDispatcher,
   createExecutionWorker,
   type ExecutionDispatcher,
   type ExecutionRerunDispatcher,
+  type TechnicalResumeDispatcher,
   type ExecutionWorker,
 } from '@brq/execution-worker';
 import {
   createFactoryPipelineCoordinator,
   type FactoryPipelineConfiguration,
   type FactoryPipelineCoordinator,
+  type FactoryTechnicalBoundaryIdentity,
 } from '@brq/factory-pipeline';
 import { createKnowledgeLoader, type KnowledgeSource } from '@brq/knowledge-loader';
 import {
@@ -56,7 +66,15 @@ import { createPromptBuilder } from '@brq/prompt-builder';
 import { createDeterministicQAAgent, createQAAgent, loadQAPromptAssets } from '@brq/qa-agent';
 import { createResponseValidator } from '@brq/response-validator';
 import { createDevelopmentResponseValidator } from '@brq/response-validator/development';
-import type { SandboxRunner } from '@brq/sandbox-runner';
+import {
+  calculateSandboxCommandPolicyHash,
+  calculateSandboxLimitsHash,
+  calculateSandboxPolicyHash,
+  resolveSandboxLimits,
+  SANDBOX_RUNNER_CONTRACT_VERSION,
+  SANDBOX_RUNNER_VERSION,
+  type SandboxRunner,
+} from '@brq/sandbox-runner';
 import {
   createDockerArtifactCapturingSandboxRunner,
   createDockerSandboxRunner,
@@ -107,6 +125,7 @@ export interface ApplicationFactoryRuntimeOptions extends Omit<
   readonly controlledWorkspace?: ControlledWorkspace;
   readonly sandboxRunner?: SandboxRunner;
   readonly factoryConfiguration?: FactoryPipelineConfiguration;
+  readonly technicalBoundaryIdentity?: FactoryTechnicalBoundaryIdentity;
   readonly previewArtifactIntegration?: FactoryPreviewArtifactIntegration;
 }
 
@@ -303,7 +322,13 @@ function resolveFactoryBoundaries(
   options: ApplicationFactoryRuntimeOptions,
   logger: Logger,
   now: () => number,
-): { readonly workspace: ControlledWorkspace; readonly sandboxRunner: SandboxRunner } {
+  factoryConfiguration: FactoryPipelineConfiguration,
+  codeGeneratorAssetBundleHash: string | undefined,
+): {
+  readonly workspace: ControlledWorkspace;
+  readonly sandboxRunner: SandboxRunner;
+  readonly technicalBoundaryIdentity?: FactoryTechnicalBoundaryIdentity;
+} {
   const hasWorkspace = options.controlledWorkspace !== undefined;
   const hasSandbox = options.sandboxRunner !== undefined;
   if (hasWorkspace !== hasSandbox) {
@@ -315,12 +340,56 @@ function resolveFactoryBoundaries(
     return Object.freeze({
       workspace: options.controlledWorkspace,
       sandboxRunner: options.sandboxRunner,
+      ...(options.technicalBoundaryIdentity === undefined
+        ? {}
+        : { technicalBoundaryIdentity: options.technicalBoundaryIdentity }),
     });
   }
 
   const configuration = resolveFactorySandboxRuntimeConfiguration(
     options.environment ?? process.env,
   );
+  if (codeGeneratorAssetBundleHash === undefined) {
+    throw new TypeError(
+      'A composição Docker exige a identidade explícita dos assets do Code Generator.',
+    );
+  }
+  const workspaceLimits = resolveControlledWorkspaceLimits();
+  const sandboxLimits = resolveSandboxLimits(factoryConfiguration.sandbox.limits);
+  const imageDigest = configuration.image.reference.split('@')[1];
+  if (imageDigest === undefined) {
+    throw new TypeError('A referência da imagem Docker não contém digest imutável.');
+  }
+  const runtimeIdentity = Object.freeze({
+    adapter: 'DOCKER',
+    engineName: 'DOCKER_ENGINE',
+    imageReference: configuration.image.reference,
+    imageDigest,
+    imageId: configuration.image.expectedImageId,
+    platform: configuration.image.platform,
+    runtimeName: configuration.policy.runtime.name,
+    runtimeVersion: configuration.policy.runtime.version,
+    toolchainVersions: configuration.image.toolchainVersions,
+  });
+  const technicalBoundaryIdentity: FactoryTechnicalBoundaryIdentity = Object.freeze({
+    codeGeneratorAssetBundleHash,
+    workspace: Object.freeze({
+      version: CONTROLLED_WORKSPACE_VERSION,
+      contractVersion: CONTROLLED_WORKSPACE_CONTRACT_VERSION,
+      policyHash: calculateWorkspacePolicyHash(workspaceLimits),
+      configurationHash: calculateWorkspaceConfigurationHash(workspaceLimits),
+    }),
+    sandbox: Object.freeze({
+      runnerVersion: SANDBOX_RUNNER_VERSION,
+      contractVersion: SANDBOX_RUNNER_CONTRACT_VERSION,
+      policyHash: calculateSandboxPolicyHash(configuration.policy, runtimeIdentity),
+      commandPolicyHash: calculateSandboxCommandPolicyHash(configuration.policy),
+      limitsHash: calculateSandboxLimitsHash(sandboxLimits),
+      imageDigest,
+      imageId: configuration.image.expectedImageId,
+      platform: configuration.image.platform,
+    }),
+  });
   return Object.freeze({
     workspace: createFilesystemControlledWorkspace({
       rootPath: configuration.workspaceRoot,
@@ -350,6 +419,7 @@ function resolveFactoryBoundaries(
             },
             options.previewArtifactIntegration.artifactSink,
           ),
+    technicalBoundaryIdentity,
   });
 }
 
@@ -373,23 +443,36 @@ export async function createApplicationFactoryRuntime(
   });
   const logger = createObservabilityLogger({ delegate: baseLogger, history: executionHistory });
   const core = await composeExecutionCore(options, logger, baseLogger, now);
+  const promptAssets = loadCodeGeneratorPromptAssets();
   const codeGeneratorAgent =
     options.codeGeneratorAgent ??
     createCodeGeneratorAgent({
       knowledgeLoader: core.knowledgeLoader,
       agentRunner: core.agentRunner,
       responseValidator: core.responseValidator,
-      promptAssets: loadCodeGeneratorPromptAssets(),
+      promptAssets,
       logger,
       now,
     });
-  const boundaries = resolveFactoryBoundaries(options, logger, now);
+  const factoryConfiguration = options.factoryConfiguration ?? FACTORY_PIPELINE_CONFIGURATION;
+  const boundaries = resolveFactoryBoundaries(
+    options,
+    logger,
+    now,
+    factoryConfiguration,
+    options.codeGeneratorAgent === undefined
+      ? promptAssets.hashes.bundleHash
+      : options.technicalBoundaryIdentity?.codeGeneratorAssetBundleHash,
+  );
   const coordinator = createFactoryPipelineCoordinator({
     executionEngine: core.engine,
     codeGeneratorAgent,
     workspace: boundaries.workspace,
     sandboxRunner: boundaries.sandboxRunner,
-    configuration: options.factoryConfiguration ?? FACTORY_PIPELINE_CONFIGURATION,
+    configuration: factoryConfiguration,
+    ...(boundaries.technicalBoundaryIdentity === undefined
+      ? {}
+      : { technicalBoundaryIdentity: boundaries.technicalBoundaryIdentity }),
     logger,
     now,
   });
@@ -540,6 +623,32 @@ export async function getExecutionRerunDispatcherForPrincipal(
     },
     checkpoints: new PrismaAIResponseCache(getDatabaseClient()),
     cacheOnlyDispatcher: createCacheOnlyExecutionDispatcher(queueDispatcher),
+  });
+}
+
+export async function getTechnicalResumeDispatcherForPrincipal(
+  principal: AuthenticatedPrincipal,
+): Promise<TechnicalResumeDispatcher> {
+  const pipeline = await getFactoryPipeline();
+  if (pipeline.resumeTechnical === undefined) {
+    throw new TypeError('A retomada técnica não está configurada no Factory Pipeline.');
+  }
+  const repository = new PrismaExecutionRecordRepository(getDatabaseClient(), {
+    access: 'OWNER',
+    userId: principal.userId,
+  });
+  return createTechnicalResumeDispatcher({
+    repository,
+    executor: { resumeTechnical: pipeline.resumeTechnical.bind(pipeline) },
+  });
+}
+
+export async function getTechnicalCheckpointRepositoryForPrincipal(
+  principal: AuthenticatedPrincipal,
+): Promise<FactoryExecutionRecordRepository> {
+  return new PrismaExecutionRecordRepository(getDatabaseClient(), {
+    access: 'OWNER',
+    userId: principal.userId,
   });
 }
 

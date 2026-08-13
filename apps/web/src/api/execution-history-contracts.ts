@@ -128,6 +128,8 @@ export interface ExecutionHistoryFactoryResult {
   readonly sandboxRunId: string | null;
   readonly sandboxResourceOutcome:
     'NONE' | 'OOM' | 'PID_LIMIT' | 'DISK_LIMIT' | 'OUTPUT_LIMIT' | 'UNKNOWN';
+  readonly sandboxCleanupFailureCode: 'SANDBOX_CLEANUP_FAILED' | null;
+  readonly sandboxCleanupSourceCode: string | null;
   readonly hashes: {
     readonly lineageHash: string;
     readonly provenanceHash: string;
@@ -247,7 +249,7 @@ export interface ExecutionHistoryTimelineEvent {
 }
 
 export interface ExecutionHistoryTimeline {
-  readonly observabilityVersion: '1.0.0' | '2.0.0';
+  readonly observabilityVersion: '1.0.0' | '2.0.0' | '3.0.0';
   readonly revision: number;
   readonly executionId: string;
   readonly workflowId: string;
@@ -266,7 +268,7 @@ export interface ExecutionHistoryTimeline {
     readonly executionId: string;
   }[];
   readonly stageMetrics: readonly {
-    readonly stageId: 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA';
+    readonly stageId: 'PRODUCT_OWNER' | 'DEVELOPER' | 'QA' | 'CODE_GENERATOR';
     readonly durationMs: number | null;
     readonly promptBytes: number | null;
     readonly completionBytes: number | null;
@@ -302,6 +304,10 @@ export interface ExecutionHistoryTimelineV1 extends ExecutionHistoryTimeline {
 
 export interface ExecutionHistoryTimelineV2 extends ExecutionHistoryTimeline {
   readonly observabilityVersion: '2.0.0';
+}
+
+export interface ExecutionHistoryTimelineV3 extends ExecutionHistoryTimeline {
+  readonly observabilityVersion: '3.0.0';
 }
 
 export interface ExecutionHistoryDetailView {

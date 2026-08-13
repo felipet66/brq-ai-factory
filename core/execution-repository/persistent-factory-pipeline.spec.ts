@@ -127,15 +127,17 @@ describe('Persistent Factory Pipeline', () => {
     expect(pipeline.execute).toHaveBeenCalledOnce();
   });
 
-  it('executa o preflight antes de qualquer persistência ou agente da Factory', async () => {
+  it('does not duplicate the authoritative preflight owned by pipeline.execute', async () => {
     const request = createExecutionRequestFixture();
-    const failure = new FactoryPipelineError('sandbox unavailable', {
-      code: FACTORY_PIPELINE_ERROR_CODES.SANDBOX_FAILED,
-      stage: 'SANDBOX_PREPARE',
-      sourceCode: 'DOCKER_IMAGE_REQUIRED_LABEL_MISMATCH',
+    const result = createFactoryExecutionResultFixture({
+      executionId: `execution-${'d'.repeat(32)}`,
+      workflowId: request.workflowId,
     });
-    const preflight = vi.fn(async () => Promise.reject(failure));
-    const execute = vi.fn(async () => Promise.reject(new Error('must not execute')));
+    const preflight = vi.fn(async () => undefined);
+    const execute = vi.fn(async () => {
+      await preflight();
+      return result;
+    });
     const repository = createInMemoryExecutionRecordRepository();
     const persistent = createPersistentFactoryPipeline({
       pipeline: { preflight, execute },
@@ -143,11 +145,13 @@ describe('Persistent Factory Pipeline', () => {
       history: history(),
     });
 
-    await expect(persistent.execute(request)).rejects.toBe(failure);
+    await expect(persistent.execute(request)).resolves.toBe(result);
 
     expect(preflight).toHaveBeenCalledOnce();
-    expect(execute).not.toHaveBeenCalled();
-    await expect(repository.findByWorkflowId(request.workflowId)).resolves.toBeNull();
+    expect(execute).toHaveBeenCalledOnce();
+    await expect(repository.findByWorkflowId(request.workflowId)).resolves.toMatchObject({
+      status: 'SUCCESS',
+    });
   });
 
   it('persiste resultado terminal anexado e relança o mesmo erro técnico', async () => {

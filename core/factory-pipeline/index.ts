@@ -31,6 +31,7 @@ export {
   projectFactoryWorkspaceSummary,
   projectGeneratedBundleToWorkspacePlanRequest,
   projectWorkspaceToSandboxRunRequest,
+  projectWorkspaceToSandboxRunRequestFromContext,
 } from './projections';
 export { createFactoryExecutionResult, type CreateFactoryExecutionResultInput } from './result';
 export * from './schemas';
@@ -47,3 +48,21 @@ export {
   FACTORY_PIPELINE_HASH_ALGORITHM,
   FACTORY_PIPELINE_VERSION,
 } from './version';
+export {
+  calculateFactoryTechnicalCheckpointHash,
+  createFactoryTechnicalCheckpoint,
+  FACTORY_TECHNICAL_CHECKPOINT_VERSION,
+  factoryTechnicalBoundaryIdentitySchema,
+  factoryTechnicalCheckpointSchema,
+  parseFactoryTechnicalCheckpoint,
+  type FactoryTechnicalCheckpoint,
+} from './technical-checkpoint';
+export {
+  createFactoryTechnicalResumeExecutor,
+  FACTORY_TECHNICAL_RESUME_VERSION,
+  FactoryTechnicalResumeError,
+  factoryTechnicalResumeResultSchema,
+  type FactoryTechnicalResumeExecutor,
+  type FactoryTechnicalResumeOptions,
+  type FactoryTechnicalResumeResult,
+} from './technical-resume';

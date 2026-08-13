@@ -2,8 +2,12 @@ import type { ExecutionEngine, ExecutionRequest } from '@brq/execution-engine';
 import type {
   ExecutionRecordRepository,
   ExecutionRequestSnapshotRepository,
+  FactoryTechnicalCheckpointRepository,
 } from '@brq/execution-repository';
-import type { FactoryPipelineCoordinator } from '@brq/factory-pipeline';
+import type {
+  FactoryPipelineCoordinator,
+  FactoryTechnicalResumeExecutor,
+} from '@brq/factory-pipeline';
 import type { JobExecutionOptions, JobQueue, JobRecord } from '@brq/job-queue';
 import type { Logger } from '@brq/shared/logger/logger';
 
@@ -99,6 +103,35 @@ export interface CreateExecutionRerunDispatcherOptions {
   readonly cacheOnlyDispatcher: CacheOnlyExecutionDispatcher;
   readonly idFactory?: () => string;
   readonly now?: () => number;
+}
+
+export interface TechnicalResumeDispatchInput {
+  readonly ownerId: string;
+  readonly sourceExecutionId: string;
+  readonly requestId: string;
+  readonly signal?: AbortSignal;
+}
+
+export interface TechnicalResumeDispatchResult {
+  readonly attemptId: string;
+  readonly sourceExecutionId: string;
+  readonly checkpointHash: string;
+  readonly status: 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'COMPLETION_PENDING';
+  readonly resultHash: string;
+  readonly usesOpenAI: false;
+}
+
+export interface TechnicalResumeDispatcher {
+  dispatch(input: TechnicalResumeDispatchInput): Promise<TechnicalResumeDispatchResult>;
+}
+
+export interface CreateTechnicalResumeDispatcherOptions {
+  readonly repository: FactoryTechnicalCheckpointRepository;
+  readonly executor: FactoryTechnicalResumeExecutor;
+  readonly idFactory?: () => string;
+  readonly now?: () => number;
+  readonly leaseDurationMs?: number;
+  readonly heartbeatIntervalMs?: number;
 }
 
 export interface ExecutionWorker {

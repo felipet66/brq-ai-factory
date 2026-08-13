@@ -188,38 +188,39 @@ model Verification {
 }
 
 model ExecutionRecord {
-  storageId         String                          @id @default(cuid())
-  userId            String
-  workflowId        String                          @unique
-  executionId       String?                         @unique
-  requestId         String?
-  traceId           String?
-  projectName       String
-  status            String                          @default("CREATED")
-  workflowStatus    String?
-  readiness         String?
-  createdAt         DateTime
-  startedAt         DateTime?
-  finishedAt        DateTime?
-  durationMs        Int?
-  engineVersion     String
-  contractVersion   String
-  attempt           Int                             @default(1)
-  revision          Int                             @default(0)
-  failureKind       String?
-  failureCode       String?
-  failureSourceCode String?
-  hashes            ExecutionRecordHash?
-  job               ExecutionJob?
-  lifecycleEvents   ExecutionRecordLifecycleEvent[]
-  observation       ExecutionObservation?
-  lineageOutput     ExecutionLineageOutput?
-  lineageHandoffs   ExecutionLineageHandoff[]
-  provenanceStages  ExecutionProvenanceStage[]
-  factoryResult     ExecutionFactoryResult?
-  previewArtifacts  PreviewArtifact[]
-  previewSessions   PreviewSession[]
-  user              User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  storageId           String                          @id @default(cuid())
+  userId              String
+  workflowId          String                          @unique
+  executionId         String?                         @unique
+  requestId           String?
+  traceId             String?
+  projectName         String
+  status              String                          @default("CREATED")
+  workflowStatus      String?
+  readiness           String?
+  createdAt           DateTime
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  durationMs          Int?
+  engineVersion       String
+  contractVersion     String
+  attempt             Int                             @default(1)
+  revision            Int                             @default(0)
+  failureKind         String?
+  failureCode         String?
+  failureSourceCode   String?
+  hashes              ExecutionRecordHash?
+  job                 ExecutionJob?
+  lifecycleEvents     ExecutionRecordLifecycleEvent[]
+  observation         ExecutionObservation?
+  lineageOutput       ExecutionLineageOutput?
+  lineageHandoffs     ExecutionLineageHandoff[]
+  provenanceStages    ExecutionProvenanceStage[]
+  factoryResult       ExecutionFactoryResult?
+  previewArtifacts    PreviewArtifact[]
+  previewSessions     PreviewSession[]
+  technicalCheckpoint FactoryTechnicalCheckpoint?
+  user                User                            @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, createdAt])
   @@index([userId, status, createdAt])
@@ -228,6 +229,64 @@ model ExecutionRecord {
   @@index([readiness, createdAt])
   @@index([requestId])
   @@index([finishedAt])
+}
+
+model FactoryTechnicalCheckpoint {
+  checkpointHash        String                             @id
+  executionRecordId     String                             @unique
+  sourceExecutionId     String                             @unique
+  checkpointVersion     String
+  bundleHash            String
+  profileValidationHash String
+  payload               Json
+  createdAt             DateTime
+  executionRecord       ExecutionRecord                    @relation(fields: [executionRecordId], references: [storageId], onDelete: Restrict)
+  cleanup               FactoryTechnicalCheckpointCleanup?
+  resumeAttempts        FactoryTechnicalResumeAttempt[]
+
+  @@index([createdAt])
+  @@index([bundleHash])
+}
+
+model FactoryTechnicalCheckpointCleanup {
+  checkpointHash    String                     @id
+  factoryResultHash String
+  releaseStatus     String
+  completedAt       DateTime
+  checkpoint        FactoryTechnicalCheckpoint @relation(fields: [checkpointHash], references: [checkpointHash], onDelete: Restrict)
+
+  @@index([factoryResultHash])
+  @@index([completedAt])
+}
+
+model FactoryTechnicalResumeAttempt {
+  attemptId            String                     @id
+  checkpointHash       String
+  activeCheckpointHash String?                    @unique
+  ownerId              String
+  requestId            String
+  status               String
+  activePhase          String?
+  startedAt            DateTime
+  finishedAt           DateTime?
+  leaseId              String?
+  leaseVersion         Int                        @default(0)
+  heartbeatAt          DateTime?
+  leaseExpiresAt       DateTime?
+  pendingResultHash    String?
+  pendingResult        Json?
+  pendingRecordedAt    DateTime?
+  resultHash           String?
+  result               Json?
+  cleanupConfirmed     Boolean
+  failureReasonCode    String?
+  recoveryReasonCode   String?
+  checkpoint           FactoryTechnicalCheckpoint @relation(fields: [checkpointHash], references: [checkpointHash], onDelete: Restrict)
+
+  @@index([checkpointHash, startedAt])
+  @@index([ownerId, status, startedAt])
+  @@index([status, leaseExpiresAt])
+  @@index([requestId])
 }
 
 model ExecutionJob {
@@ -434,6 +493,8 @@ model ExecutionFactoryResult {
   sandboxStatus              String
   sandboxRunId               String?
   sandboxResourceOutcome     String
+  sandboxCleanupFailureCode  String?
+  sandboxCleanupSourceCode   String?
   failureKind                String?
   failureCode                String?
   failureSourceCode          String?
@@ -704,7 +765,7 @@ model AiResponseCacheEntry {
   claimToken   String?
   responseHash String?
   response     Json?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   completedAt  DateTime?
 
   @@id([executionId, agent])

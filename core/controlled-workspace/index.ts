@@ -17,7 +17,10 @@ export type {
   WorkspaceReleaseResult,
   WorkspaceSourceHashes,
 } from './contracts';
-export type { ControlledWorkspaceLimitsInput } from './configuration';
+export {
+  resolveControlledWorkspaceLimits,
+  type ControlledWorkspaceLimitsInput,
+} from './configuration';
 export {
   CONTROLLED_WORKSPACE_ERROR_CODES,
   CONTROLLED_WORKSPACE_ERROR_STAGES,
@@ -45,7 +48,12 @@ export {
   workspaceSourceHashesSchema,
 } from './schemas';
 export { createControlledWorkspacePlanner, createWorkspacePlan } from './workspace-planner';
-export { calculateWorkspaceBundleContentHash, calculateWorkspaceContentHash } from './hashing';
+export {
+  calculateWorkspaceBundleContentHash,
+  calculateWorkspaceConfigurationHash,
+  calculateWorkspaceContentHash,
+  calculateWorkspacePolicyHash,
+} from './hashing';
 export {
   DEFAULT_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS,
   MAX_CONTROLLED_WORKSPACE_CLEANUP_TIMEOUT_MS,

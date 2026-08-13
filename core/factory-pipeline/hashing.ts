@@ -54,7 +54,7 @@ export type FactoryResultHashInput = Omit<FactoryExecutionResult, 'hashes'> & {
 };
 
 export function calculateFactoryPipelineResultHash(result: FactoryResultHashInput): string {
-  return domainHash('brq-factory-pipeline:result:v2', {
+  const identity = {
     executionId: result.executionId,
     workflowId: result.workflowId,
     status: result.status,
@@ -73,7 +73,9 @@ export function calculateFactoryPipelineResultHash(result: FactoryResultHashInpu
     generation: result.generation,
     workspace: result.workspace,
     sandbox: {
-      ...result.sandbox,
+      status: result.sandbox.status,
+      sandboxRunId: result.sandbox.sandboxRunId,
+      resourceOutcome: result.sandbox.resourceOutcome,
       steps: result.sandbox.steps.map((step) => ({
         stepId: step.stepId,
         status: step.status,
@@ -83,11 +85,23 @@ export function calculateFactoryPipelineResultHash(result: FactoryResultHashInpu
         stderr: step.stderr,
         failure: failureIdentity(step.failure),
       })),
+      hashes: result.sandbox.hashes,
+      provenance: result.sandbox.provenance,
     },
     lineage: result.lineage,
     provenance: result.provenance,
     hashes: result.hashes,
     failure: failureIdentity(result.failure),
+  };
+  if (result.sandbox.cleanupFailure === null) {
+    return domainHash('brq-factory-pipeline:result:v2', identity);
+  }
+  return domainHash('brq-factory-pipeline:result:v3', {
+    ...identity,
+    sandbox: {
+      ...identity.sandbox,
+      cleanupFailure: failureIdentity(result.sandbox.cleanupFailure),
+    },
   });
 }
 

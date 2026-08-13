@@ -5,6 +5,7 @@ import type { CodeGeneratorAgent } from '@brq/code-generator-agent';
 import type { ControlledWorkspace } from '@brq/controlled-workspace';
 import { FakeKnowledgeSource } from '@brq/knowledge-loader/testing';
 import type { SandboxRunner } from '@brq/sandbox-runner';
+import { createFactoryTechnicalBoundaryIdentityFixture } from '@brq/factory-pipeline/testing';
 import { createLogger } from '@brq/shared/logger/logger';
 import { describe, expect, it } from 'vitest';
 
@@ -70,12 +71,14 @@ describe('application composition root', () => {
       sandboxRunner: {
         run: async () => Promise.reject(new Error('not executed')),
       } as SandboxRunner,
+      technicalBoundaryIdentity: createFactoryTechnicalBoundaryIdentityFixture(),
       environment: { NODE_ENV: 'test' },
       logger: createLogger({ sink: () => undefined }),
       now: () => 0,
     });
 
     expect(pipeline.execute).toBeTypeOf('function');
+    expect(pipeline.resumeTechnical).toBeTypeOf('function');
   });
 
   it('fails closed when production Factory Docker configuration is absent', async () => {

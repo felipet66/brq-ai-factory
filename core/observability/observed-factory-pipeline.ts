@@ -33,6 +33,11 @@ export function createObservedFactoryPipeline(
       : {
           preflight: options.pipeline.preflight.bind(options.pipeline),
         }),
+    ...(options.pipeline.resumeTechnical === undefined
+      ? {}
+      : {
+          resumeTechnical: options.pipeline.resumeTechnical.bind(options.pipeline),
+        }),
     async execute(
       request: ExecutionRequest,
       runOptions?: FactoryPipelineRunOptions,

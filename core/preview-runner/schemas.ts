@@ -283,7 +283,22 @@ export const previewRuntimeResultSchema = z
   });
 
 export const previewInspectRequestSchema = z
-  .object({ previewId: previewIdSchema, executionId: identifierSchema })
+  .object({
+    previewId: previewIdSchema,
+    executionId: identifierSchema,
+    expected: z
+      .object({
+        artifactId: z.string().regex(/^preview-artifact-[a-f0-9]{32}$/u),
+        expiresAt: isoDateTimeSchema,
+        sessionRevision: z.number().int().nonnegative(),
+        previewSessionHash: previewHashSchema,
+        policy: previewPolicySchema,
+        limits: previewEffectiveLimitsSchema,
+        runtime: previewRuntimeObservationSchema.nullable(),
+      })
+      .strict()
+      .optional(),
+  })
   .strict();
 
 export const previewRuntimeInspectionSchema = z

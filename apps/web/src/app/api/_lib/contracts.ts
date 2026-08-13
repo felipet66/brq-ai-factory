@@ -10,6 +10,8 @@ import type {
   errorResponseSchema,
   executionAcceptedResponseSchema,
   executionRerunAcceptedResponseSchema,
+  executionTechnicalResumeLatestResponseSchema,
+  executionTechnicalResumeResponseSchema,
   executionHttpRequestSchema,
   executionHistoryDetailResponseSchema,
   executionHistoryPageResponseSchema,
@@ -28,6 +30,12 @@ export type ErrorResponse = z.infer<typeof errorResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ExecutionAcceptedResponse = z.infer<typeof executionAcceptedResponseSchema>;
 export type ExecutionRerunAcceptedResponse = z.infer<typeof executionRerunAcceptedResponseSchema>;
+export type ExecutionTechnicalResumeResponse = z.infer<
+  typeof executionTechnicalResumeResponseSchema
+>;
+export type ExecutionTechnicalResumeLatestResponse = z.infer<
+  typeof executionTechnicalResumeLatestResponseSchema
+>;
 export type ExecutionListQueryHttp = z.infer<typeof executionListQueryHttpSchema>;
 export type ExecutionHistoryPageResponse = z.infer<typeof executionHistoryPageResponseSchema>;
 export type ExecutionHistoryDetailResponse = z.infer<typeof executionHistoryDetailResponseSchema>;

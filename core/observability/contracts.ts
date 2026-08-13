@@ -14,8 +14,10 @@ import type {
   factoryExecutionObservabilityEventSchema,
   factoryExecutionObservabilitySnapshotSchema,
   factoryExecutionObservabilitySummarySchema,
+  factoryExecutionStageMetricsSchema,
   factoryExecutionStageSchema,
   factoryExecutionTimelineStageIdSchema,
+  factoryObservableAgentStageIdSchema,
   factoryObservabilityStageIdSchema,
   observableAgentStageIdSchema,
   observabilityEventTypeSchema,
@@ -49,11 +51,15 @@ export type ExecutionObservabilitySnapshot = DeepReadonly<
   z.infer<typeof executionObservabilitySnapshotSchema>
 >;
 export type FactoryExecutionTimelineStageId = z.infer<typeof factoryExecutionTimelineStageIdSchema>;
+export type FactoryObservableAgentStageId = z.infer<typeof factoryObservableAgentStageIdSchema>;
 export type FactoryObservabilityStageId = z.infer<typeof factoryObservabilityStageIdSchema>;
 export type FactoryExecutionObservabilityEvent = DeepReadonly<
   z.infer<typeof factoryExecutionObservabilityEventSchema>
 >;
 export type FactoryExecutionStage = DeepReadonly<z.infer<typeof factoryExecutionStageSchema>>;
+export type FactoryExecutionStageMetrics = DeepReadonly<
+  z.infer<typeof factoryExecutionStageMetricsSchema>
+>;
 export type FactoryExecutionObservabilitySummary = DeepReadonly<
   z.infer<typeof factoryExecutionObservabilitySummarySchema>
 >;

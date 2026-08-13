@@ -144,6 +144,15 @@ const FACTORY_SNAPSHOT = {
   ],
 } as FactoryExecutionObservabilitySnapshot;
 
+const FACTORY_V3_SNAPSHOT = {
+  ...FACTORY_SNAPSHOT,
+  observabilityVersion: '3.0.0',
+  stageMetrics: [
+    ...SNAPSHOT.stageMetrics,
+    { ...SNAPSHOT.stageMetrics[0], stageId: 'CODE_GENERATOR' },
+  ],
+} as FactoryExecutionObservabilitySnapshot;
+
 function record(snapshot: ExecutionObservabilitySnapshot = SNAPSHOT): ExecutionRecord {
   return { observation: snapshot } as ExecutionRecord;
 }
@@ -241,6 +250,28 @@ describe('execution timeline HTTP adapter', () => {
       'SANDBOX_BUILD',
       'SANDBOX_TEST',
     ]);
+  });
+
+  it('returns Observability v3 with Code Generator metrics through the same endpoint', async () => {
+    const repository = fakeRepository();
+    repository.findByExecutionId.mockResolvedValueOnce(record(FACTORY_V3_SNAPSHOT));
+    const handler = createExecutionTimelineHandler({
+      authenticate: authenticateRequestFixture,
+      getExecutionRepository: async () => repository,
+      logger: capturedLogger().logger,
+      requestIdFactory: () => FIXED_REQUEST_ID,
+    });
+
+    const response = await handler(
+      new Request(`http://localhost/api/executions/${EXECUTION_ID}/timeline`),
+      context(EXECUTION_ID),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.observabilityVersion).toBe('3.0.0');
+    expect(body.data.stageMetrics).toHaveLength(4);
+    expect(body.data.stageMetrics[3]).toMatchObject({ stageId: 'CODE_GENERATOR' });
   });
 
   it('looks up an active timeline by its workflowId alias', async () => {

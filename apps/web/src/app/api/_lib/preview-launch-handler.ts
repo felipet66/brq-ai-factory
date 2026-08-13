@@ -4,7 +4,7 @@ import type { Logger } from '@brq/shared/logger/logger';
 
 import { previewIdSchema } from '@/api/preview-contracts';
 import type { RequestAuthenticator } from '@/server/auth/contracts';
-import { assertSameOriginMutation } from '@/server/auth/csrf';
+import { assertSameOriginNavigationMutation } from '@/server/auth/csrf';
 import type { PreviewApplicationService } from '@/server/preview/contracts';
 
 import { API_ERROR_CODES } from './constants';
@@ -92,7 +92,7 @@ export function createPreviewLaunchHandler(options: PreviewLaunchHandlerOptions)
     allowedMethods: ['POST'],
     ...options,
     async operation(request, context, requestId, principal) {
-      (options.assertOrigin ?? assertSameOriginMutation)(request);
+      (options.assertOrigin ?? assertSameOriginNavigationMutation)(request);
       rejectQueryParameters(request);
       await requireEmptyRequestBody(request);
       const previewId = (await context.params).id;

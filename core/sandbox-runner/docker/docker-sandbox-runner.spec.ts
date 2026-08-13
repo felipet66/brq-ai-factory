@@ -4,7 +4,8 @@ import path from 'node:path';
 
 import { createFilesystemControlledWorkspace } from '@brq/controlled-workspace/filesystem';
 import { createWorkspacePlanRequestFixture } from '@brq/controlled-workspace/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import type { Logger } from '@brq/shared/logger/logger';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SandboxRunRequest } from '../contracts';
 import { SANDBOX_RUNNER_ERROR_CODES, SandboxRunnerError } from '../errors';
@@ -209,6 +210,8 @@ async function createHarness(
     readonly executor?: FakeDockerExecutor;
     readonly policy?: ReturnType<typeof createSandboxExecutionPolicyFixture>;
     readonly artifactSink?: DockerSandboxArtifactSink;
+    readonly logger?: Logger;
+    readonly wait?: (durationMs: number) => Promise<void>;
   } = {},
 ) {
   const workspaceRoot = await realpath(
@@ -234,11 +237,17 @@ async function createHarness(
       toolchainVersions: { NODE: '24.19.0', TYPESCRIPT: '5.9.3' },
     },
     policies: [policy],
+    ...(overrides.logger === undefined ? {} : { logger: overrides.logger }),
     now: () => tick++,
   });
   const runner = createDockerSandboxRunnerWithDependencies(options, {
     executor,
     ...(overrides.artifactSink === undefined ? {} : { artifactSink: overrides.artifactSink }),
+    wait:
+      overrides.wait ??
+      (async (durationMs) => {
+        tick += durationMs;
+      }),
   });
   const request: SandboxRunRequest = {
     context: { executionId: 'execution-sandbox-test' },
@@ -253,7 +262,7 @@ afterEach(async () => {
 });
 
 describe('DockerSandboxRunner', () => {
-  it('preflights only the Docker runtime and pinned image without reading or creating a workspace', async () => {
+  it('preflights the Docker runtime and disposable lifecycle without reading a workspace', async () => {
     const { runner, request, executor } = await createHarness();
 
     await expect(runner.preflight?.({ policyId: request.policyId })).resolves.toBeUndefined();
@@ -261,8 +270,14 @@ describe('DockerSandboxRunner', () => {
     expect(executor.requests.map((call) => call.args.slice(0, 2))).toEqual([
       ['version', '--format'],
       ['image', 'inspect'],
+      ['container', 'create'],
+      ['container', 'inspect'],
+      ['container', 'start'],
+      ['container', 'exec'],
+      ['container', 'rm'],
+      ['container', 'ls'],
     ]);
-    expect(executor.requests.some((call) => call.args.includes('create'))).toBe(false);
+    expect(executor.removed).toBe(true);
   });
 
   it('fails preflight with a specific safe mismatch and never creates a container', async () => {
@@ -290,6 +305,9 @@ describe('DockerSandboxRunner', () => {
     const { runner, request, executor } = await createHarness();
 
     await runner.preflight?.({ policyId: request.policyId });
+    const createCountAfterPreflight = executor.requests.filter(
+      (call) => call.args[1] === 'create',
+    ).length;
     executor.imageOverride = { Id: `sha256:${'f'.repeat(64)}` };
 
     await expect(runner.run(request)).rejects.toMatchObject({
@@ -297,7 +315,68 @@ describe('DockerSandboxRunner', () => {
       sourceCode: 'DOCKER_IMAGE_ID_MISMATCH',
     });
     expect(executor.requests.filter((call) => call.args[0] === 'image')).toHaveLength(2);
-    expect(executor.requests.some((call) => call.args.includes('create'))).toBe(false);
+    expect(executor.requests.filter((call) => call.args[1] === 'create')).toHaveLength(
+      createCountAfterPreflight,
+    );
+  });
+
+  it('fails closed when disposable preflight cleanup cannot be confirmed', async () => {
+    const executor = new FakeDockerExecutor();
+    executor.cleanupResult = commandResult({ exitCode: 1 });
+    const { runner, request } = await createHarness({ executor });
+
+    await expect(runner.preflight?.({ policyId: request.policyId })).rejects.toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+      stage: 'CLEANUP',
+      sourceCode: 'REMOVAL_NOT_CONFIRMED',
+    });
+    const removeIndex = executor.requests.findIndex((call) => call.args[1] === 'rm');
+    const confirmIndex = executor.requests.findIndex(
+      (call, index) => index > removeIndex && call.args[1] === 'ls',
+    );
+    expect(removeIndex).toBeGreaterThan(-1);
+    expect(confirmIndex).toBeGreaterThan(removeIndex);
+  });
+
+  it('preserves preflight readiness as primary and cleanup as secondary evidence', async () => {
+    const executor = new FakeDockerExecutor();
+    executor.readinessResult = commandResult({ timedOut: true, exitCode: null });
+    executor.cleanupResult = commandResult({ exitCode: 1 });
+    const { runner, request } = await createHarness({ executor });
+
+    await expect(runner.preflight?.({ policyId: request.policyId })).rejects.toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.TIMEOUT,
+      stage: 'START',
+      cleanupFailure: {
+        code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+        stage: 'CLEANUP',
+        sourceCode: 'REMOVAL_NOT_CONFIRMED',
+      },
+    });
+  });
+
+  it('logs safe lifecycle operation metadata without args or output', async () => {
+    const info = vi.fn();
+    const warn = vi.fn();
+    const logger: Logger = { debug: vi.fn(), info, warn, error: vi.fn() };
+    const { runner, request } = await createHarness({ logger });
+
+    await runner.preflight?.({ policyId: request.policyId });
+
+    const lifecycle = [...info.mock.calls, ...warn.mock.calls].filter(([event]) =>
+      String(event).startsWith('sandbox.docker.operation.'),
+    );
+    expect(lifecycle.map(([, context]) => (context as { operation: string }).operation)).toEqual([
+      'CREATE',
+      'INSPECT',
+      'START',
+      'READINESS',
+      'REMOVE',
+      'CONFIRM_ABSENCE',
+    ]);
+    expect(JSON.stringify(lifecycle)).not.toMatch(
+      /--|\/opt\/|containerId|stdout|stderr|ownership/u,
+    );
   });
 
   it('captures an opt-in canonical artifact after TEST and before cleanup', async () => {
@@ -633,7 +712,7 @@ describe('DockerSandboxRunner', () => {
     expect(executor.requests).toHaveLength(0);
   });
 
-  it('exposes cleanup failure at the top level while preserving the primary step failure', async () => {
+  it('preserves primary step failure and exposes cleanup as secondary evidence', async () => {
     const executor = new FakeDockerExecutor();
     executor.stepResults.push(commandResult({ exitCode: 1 }));
     executor.cleanupResult = commandResult({ exitCode: 1 });
@@ -641,8 +720,12 @@ describe('DockerSandboxRunner', () => {
 
     const result = await runner.run(request);
 
-    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
-    expect(result.failure?.sourceCode).toBe(SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED);
+    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED);
+    expect(result.failure?.sourceCode).toBe('EXIT_1');
+    expect(result.cleanupFailure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+      sourceCode: 'REMOVAL_NOT_CONFIRMED',
+    });
     expect(result.steps[0]?.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.STEP_FAILED);
     expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(1);
   });
@@ -724,6 +807,7 @@ describe('DockerSandboxRunner', () => {
 
     expect(result.status).toBe('FAILED');
     expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
+    expect(result.cleanupFailure).toEqual(result.failure);
   });
 
   it('surfaces cleanup failure while preserving a timed out or cancelled step', async () => {
@@ -736,12 +820,15 @@ describe('DockerSandboxRunner', () => {
       const result = await runner.run(request);
 
       expect(result.status).toBe('FAILED');
-      expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
-      expect(result.failure?.sourceCode).toBe(
+      expect(result.failure?.code).toBe(
         primary === 'timedOut'
           ? SANDBOX_RUNNER_ERROR_CODES.TIMEOUT
           : SANDBOX_RUNNER_ERROR_CODES.CANCELLED,
       );
+      expect(result.cleanupFailure).toMatchObject({
+        code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+        sourceCode: 'REMOVAL_NOT_CONFIRMED',
+      });
       expect(result.steps[0]?.status).toBe(primary === 'timedOut' ? 'TIMEOUT' : 'CANCELLED');
     }
   });
@@ -776,9 +863,93 @@ describe('DockerSandboxRunner', () => {
     expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(0);
   });
 
+  it('reconciles a delayed ambiguous create by name and ownership before cleanup', async () => {
+    const executor = new FakeDockerExecutor();
+    const original = executor.execute.bind(executor);
+    const wait = vi.fn(async () => undefined);
+    let reconciliationInspections = 0;
+    executor.execute = async (request) => {
+      if (request.args[1] === 'create') {
+        await original(request);
+        return commandResult({ timedOut: true, exitCode: null });
+      }
+      if (
+        request.args[0] === 'container' &&
+        request.args[1] === 'inspect' &&
+        request.args.includes('{{json .}}')
+      ) {
+        reconciliationInspections += 1;
+        if (reconciliationInspections <= 2) {
+          executor.requests.push(request);
+          return commandResult({ exitCode: 1 });
+        }
+      }
+      if (
+        request.args[0] === 'container' &&
+        request.args[1] === 'ls' &&
+        request.args.some((argument) => argument.startsWith('label=org.brq.sandbox.ownership=')) &&
+        reconciliationInspections <= 2
+      ) {
+        executor.requests.push(request);
+        return commandResult({ stdout: capture('') });
+      }
+      return original(request);
+    };
+    const { runner, request } = await createHarness({ executor, wait });
+
+    const result = await runner.run(request);
+
+    expect(result.status).toBe('TIMEOUT');
+    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.TIMEOUT);
+    expect(result.cleanupFailure).toBeNull();
+    expect(reconciliationInspections).toBe(3);
+    expect(wait).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenNthCalledWith(1, 50);
+    expect(wait).toHaveBeenNthCalledWith(2, 50);
+    expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(1);
+    const reconciliationLists = executor.requests.filter(
+      (call) =>
+        call.args[1] === 'ls' &&
+        call.args.some((argument) => argument.startsWith('name=^/brq-sandbox-')),
+    );
+    expect(reconciliationLists).toHaveLength(2);
+    expect(
+      reconciliationLists.every((call) =>
+        call.args.some((argument) => argument.startsWith('label=org.brq.sandbox.ownership=')),
+      ),
+    ).toBe(true);
+  });
+
+  it('reconciles a rejected create command before returning the primary runtime failure', async () => {
+    const executor = new FakeDockerExecutor();
+    const original = executor.execute.bind(executor);
+    executor.execute = async (request) => {
+      if (request.args[1] === 'create') {
+        await original(request);
+        throw new Error('private Docker rejection');
+      }
+      return original(request);
+    };
+    const { runner, request } = await createHarness({ executor });
+
+    const result = await runner.run(request);
+
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      failure: {
+        code: SANDBOX_RUNNER_ERROR_CODES.RUNTIME_UNAVAILABLE,
+        sourceCode: 'DOCKER_COMMAND_REJECTED',
+      },
+      cleanupFailure: null,
+    });
+    expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(1);
+    expect(JSON.stringify(result)).not.toContain('private Docker rejection');
+  });
+
   it('reports cleanup failure when create may have side effects but ownership is unconfirmed', async () => {
     const executor = new FakeDockerExecutor();
     const original = executor.execute.bind(executor);
+    const wait = vi.fn(async () => undefined);
     executor.execute = async (request) => {
       if (request.args[1] === 'create') {
         await original(request);
@@ -802,14 +973,26 @@ describe('DockerSandboxRunner', () => {
       }
       return original(request);
     };
-    const { runner, request } = await createHarness({ executor });
+    const { runner, request } = await createHarness({ executor, wait });
 
     const result = await runner.run(request);
 
     expect(result.status).toBe('FAILED');
-    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED);
-    expect(result.failure?.sourceCode).toBe(SANDBOX_RUNNER_ERROR_CODES.TIMEOUT);
+    expect(result.failure?.code).toBe(SANDBOX_RUNNER_ERROR_CODES.TIMEOUT);
+    expect(result.cleanupFailure).toMatchObject({
+      code: SANDBOX_RUNNER_ERROR_CODES.CLEANUP_FAILED,
+      sourceCode: 'OWNERSHIP_NOT_CONFIRMED',
+    });
     expect(result.steps[0]?.status).toBe('TIMEOUT');
+    expect(wait).toHaveBeenCalledTimes(3);
+    expect(
+      executor.requests.filter(
+        (call) =>
+          call.args[0] === 'container' &&
+          call.args[1] === 'inspect' &&
+          call.args.includes('{{json .}}'),
+      ),
+    ).toHaveLength(4);
     expect(executor.requests.filter((call) => call.args[1] === 'rm')).toHaveLength(0);
   });
 });

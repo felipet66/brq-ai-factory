@@ -136,6 +136,74 @@ export const executionRerunAcceptedResponseSchema = z
   })
   .strict();
 
+export const executionTechnicalResumeDataSchema = z
+  .object({
+    attemptId: z
+      .string()
+      .regex(
+        /^technical-resume-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      ),
+    sourceExecutionId: executionIdPathSchema,
+    checkpointHash: z.string().regex(/^[a-f0-9]{64}$/),
+    status: z.enum(['COMPLETION_PENDING', 'SUCCESS', 'FAILED', 'CANCELLED']),
+    resultHash: z.string().regex(/^[a-f0-9]{64}$/),
+    usesOpenAI: z.literal(false),
+  })
+  .strict();
+
+export const executionTechnicalResumeResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: executionTechnicalResumeDataSchema,
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
+export const executionTechnicalResumeCheckpointStatusSchema = z.enum([
+  'AVAILABLE',
+  'NOT_FOUND',
+  'CLEANUP_PENDING',
+  'CLEANUP_FAILED',
+]);
+
+export const executionTechnicalResumeLatestResponseSchema = z
+  .object({
+    success: z.literal(true),
+    data: z
+      .object({
+        sourceExecutionId: executionIdPathSchema,
+        checkpointStatus: executionTechnicalResumeCheckpointStatusSchema,
+        attempt: z
+          .object({
+            attemptId: z.string().min(1).max(128),
+            checkpointHash: z.string().regex(/^[a-f0-9]{64}$/),
+            status: z.enum(['RUNNING', 'SUCCESS', 'FAILED', 'CANCELLED']),
+            activePhase: z
+              .enum(['EXECUTING', 'COMPLETION_PENDING', 'RECOVERY_REQUIRED'])
+              .nullable(),
+            startedAt: z.string().datetime({ offset: true }),
+            finishedAt: z.string().datetime({ offset: true }).nullable(),
+            resultHash: z
+              .string()
+              .regex(/^[a-f0-9]{64}$/)
+              .nullable(),
+            reasonCode: z
+              .string()
+              .regex(/^[A-Z][A-Z0-9_]{1,127}$/)
+              .nullable(),
+            cleanupConfirmed: z.boolean(),
+            usesOpenAI: z.literal(false),
+          })
+          .strict()
+          .nullable(),
+      })
+      .strict(),
+    metadata: apiResponseMetadataSchema,
+    errors: z.tuple([]),
+  })
+  .strict();
+
 export const loginHttpRequestSchema = loginCredentialsSchema;
 
 export const loginResponseSchema = z
